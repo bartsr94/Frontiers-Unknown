@@ -128,10 +128,17 @@ const GROUP_ABBR: Partial<Record<string, string>> = {
 
 /** Body paint/dye clause by culture — {sex} is replaced at call-site. */
 const CULTURE_PAINT: Partial<Record<CultureId, string>> = {
-  hanjoda_traditional: 'covered in blue body dye with intricate white patterns',
-  sauro_wildborn:      'stained with red ochre across {sex} skin',
-  sauro_borderfolk:    'marked with white body paint in geometric patterns',
-  kiswani_traditional: 'decorated with plant-based body paints',
+  hanjoda_traditional:  'covered in blue body dye with intricate white patterns',
+  hanjoda_stormcaller:  'marked with spiral blue dye patterns across {sex} arms and shoulders',
+  hanjoda_bloodmoon:    'stained with red ochre across {sex} chest and face',
+  hanjoda_talon:        'marked with iron-black geometric lines along {sex} forearms',
+  hanjoda_emrasi:       'decorated with pale blue and copper-red patterns',
+  sauro_wildborn:       'stained with red ochre across {sex} skin',
+  sauro_borderfolk:     'marked with white body paint in geometric patterns',
+  kiswani_traditional:  'decorated with plant-based body paints',
+  kiswani_riverfolk:    'painted with flowing water-pattern designs in pale clay and charcoal',
+  kiswani_bayuk:        'marked with deep green and black botanical leaf patterns',
+  kiswani_haisla:       'decorated with bold angular designs in blue-black dye',
 };
 
 /**
@@ -194,7 +201,7 @@ export function buildProseDescription(person: Person): string {
   }
 
   // Body paint/dye clause
-  const paint = CULTURE_PAINT[person.culturalIdentity as CultureId];
+  const paint = CULTURE_PAINT[person.heritage.primaryCulture];
   if (paint) {
     const paintStr = paint.replace('{sex}', person.sex === 'female' ? 'her' : 'his');
     prose += ` ${herHis} skin is ${paintStr}.`;

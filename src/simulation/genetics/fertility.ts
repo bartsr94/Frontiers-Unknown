@@ -23,6 +23,7 @@ import type { SeededRNG } from '../../utils/rng';
 import { clamp } from '../../utils/math';
 import { resolveInheritance, averageBloodlines } from './inheritance';
 import { determineSex } from './gender-ratio';
+import { deriveCulture } from '../population/culture';
 import { resolveChildLanguages } from '../culture/language-acquisition';
 
 // ─── Result Types ─────────────────────────────────────────────────────────────
@@ -285,14 +286,9 @@ export function processPregnancies(
       age: 0,
       genetics: childGenetics,
       fertility: createFertilityProfile(sex === 'female' ? childGenetics.extendedFertility : false),
-      heritage: {
-        bloodline: childBloodline,
-        primaryCulture: mother.heritage.primaryCulture,
-        culturalFluency: new Map(mother.heritage.culturalFluency),
-      },
+      heritage: deriveCulture(mother, father, childBloodline),
       languages: childLanguages,
       religion: mother.religion,
-      culturalIdentity: mother.culturalIdentity,
       parentIds: [mother.id, father === mother ? null : father.id],
       socialStatus: 'settler',
       isPlayerControlled: false,

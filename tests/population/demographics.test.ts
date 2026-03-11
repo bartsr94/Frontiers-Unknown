@@ -488,3 +488,93 @@ describe('full pipeline: marriage → conception → birth', () => {
     throw new Error('Pregnancy did not resolve within 4 turns of conception');
   });
 });
+
+// ─── Child culture — blended heritage ────────────────────────────────────────
+
+describe('child culture — blended heritage from mixed parents', () => {
+  /**
+   * Mother is Hanjoda Talon (primaryCulture: hanjoda_talon, fluency 1.0)
+   * Father is Imanian    (primaryCulture: ansberite,     fluency 1.0)
+   * The child should receive a Heritage blended from both parents.
+   */
+  function makeMixedBirthState() {
+    const father = makeMan({
+      heritage: {
+        bloodline: [{ group: 'imanian', fraction: 1.0 }],
+        primaryCulture: 'ansberite',
+        culturalFluency: new Map([['ansberite', 1.0]]),
+      },
+    });
+
+    const mother: Person = {
+      ...makeWoman({
+        heritage: {
+          bloodline: [{ group: 'hanjoda_talon', fraction: 1.0 }],
+          primaryCulture: 'hanjoda_talon',
+          culturalFluency: new Map([['hanjoda_talon', 1.0]]),
+        },
+      }),
+      spouseIds: [father.id],
+      health: {
+        currentHealth: 100,
+        conditions: [],
+        pregnancy: { fatherId: father.id, conceptionTurn: 0, dueDate: 1 },
+      },
+    };
+    const linkedFather: Person = { ...father, spouseIds: [mother.id] };
+
+    return {
+      mother,
+      father: linkedFather,
+      state: makeState(
+        new Map([[mother.id, mother], [linkedFather.id, linkedFather]]),
+        { turnNumber: 1 },
+      ),
+    };
+  }
+
+  it("child culturalFluency contains both parents' primary cultures", () => {
+    const { state } = makeMixedBirthState();
+    const result = processDawn(state, createRNG(42));
+    const birth = result.births[0];
+    if (!birth) throw new Error('No birth occurred — check due date / turnNumber setup');
+
+    const child = result.updatedPeople.get(birth.childId)!;
+    expect(child.heritage.culturalFluency.has('hanjoda_talon')).toBe(true);
+    expect(child.heritage.culturalFluency.has('ansberite')).toBe(true);
+  });
+
+  it('child culturalFluency always contains settlement_native', () => {
+    const { state } = makeMixedBirthState();
+    const result = processDawn(state, createRNG(42));
+    const birth = result.births[0];
+    if (!birth) throw new Error('No birth occurred');
+
+    const child = result.updatedPeople.get(birth.childId)!;
+    expect(child.heritage.culturalFluency.has('settlement_native')).toBe(true);
+    expect(child.heritage.culturalFluency.get('settlement_native')).toBeGreaterThan(0);
+  });
+
+  it("child primaryCulture is a key present in the child's fluency map", () => {
+    const { state } = makeMixedBirthState();
+    const result = processDawn(state, createRNG(42));
+    const birth = result.births[0];
+    if (!birth) throw new Error('No birth occurred');
+
+    const child = result.updatedPeople.get(birth.childId)!;
+    expect(child.heritage.culturalFluency.has(child.heritage.primaryCulture)).toBe(true);
+  });
+
+  it('child is NOT purely Imanian or purely Sauromatian in fluency (both present)', () => {
+    const { state } = makeMixedBirthState();
+    const result = processDawn(state, createRNG(42));
+    const birth = result.births[0];
+    if (!birth) throw new Error('No birth occurred');
+
+    const child = result.updatedPeople.get(birth.childId)!;
+    const fluency = child.heritage.culturalFluency;
+    // Neither parent's culture should be 0 — both must be present with value > 0.
+    expect(fluency.get('ansberite') ?? 0).toBeGreaterThan(0);
+    expect(fluency.get('hanjoda_talon') ?? 0).toBeGreaterThan(0);
+  });
+});

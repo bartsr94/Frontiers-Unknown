@@ -31,7 +31,7 @@ import type {
   GameConfig,
 } from '../simulation/turn/game-state';
 import type { Person, WorkRole, CultureId } from '../simulation/population/person';
-import { ETHNIC_GROUP_PRIMARY_LANGUAGE } from '../simulation/population/person';
+import { ETHNIC_GROUP_PRIMARY_LANGUAGE, ETHNIC_GROUP_CULTURE } from '../simulation/population/person';
 import type { GameEvent } from '../simulation/events/engine';
 
 // ─── Stub types (Phase 3) ────────────────────────────────────────────────────
@@ -269,12 +269,11 @@ function createInitialState(config: GameConfig, settlementName: string): GameSta
         fertility: createFertilityProfile(true),
         heritage: {
           bloodline: [{ group: sauroGroup, fraction: 1.0 }],
-          primaryCulture: 'kiswani_traditional',
-          culturalFluency: new Map<CultureId, number>([['kiswani_traditional', 1.0]]),
+          primaryCulture: ETHNIC_GROUP_CULTURE[sauroGroup],
+          culturalFluency: new Map<CultureId, number>([[ETHNIC_GROUP_CULTURE[sauroGroup], 1.0]]),
         },
         languages: [{ language: ETHNIC_GROUP_PRIMARY_LANGUAGE[sauroGroup], fluency: 1.0 }],
         religion: 'sacred_wheel',
-        culturalIdentity: 'kiswani_traditional',
       });
       people.set(woman.id, woman);
     }
@@ -420,6 +419,8 @@ export const useGameStore = create<GameStore>((set, get) => {
             )[0]?.[0] ?? gameState.culture.primaryLanguage,
           languageTension: dawnResult.newLanguageTension,
           languageDiversityTurns: dawnResult.newLanguageDiversityTurns,
+          culturalBlend: dawnResult.updatedCultureBlend,
+          religions: dawnResult.updatedReligions,
         },
         // Append birth records to event history for genealogy / event-chain queries.
         eventHistory: [

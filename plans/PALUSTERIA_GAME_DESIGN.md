@@ -237,7 +237,45 @@ Some events trigger follow-ups. Accepting the Riverfolk widow might lead to "Her
 
 ### 9.1 Language
 
-People speak languages with varying fluency. An Imanian settler with zero Kiswani cannot communicate with a Wildborn wife beyond gestures. Children learn languages from parents and community — strongest influence is the mother's tongue. The player can establish schools to teach specific languages. Tradetalk is a bridge language with limited vocabulary. Over generations, a creole may emerge naturally.
+People speak languages with varying fluency (`0.0`–`1.0`). There are five languages in the game:
+
+- **Imanian** — the colonists' tongue; all founding settlers speak it natively
+- **Kiswani** — spoken by the Kiswani Sauromatian groups (Riverfolk, Bayuk, Haisla)
+- **Hanjoda** — spoken by the Hanjoda Sauromatian groups (Stormcaller, Bloodmoon, Talon, Emrasi)
+- **Tradetalk** — a sparse pidgin used across all groups; limited vocabulary, maximum fluency 0.50
+- **Settlement Creole** — emerges organically after ~5 years of sustained bilingualism
+
+#### Acquisition
+
+Fluency drifts upward passively every turn based on community exposure:
+
+> `Δfluency = learningRate(age) × communityFraction × (1 − currentFluency)`
+
+Children acquire languages ~30× faster than elderly adults (age-band rates: 0.040 at birth → 0.001 at 60+). A Sauromatian woman who arrives speaking no Imanian will gradually develop conversational fluency (~0.30) over several years if she lives in a predominantly Imanian-speaking settlement.
+
+#### Child Language Inheritance
+
+Newborns do **not** inherit native fluency from their parents. Instead they start at **0.10** for every language their mother or father speaks at conversational level (≥ 0.30). The community then teaches the child the rest through passive drift. This means a child of a monolingual Imanian father and a Kiswani-speaking mother is born hearing both languages but must grow up to speak them.
+
+#### Tradetalk
+
+Tradetalk is a bridge pidgin — it spreads quickly (2× learning rate bonus) but is permanently capped at 0.50. No one's native tongue; a useful stopgap in multilingual households while true bilingualism develops.
+
+#### Creole Emergence
+
+When ≥ 2 languages each exceed 10% community share for 20 consecutive turns (~5 in-game years), the settlement reaches sustained bilingualism. From that point forward, newborns are born already hearing the settlement creole: they receive `settlement_creole` at 0.10 alongside their inherited languages. The creole is a new tongue that can grow to native fluency through the same drift mechanism.
+
+#### Language Tension
+
+The settlement tracks a `languageTension` value (0.0–1.0) that peaks at 1.0 when the community is split exactly 50/50 between two languages. Tension drops toward zero as one language becomes dominant or the community converges on a single tongue. High tension unlocks cultural conflict events and can be a precondition for faction events.
+
+#### Marriage and Language Barriers
+
+When arranging a marriage, the `MarriageDialog` warns the player if the two people have no common language. Three compatibility levels:
+
+- **Shared** — at least one language both speak at conversational level; no warning shown
+- **Partial** — only Tradetalk as a bridge; a grey note points this out
+- **None** — no language in common; amber warning flagged
 
 ### 9.2 Religion
 

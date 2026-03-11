@@ -114,7 +114,7 @@ function makePerson(overrides: Partial<Person> = {}): Person {
     sex:        'male',
     age:        25,
     religion:   'imanian_orthodox',
-    culturalIdentity: 'imanian_homeland',
+
     role:  'unassigned',
     socialStatus: 'settler',
     traits: [],
@@ -344,8 +344,8 @@ describe('isEventEligible', () => {
     });
 
     it('filters by culturalIdentity when specified', () => {
-      const kiswani = makePerson({ id: 'p1', sex: 'female', culturalIdentity: 'kiswani_traditional' });
-      const imanian = makePerson({ id: 'p2', sex: 'female', culturalIdentity: 'imanian_homeland' });
+      const kiswani = makePerson({ id: 'p1', sex: 'female', heritage: { bloodline: [{ group: 'kiswani_riverfolk', fraction: 1.0 }], primaryCulture: 'kiswani_traditional', culturalFluency: new Map([['kiswani_traditional', 1.0]]) } });
+      const imanian = makePerson({ id: 'p2', sex: 'female', heritage: { bloodline: [{ group: 'imanian', fraction: 1.0 }], primaryCulture: 'imanian_homeland', culturalFluency: new Map([['imanian_homeland', 1.0]]) } });
       const prereqCulture = {
         type: 'has_person_matching' as const,
         params: { sex: 'female', culturalIdentity: 'kiswani_traditional' },

@@ -129,6 +129,13 @@ export function getLanguageCompatibility(a: Person, b: Person): LanguageCompatib
 const SAUROMATIAN_CULTURES: ReadonlySet<CultureId> = new Set([
   'kiswani_traditional',
   'hanjoda_traditional',
+  'kiswani_riverfolk',
+  'kiswani_bayuk',
+  'kiswani_haisla',
+  'hanjoda_stormcaller',
+  'hanjoda_bloodmoon',
+  'hanjoda_talon',
+  'hanjoda_emrasi',
   'sauro_borderfolk',
   'sauro_wildborn',
   'settlement_native',
@@ -140,11 +147,11 @@ const SAUROMATIAN_CULTURES: ReadonlySet<CultureId> = new Set([
  * Women's spouse count is always capped at 1 regardless of which rules apply —
  * this asymmetry is enforced in `canMarry()`, not here.
  *
- * @param culturalIdentity - The CultureId of the person (typically the man).
+ * @param primaryCulture - The CultureId of the person (typically the man).
  * @returns The applicable MarriageRules.
  */
-export function getMarriageRules(culturalIdentity: CultureId): MarriageRules {
-  if (SAUROMATIAN_CULTURES.has(culturalIdentity)) {
+export function getMarriageRules(primaryCulture: CultureId): MarriageRules {
+  if (SAUROMATIAN_CULTURES.has(primaryCulture)) {
     return { tradition: 'sauromatian', maxWives: 6, maxConcubines: 0 };
   }
   // Imanian (imanian_homeland, ansberite) and townborn default
@@ -213,7 +220,7 @@ export function canMarry(
   }
 
   // Man's limit is determined by his cultural rules
-  const rules = getMarriageRules(man.culturalIdentity);
+  const rules = getMarriageRules(man.heritage.primaryCulture);
   const manMaxSpouses = rules.maxWives + rules.maxConcubines;
   if (man.spouseIds.length >= manMaxSpouses) {
     return { allowed: false, reason: 'man_at_spouse_limit' };
@@ -255,7 +262,7 @@ export function performMarriage(
     spouseIds: [...personB.spouseIds, personA.id],
   };
 
-  const isCrossCultural = personA.culturalIdentity !== personB.culturalIdentity;
+  const isCrossCultural = personA.heritage.primaryCulture !== personB.heritage.primaryCulture;
   const man = personA.sex === 'male' ? personA : personB;
 
   const opinionChanges: MarriageResult['opinionChanges'] = [];
@@ -265,7 +272,7 @@ export function performMarriage(
       // Skip the couple themselves
       if (observer.id === personA.id || observer.id === personB.id) continue;
       // Only people who share the groom's culture are affected
-      if (observer.culturalIdentity !== man.culturalIdentity) continue;
+      if (observer.heritage.primaryCulture !== man.heritage.primaryCulture) continue;
 
       if (observer.traits.includes('traditional' as TraitId)) {
         opinionChanges.push({ observerId: observer.id, targetId: man.id, delta: -10 });
@@ -300,7 +307,7 @@ export function performMarriage(
  */
 export function getMarriageability(person: Person, _state: GameState): MarriageInfo {
   const currentSpouseCount = person.spouseIds.length;
-  const culturalContext = person.culturalIdentity;
+  const culturalContext = person.heritage.primaryCulture;
 
   // Women's cap is always 1 regardless of culture
   if (person.sex === 'female') {

@@ -11,7 +11,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 |-------|--------|-------|
 | Phase 1 — Foundation | ✅ Complete | 13/13 steps done, 13/13 tests pass, zero compile errors |
 | Phase 2 — Genetics Engine | ✅ Complete | All 12 steps done, 139/139 tests pass, zero compile errors |
-| Phase 3 — Living Settlement | 🔲 Not started | — |
+| Phase 3 — Living Settlement | � In Progress | Language acquisition engine complete (173/173 tests) |
 | Phase 4 — Polish | 🔲 Not started | — |
 
 ---
@@ -233,6 +233,9 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/genetics/gender-ratio.test.ts` — 26/26 passing (fraction helpers, resolveGenderRatio formula, determineSex probability, lore rules)
 - `tests/genetics/fertility.test.ts` — 31/31 passing (profile shapes, fertility window, seasonal/condition modifiers, pure function contract, childbirth risk)
 - `tests/events/event-filter.test.ts` — 47/47 passing (all prerequisite types, isUnique, cooldown, filterEligibleEvents, drawEvents, ALL_EVENTS deck integrity)
+- `tests/events/resolver.test.ts` — 14/14 passing (modify_resource, modify_standing, clamping, cooldown recording, event history, multi-consequence)
+- `tests/economy/resources.test.ts` — 24/24 passing (emptyResourceStock, addResourceStocks, clampResourceStock, calculateProduction with seasons, calculateConsumption)
 - `tests/population/demographics.test.ts` — 12/12 passing (marriage → conception → birth pipeline; child parentIds/childrenIds; pregnancy cleared after birth)
+- `tests/population/marriage.test.ts` — 12/12 passing (getLanguageCompatibility: shared/partial/none, Tradetalk, creole, asymmetric cases)
 - `tests/culture/language-acquisition.test.ts` — 34/34 passing (learning rates, child language resolution, language drift, settlement language fractions, tension formula, diversity turn counter)
-- **Total: 173/173 passing**
+- **Total: 223/223 passing**

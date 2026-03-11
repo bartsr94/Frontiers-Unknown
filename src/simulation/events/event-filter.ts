@@ -54,11 +54,11 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
       // Supported criteria keys: sex, religion, culturalIdentity, minAge, maxAge.
       const criteria = prereq.params as Record<string, unknown>;
       return Array.from(state.people.values()).some(person => {
-        if (criteria['sex']             !== undefined && person.sex             !== criteria['sex'])             return false;
-        if (criteria['religion']        !== undefined && person.religion        !== criteria['religion'])        return false;
-        if (criteria['culturalIdentity']!== undefined && person.culturalIdentity!== criteria['culturalIdentity']) return false;
-        if (criteria['minAge']          !== undefined && person.age             <  (criteria['minAge'] as number))  return false;
-        if (criteria['maxAge']          !== undefined && person.age             >  (criteria['maxAge'] as number))  return false;
+        if (criteria['sex']             !== undefined && person.sex                          !== criteria['sex'])             return false;
+        if (criteria['religion']        !== undefined && person.religion                     !== criteria['religion'])        return false;
+        if (criteria['culturalIdentity']!== undefined && person.heritage.primaryCulture     !== criteria['culturalIdentity']) return false;
+        if (criteria['minAge']          !== undefined && person.age                          <  (criteria['minAge'] as number))  return false;
+        if (criteria['maxAge']          !== undefined && person.age                          >  (criteria['maxAge'] as number))  return false;
         return true;
       });
     }

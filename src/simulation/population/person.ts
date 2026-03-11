@@ -35,16 +35,33 @@ export type EthnicGroup =
  * Cultural identity identifiers.
  * Represents how a person self-identifies, independent of biological bloodline.
  * Determined by upbringing, education, and lived experience.
+ *
+ * Broad Sauromatian IDs ('kiswani_traditional', 'hanjoda_traditional') are kept
+ * as pan-tribal identities for acculturated or blended individuals.
+ * Sub-group IDs map more precisely to specific ethnic communities.
  */
 export type CultureId =
+  // Imanian (colonist origin)
   | 'imanian_homeland'
   | 'ansberite'
   | 'townborn'
+  // Settlement-born emergent identity
+  | 'settlement_native'
+  // Sauromatian — broad (pan-tribal / blended)
   | 'kiswani_traditional'
   | 'hanjoda_traditional'
+  // Sauromatian — Kiswani sub-groups
+  | 'kiswani_riverfolk'
+  | 'kiswani_bayuk'
+  | 'kiswani_haisla'
+  // Sauromatian — Hanjoda sub-groups
+  | 'hanjoda_stormcaller'
+  | 'hanjoda_bloodmoon'
+  | 'hanjoda_talon'
+  | 'hanjoda_emrasi'
+  // Borderland / mixed-origin identities
   | 'sauro_borderfolk'
-  | 'sauro_wildborn'
-  | 'settlement_native';
+  | 'sauro_wildborn';
 
 /**
  * Religion identifiers.
@@ -81,6 +98,24 @@ export const ETHNIC_GROUP_PRIMARY_LANGUAGE: Record<EthnicGroup, LanguageId> = {
   hanjoda_bloodmoon:    'hanjoda',
   hanjoda_talon:        'hanjoda',
   hanjoda_emrasi:       'hanjoda',
+};
+
+/**
+ * Maps each ethnic group to the most specific CultureId that represents
+ * a person raised fully within that ethnic community.
+ *
+ * Used when initialising founding women and immigrants, so they get the
+ * correct sub-group culture rather than the broad pan-tribal label.
+ */
+export const ETHNIC_GROUP_CULTURE: Record<EthnicGroup, CultureId> = {
+  imanian:              'ansberite',
+  kiswani_riverfolk:    'kiswani_riverfolk',
+  kiswani_bayuk:        'kiswani_bayuk',
+  kiswani_haisla:       'kiswani_haisla',
+  hanjoda_stormcaller:  'hanjoda_stormcaller',
+  hanjoda_bloodmoon:    'hanjoda_bloodmoon',
+  hanjoda_talon:        'hanjoda_talon',
+  hanjoda_emrasi:       'hanjoda_emrasi',
 };
 
 // ─── Bloodline & Heritage ─────────────────────────────────────────────────────
@@ -255,8 +290,9 @@ export interface Person {
   languages: LanguageFluency[];
   /** The religious tradition this person practices. */
   religion: ReligionId;
-  /** The culture this person self-identifies with (may differ from bloodline). */
-  culturalIdentity: CultureId;
+  // NOTE: Cultural identity is accessed via heritage.primaryCulture — there is
+  // no standalone culturalIdentity field. heritage.culturalFluency tracks familiarity
+  // with multiple cultures; heritage.primaryCulture is the dominant one.
 
   /**
    * Personality, aptitude, cultural, and earned trait IDs.
@@ -367,7 +403,6 @@ export function createPerson(options: CreatePersonOptions = {}): Person {
     },
     languages: options.languages ?? [{ language: 'imanian', fluency: 1.0 }],
     religion: options.religion ?? 'imanian_orthodox',
-    culturalIdentity: options.culturalIdentity ?? 'ansberite',
 
     traits: options.traits ?? [],
 

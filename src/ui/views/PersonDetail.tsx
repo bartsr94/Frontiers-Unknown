@@ -21,6 +21,7 @@ import { useState } from 'react';
 import { useGameStore } from '../../stores/game-store';
 import Portrait from '../components/Portrait';
 import FamilyTree from './FamilyTree';
+import { CULTURE_LABELS } from '../../simulation/population/culture';
 import type { EthnicGroup } from '../../simulation/population/person';
 import type { TraitId } from '../../simulation/personality/traits';
 
@@ -202,16 +203,7 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
   };
 
   // ── Culture label ─────────────────────────────────────────────────────────
-  const cultureLabels: Record<string, string> = {
-    imanian_homeland:    'Imanian Homeland',
-    ansberite:           'Ansberite',
-    townborn:            'Townborn',
-    kiswani_traditional: 'Kiswani Traditional',
-    hanjoda_traditional: 'Hanjoda Traditional',
-    sauro_borderfolk:    'Sauro Borderfolk',
-    sauro_wildborn:      'Sauro Wildborn',
-    settlement_native:   'Settlement Native',
-  };
+  const cultureLabels = CULTURE_LABELS;
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -260,7 +252,7 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
           <span className="text-stone-300 capitalize">{person.socialStatus.replace(/_/g, ' ')}</span>
 
           <span className="text-stone-500">Culture</span>
-          <span className="text-stone-300">{cultureLabels[person.culturalIdentity] ?? person.culturalIdentity}</span>
+          <span className="text-stone-300">{cultureLabels[person.heritage.primaryCulture] ?? person.heritage.primaryCulture}</span>
 
           <span className="text-stone-500">Religion</span>
           <span className="text-stone-300">{religionLabels[person.religion] ?? person.religion}</span>
@@ -306,6 +298,51 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
         </div>
 
         <Divider />
+
+        {/* Cultural Fluency */}
+        {(() => {
+          const secondaryCultures = Array.from(person.heritage.culturalFluency.entries())
+            .filter(([cid, val]) => val > 0.05 && cid !== person.heritage.primaryCulture)
+            .sort((a, b) => b[1] - a[1]);
+          return (
+            <>
+              <SectionHeading>Cultural Fluency</SectionHeading>
+              {/* Primary culture — always shown first at full bar */}
+              <div className="flex flex-col gap-1 mb-1">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-teal-200 w-40 truncate">
+                    {cultureLabels[person.heritage.primaryCulture] ?? person.heritage.primaryCulture}
+                  </span>
+                  <div className="flex-1 h-1.5 bg-stone-700 rounded overflow-hidden">
+                    <div
+                      className="h-full bg-teal-600 rounded"
+                      style={{ width: `${((person.heritage.culturalFluency.get(person.heritage.primaryCulture) ?? 1.0) * 100).toFixed(0)}%` }}
+                    />
+                  </div>
+                  <span className="text-stone-500 w-8 text-right">
+                    {((person.heritage.culturalFluency.get(person.heritage.primaryCulture) ?? 1.0) * 100).toFixed(0)}%
+                  </span>
+                </div>
+                {/* Secondary cultures */}
+                {secondaryCultures.map(([cid, val]) => (
+                  <div key={cid} className="flex items-center gap-2 text-xs">
+                    <span className="text-stone-400 w-40 truncate">
+                      {cultureLabels[cid] ?? cid}
+                    </span>
+                    <div className="flex-1 h-1.5 bg-stone-700 rounded overflow-hidden">
+                      <div
+                        className="h-full bg-teal-800 rounded"
+                        style={{ width: `${(val * 100).toFixed(0)}%` }}
+                      />
+                    </div>
+                    <span className="text-stone-500 w-8 text-right">{(val * 100).toFixed(0)}%</span>
+                  </div>
+                ))}
+              </div>
+              <Divider />
+            </>
+          );
+        })()}
 
         {/* Traits */}
         {person.traits.length > 0 && (

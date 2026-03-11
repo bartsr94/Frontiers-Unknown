@@ -24,13 +24,18 @@ import {
 } from '../economy/resources';
 import { processPregnancies, attemptConception } from '../genetics/fertility';
 import { generateName } from '../population/naming';
-import type { LanguageId } from '../population/person';
+import type { LanguageId, ReligionId } from '../population/person';
 import {
   applyLanguageDrift,
   updateSettlementLanguages,
   updateLanguageTension,
   updateLanguageDiversityTurns,
 } from '../culture/language-acquisition';
+import {
+  processCulturalDrift,
+  computeCulturalBlend,
+  computeReligionDistribution,
+} from '../population/culture';
 
 // ─── Result Types ─────────────────────────────────────────────────────────────
 
@@ -80,6 +85,16 @@ export interface DawnResult {
   newLanguageDiversityTurns: number;
   /** True if settlement_creole emerged for the first time this turn. */
   creoleEmerged: boolean;
+  /**
+   * Updated cultural blend value (0.0 = fully Imanian, 1.0 = fully Sauromatian).
+   * Computed from the fraction of people whose primaryCulture is Sauromatian.
+   */
+  updatedCultureBlend: number;
+  /**
+   * Updated religion distribution for the settlement (fraction per religion).
+   * Recalculated each dawn from the surviving population.
+   */
+  updatedReligions: Map<ReligionId, number>;
 }
 
 /** Data returned by processDusk(). The store applies these to GameState. */
@@ -333,13 +348,24 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     updatedPeople.set(id, { ...person, languages: updatedLanguages });
   }
 
-  // 8. Recalculate settlement language distribution from the updated population.
+  // 8. Apply cultural drift — each survivor shifts slightly toward the dominant
+  //    community culture. Spouse bonds add an additional pull.
+  const culturallyDrifted = processCulturalDrift(updatedPeople, rng);
+  for (const [id, person] of culturallyDrifted) {
+    updatedPeople.set(id, person);
+  }
+
+  // 8b. Recalculate settlement language distribution from the updated population.
   const updatedLanguageFractions = updateSettlementLanguages(updatedPeople);
   const newLanguageTension = updateLanguageTension(updatedLanguageFractions);
   const newLanguageDiversityTurns = updateLanguageDiversityTurns(
     updatedLanguageFractions,
     state.culture.languageDiversityTurns,
   );
+
+  // 9. Recalculate cultural blend and religion distribution from the updated population.
+  const updatedCultureBlend = computeCulturalBlend(updatedPeople);
+  const updatedReligions = computeReligionDistribution(updatedPeople);
 
   // Check if creole just emerged (first turn where diversity threshold was reached
   // and the counter crosses 20). The store uses this flag to fire a one-time notice.
@@ -358,6 +384,8 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     newLanguageTension,
     newLanguageDiversityTurns,
     creoleEmerged,
+    updatedCultureBlend,
+    updatedReligions,
   };
 }
 

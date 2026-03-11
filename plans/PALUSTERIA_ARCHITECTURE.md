@@ -64,9 +64,9 @@ palusteria-game/
 │   │   │   └── company.ts              # Company relations, quota math, support tiers
 │   │   │
 │   │   ├── culture/
-│   │   │   ├── settlement-culture.ts   # Settlement culture tracker calculations
-│   │   │   ├── language.ts             # Language fluency, drift, creolization math
-│   │   │   └── religion.ts             # Religious composition, tension calculations
+│   │   │   ├── settlement-culture.ts      # Settlement culture tracker calculations
+│   │   │   ├── language-acquisition.ts    # Language learning rates, drift, child acquisition, creolization ✅
+│   │   │   └── religion.ts                # Religious composition, tension calculations
 │   │   │
 │   │   ├── world/
 │   │   │   ├── tribes.ts               # External tribe state and AI behavior
@@ -493,8 +493,10 @@ type TribeOffering = 'food' | 'horses' | 'furs' | 'herbs' | 'warriors' | 'wives'
 
 ```typescript
 interface SettlementCulture {
-  languages: Map<LanguageId, number>;     // Language → fraction of pop speaking it
+  languages: Map<LanguageId, number>;     // Language → fraction of pop speaking it (fluency ≥ 0.3)
   primaryLanguage: LanguageId;
+  languageDiversityTurns: number;         // consecutive turns where ≥2 languages each exceed 10% share
+  languageTension: number;                // 0.0–1.0; peaks at perfect 50/50 bilingual split
   religions: Map<ReligionId, number>;
   religiousTension: number;               // 0.0–1.0
   culturalBlend: number;                  // 0.0 (fully Imanian) → 1.0 (fully Sauromatian)
@@ -502,7 +504,7 @@ interface SettlementCulture {
   governance: GovernanceStyle;
 }
 
-type LanguageId = 'imanian' | 'kiswani' | 'tradetalk' | 'settlement_creole';
+type LanguageId = 'imanian' | 'kiswani' | 'hanjoda' | 'tradetalk' | 'settlement_creole';
 type ReligionId = 'imanian_orthodox' | 'sacred_wheel' | 'syncretic_hidden_wheel' | 'irreligious';
 type GovernanceStyle = 'patriarchal_imanian' | 'council_hybrid' | 'matriarchal_sauromatian';
 
@@ -520,7 +522,108 @@ type CulturalPracticeId =
   | 'patriarchal_households';
 ```
 
-### 4.11 Game State (Master Interface)
+### 4.11 Language Acquisition Engine
+
+**Module:** `src/simulation/culture/language-acquisition.ts`
+
+Pure simulation logic — no React dependency, no DOM calls. All functions are deterministic (no RNG required for drift; children inherit from parents via separate seeded path).
+
+#### Constants
+
+```typescript
+const CONVERSATIONAL_THRESHOLD = 0.3;  // minimum fluency to be counted as a speaker
+```
+
+#### Learning Rate by Age
+
+```typescript
+function getLanguageLearningRate(age: number): number
+```
+
+| Age Band | Rate per Turn |
+|----------|--------------|
+| 0–5      | 0.040        |
+| 5–12     | 0.025        |
+| 12–20    | 0.012        |
+| 20–40    | 0.006        |
+| 40–60    | 0.003        |
+| 60+      | 0.001        |
+
+Children acquire language ~30× faster than elderly adults. Rate is applied with diminishing returns: `Δfluency = rate × communityFraction × (1 − currentFluency)`.
+
+#### Per-Turn Passive Drift
+
+```typescript
+function applyLanguageDrift(
+  person: Person,
+  settlementLangFractions: Map<LanguageId, number>
+): Person
+```
+
+Each turn, for every language spoken by ≥10% of the settlement (community fraction threshold), the person gains fluency proportional to their age-band rate, that language's community fraction, and diminishing returns. Tradetalk receives a 2× isolation boost (pidgin learns fast between strangers) but is **hard-capped at 0.50** — it is a bridge pidgin, never a native tongue.
+
+#### Child Language Inheritance
+
+```typescript
+function resolveChildLanguages(mother: Person, father: Person): LanguageFluency[]
+```
+
+A newborn receives every language that either parent speaks at conversational level (`≥ 0.3`), each starting at **0.10 fluency**. The community will do the rest via `applyLanguageDrift` as the child ages.
+
+#### Settlement Language Fractions
+
+```typescript
+function updateSettlementLanguages(
+  people: Person[]
+): Map<LanguageId, number>
+```
+
+Recalculates the fraction of the living population with fluency ≥ `CONVERSATIONAL_THRESHOLD` for each language. Called every dawn after drift is applied. Result is stored in `culture.languages` and used by subsequent drift calculations.
+
+#### Language Tension
+
+```typescript
+function updateLanguageTension(
+  langFractions: Map<LanguageId, number>
+): number
+```
+
+Returns a value in `[0.0, 1.0]`. Formula: `1 − |dominant − recessive|` where *dominant* and *recessive* are the two largest non-creole language fractions. Peaks at **1.0** on a perfect 50/50 bilingual split; drops toward 0 as one language becomes dominant or the community is monolingual. Stored in `culture.languageTension`.
+
+#### Diversity Turn Counter & Creole Emergence
+
+```typescript
+function updateLanguageDiversityTurns(
+  langFractions: Map<LanguageId, number>,
+  current: number
+): number
+```
+
+Increments `languageDiversityTurns` when ≥ 2 languages each exceed 10% community share; otherwise holds the current value. When `languageDiversityTurns ≥ 20` (~5 in-game years), newly born children receive `settlement_creole` at 0.10 fluency in their natal language set. Stored in `culture.languageDiversityTurns`.
+
+#### Marriage Language Compatibility
+
+```typescript
+type LanguageCompatibility = 'shared' | 'partial' | 'none';
+
+function getLanguageCompatibility(a: Person, b: Person): LanguageCompatibility
+```
+
+- `'shared'` — both share at least one language at conversational level
+- `'partial'` — one side has tradetalk above threshold (can gesture and trade)
+- `'none'` — no common language; `MarriageDialog` shows an amber warning
+
+#### Event Integration
+
+`languageTension` feeds the event system via `PrerequisiteType`:
+
+```typescript
+{ type: 'language_tension_above', value: 0.4 }
+```
+
+When tension exceeds the threshold, cultural conflict events become eligible and can fire during the Event Phase.
+
+### 4.12 Game State (Master Interface)
 
 ```typescript
 interface GameState {
