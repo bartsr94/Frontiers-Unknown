@@ -22,7 +22,7 @@ import {
   calculateProduction,
   calculateConsumption,
 } from '../economy/resources';
-import { processPregnancies } from '../genetics/fertility';
+import { processPregnancies, attemptConception } from '../genetics/fertility';
 import { generateName } from '../population/naming';
 
 // ─── Result Types ─────────────────────────────────────────────────────────────
@@ -259,6 +259,25 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
       motherId: result.motherId,
       motherSurvived: !result.motherDied,
     });
+  }
+
+  // 2b. Attempt conception for all married women who are not already pregnant.
+  for (const woman of Array.from(updatedPeople.values())) {
+    if (woman.sex !== 'female' || woman.health.pregnancy) continue;
+
+    for (const spouseId of woman.spouseIds) {
+      const man = updatedPeople.get(spouseId);
+      if (!man || man.sex !== 'male') continue;
+
+      const pregnancy = attemptConception(woman, man, state.turnNumber, state.currentSeason, rng);
+      if (pregnancy) {
+        updatedPeople.set(woman.id, {
+          ...woman,
+          health: { ...woman.health, pregnancy },
+        });
+        break; // one conception attempt per woman per season
+      }
+    }
   }
 
   // 3. Process natural deaths (age-based).

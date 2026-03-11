@@ -122,4 +122,665 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       },
     ],
   },
+
+  // ─── Cross-cultural events ────────────────────────────────────────────────
+
+  {
+    id: 'dom_riverfolk_widow',
+    title: 'The Riverfolk Widow',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'tribe_exists',            params: { tribeId: 'njaro_matu_riverfolk' } },
+      { type: 'tribe_disposition_above', params: { tribeId: 'njaro_matu_riverfolk', value: -20 } },
+    ],
+    weight: 2,
+    cooldown: 20,
+    isUnique: false,
+    description:
+      'A Kiswani Riverfolk woman arrives at the settlement boundary with two young daughters ' +
+      'and a bundle of possessions. She speaks haltingly in trade-talk: her husband was killed ' +
+      'in a raid three moons past. Her sisters took her land. She has nowhere to go. She asks ' +
+      'for shelter. Her daughters are quiet and wide-eyed, watching you.',
+    choices: [
+      {
+        id: 'welcome_freely',
+        label: 'Welcome them without condition.',
+        description: 'She and her daughters are given a place to sleep and a share of the work. Word like this travels.',
+        consequences: [
+          { type: 'modify_disposition', target: 'njaro_matu_riverfolk', value: 10 },
+        ],
+      },
+      {
+        id: 'welcome_conditional',
+        label: 'Welcome them — but make clear the eldest daughter will marry one of your men in time.',
+        description: 'A pragmatic arrangement. She understands and agrees. The tribe may not be pleased.',
+        consequences: [
+          { type: 'modify_disposition', target: 'njaro_matu_riverfolk', value: 4 },
+        ],
+      },
+      {
+        id: 'shelter_temporary',
+        label: 'Give them shelter through the season only. No promises.',
+        description: 'A small act of charity with no commitment.',
+        consequences: [],
+      },
+      {
+        id: 'turn_away',
+        label: 'Turn them away. This is a men\'s outpost, not a refuge.',
+        description: 'She leaves without protest, but the daughters look back. Word will reach the tribe.',
+        consequences: [
+          { type: 'modify_disposition', target: 'njaro_matu_riverfolk', value: -12 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'dom_company_send_women',
+    title: 'Company Directive: Send Women',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'min_year',               params: { value: 2 } },
+      { type: 'company_standing_above', params: { value: 40 } },
+    ],
+    weight: 2,
+    cooldown: 0,
+    isUnique: true,
+    description:
+      'A Company courier arrives with a sealed letter. The Ansberry Company has noted your ' +
+      'settlement\'s low female population — a liability for long-term productivity and morale, ' +
+      'per their demographic assessments. They offer a solution: Imanian women of good standing ' +
+      'have volunteered for frontier postings at the rate of fifty gold crowns per placement. ' +
+      'The Company will facilitate transport and contracts. Your response will be noted.',
+    choices: [
+      {
+        id: 'request_three',
+        label: 'Request three women. (−150 gold)',
+        description: 'A substantial investment in the settlement\'s future.',
+        consequences: [
+          { type: 'modify_resource', target: 'gold', value: -150 },
+        ],
+      },
+      {
+        id: 'request_one',
+        label: 'Request one woman. (−50 gold)',
+        description: 'Modest but affordable. The Company will note your restraint.',
+        consequences: [
+          { type: 'modify_resource', target: 'gold', value: -50 },
+        ],
+      },
+      {
+        id: 'decline',
+        label: 'Decline for now. You will manage your own affairs.',
+        description: 'The Company records your refusal without comment.',
+        consequences: [],
+      },
+      {
+        id: 'request_craftsmen',
+        label: 'Decline — but request skilled craftsmen instead. (−80 gold)',
+        description: 'You need tools, not wives. The Company accepts the counter-proposal.',
+        consequences: [
+          { type: 'modify_resource', target: 'gold',  value: -80 },
+          { type: 'modify_resource', target: 'goods', value: 8 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'dom_sauromatian_proposal',
+    title: 'A Sauromatian Proposal',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'has_person_matching', params: { sex: 'female', minAge: 16 } },
+      { type: 'tribe_exists',        params: { tribeId: 'thunder_veil_band' } },
+    ],
+    weight: 2,
+    cooldown: 15,
+    isUnique: false,
+    description:
+      'A delegation from one of the Hanjoda tribes arrives — three women and an interpreter. ' +
+      'They have a young man with them, perhaps twenty years old, lean and watchful. The ' +
+      'interpreter explains: he is a good hunter, unmarried, healthy. The tribe is offering ' +
+      'him as a husband to one of your Sauromatian women in exchange for steel. An unusual ' +
+      'arrangement, but not an unre asonable one.',
+    choices: [
+      {
+        id: 'accept',
+        label: 'Accept the arrangement. (−5 steel)',
+        description: 'A husband gained, a relationship with the tribe cemented.',
+        consequences: [
+          { type: 'modify_resource',    target: 'steel',              value: -5 },
+          { type: 'modify_disposition', target: 'thunder_veil_band',  value: 8  },
+        ],
+      },
+      {
+        id: 'negotiate',
+        label: 'Accept, but negotiate for more — he should bring cattle or trade goods.',
+        description: 'You push harder. They confer privately. There is a chance they withdraw.',
+        consequences: [
+          { type: 'modify_resource',    target: 'steel',             value: -5  },
+          { type: 'modify_resource',    target: 'cattle',            value: 3   },
+          { type: 'modify_disposition', target: 'thunder_veil_band', value: 3   },
+        ],
+      },
+      {
+        id: 'decline_politely',
+        label: 'Decline with respect.',
+        description: 'You are not in the business of arranging marriages on behalf of others. The tribe understands.',
+        consequences: [
+          { type: 'modify_disposition', target: 'thunder_veil_band', value: -3 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'dom_lonely_settler',
+    title: 'The Lonely Settler',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'has_person_matching', params: { sex: 'male', minAge: 25 } },
+      { type: 'has_person_matching', params: { sex: 'female'           } },
+    ],
+    weight: 2,
+    cooldown: 12,
+    isUnique: false,
+    description:
+      'One of your older men comes to you privately. He is awkward about it but direct: he ' +
+      'has developed strong feelings for one of the Sauromatian women in the settlement. ' +
+      'He has not spoken to her about it. He is asking your permission — or at least your ' +
+      'blessing — before he makes his intentions known. He is a good man and has served ' +
+      'faithfully. She, for her part, has shown no sign of objection.',
+    choices: [
+      {
+        id: 'bless_union',
+        label: 'Give them your blessing. Let them find their own way.',
+        description: 'A small happiness in a hard place. Both will work better for it.',
+        consequences: [],
+      },
+      {
+        id: 'forbid',
+        label: 'Forbid it. The settlement is not a matchmaking house.',
+        description: 'He is chastened. She is confused. Neither is pleased with you.',
+        consequences: [],
+      },
+      {
+        id: 'arrange_formally',
+        label: 'Arrange it formally, with gifts and acknowledgment. (−5 goods)',
+        description: 'Doing it properly shows respect for her culture and his commitment. A better outcome for all.',
+        consequences: [
+          { type: 'modify_resource', target: 'goods', value: -5 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'dom_first_harvest',
+    title: 'Festival of the First Harvest',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'season_is',  params: { season: 'autumn' } },
+      { type: 'min_year',   params: { value: 1 } },
+    ],
+    weight: 3,
+    cooldown: 4,
+    isUnique: false,
+    description:
+      'The harvest is in — not abundant, but real. Your men want to mark it. The Sauromatian ' +
+      'women in the settlement have their own traditions for this time of year: offerings at ' +
+      'the water\'s edge, songs that go on past dark, a particular way of braiding grain that ' +
+      'carries meaning you have not yet learned. You must decide how to honour the season.',
+    choices: [
+      {
+        id: 'imanian_ceremony',
+        label: 'Hold an Imanian ceremony — prayer, a shared meal, familiar forms.',
+        description: 'The men are comfortable. The Sauromatian women watch from the edge of the firelight.',
+        consequences: [
+          { type: 'modify_resource', target: 'food', value: -5 },
+        ],
+      },
+      {
+        id: 'sauromatian_ceremony',
+        label: 'Let the Sauromatian women lead their own ceremony. Encourage the men to observe.',
+        description: 'Strange and beautiful. Some men are unsettled. Others are quietly moved.',
+        consequences: [
+          { type: 'modify_resource',    target: 'food',              value: -5 },
+          { type: 'modify_standing',    target: 'company',           value: -2 },
+        ],
+      },
+      {
+        id: 'joint_celebration',
+        label: 'Blend both traditions — a joint celebration, Imanian and Sauromatian together.',
+        description: 'Not all are comfortable. But something new begins here — a shared memory.',
+        consequences: [
+          { type: 'modify_resource',    target: 'food',              value: -8 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'dom_mixed_child_born',
+    title: 'A Child Between Worlds',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'cultural_blend_above', params: { value: 0.1 } },
+      { type: 'min_year',             params: { value: 1   } },
+      // Require at least one infant/toddler — the child must actually exist.
+      { type: 'has_person_matching',  params: { maxAge: 2  } },
+    ],
+    weight: 3,
+    cooldown: 0,
+    isUnique: true,
+    description:
+      'The first child born of Imanian and Sauromatian blood has arrived. The birth was ' +
+      'uncomplicated. The child is healthy. She has her mother\'s cheekbones and perhaps her ' +
+      'father\'s eyes — it is too early to say. She is the first of something that has no name ' +
+      'yet. Your settlers look to you for guidance on how to mark the moment.',
+    choices: [
+      {
+        id: 'celebrate_publicly',
+        label: 'Celebrate publicly. This child is a sign of what this settlement can become.',
+        description: 'A small feast, a blessing spoken aloud. The more traditional men are quiet, but they raise their cups.',
+        consequences: [
+          { type: 'modify_resource', target: 'food', value: -6 },
+        ],
+      },
+      {
+        id: 'acknowledge_quietly',
+        label: 'Acknowledge it quietly. Give the mother a gift. Keep the moment private.',
+        description: 'Respectful and politically careful. Good for stability.',
+        consequences: [
+          { type: 'modify_resource', target: 'goods', value: -3 },
+        ],
+      },
+      {
+        id: 'name_imanian',
+        label: 'Name the child in Imanian tradition, publicly.',
+        description: 'The father\'s family name passes to this child. The Company will approve.',
+        consequences: [
+          { type: 'modify_standing', target: 'company', value: 3 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'dom_elder_complaint',
+    title: 'The Elder\'s Complaint',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'cultural_blend_above', params: { value: 0.3 } },
+    ],
+    weight: 2,
+    cooldown: 8,
+    isUnique: false,
+    description:
+      'One of your oldest settlers — a founding member, deeply Imanian in his customs — ' +
+      'has requested a private audience. He is not angry, exactly. But he is worried. He ' +
+      'remembers why the Company sent men here: to establish an Imanian presence, to trade ' +
+      'on Imanian terms. He has been watching the settlement drift. The language at the ' +
+      'fire has been changing. The saints\' days go unmarked. He asks you: are we still ' +
+      'Imanian here?',
+    choices: [
+      {
+        id: 'reassure',
+        label: 'Reassure him. You remain Imanian at your core.',
+        description: 'He is not entirely convinced, but he is mollified. For now.',
+        consequences: [],
+      },
+      {
+        id: 'ignore',
+        label: 'Dismiss his concerns. Adaptation is survival.',
+        description: 'He leaves unsatisfied. His opinions will harden.',
+        consequences: [],
+      },
+      {
+        id: 'enforce_traditions',
+        label: 'Agree. Reinstate formal observance of Imanian customs.',
+        description: 'He is gratified. Some of the younger men roll their eyes. The Sauromatian women notice the change.',
+        consequences: [
+          { type: 'modify_standing', target: 'company', value: 4 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'dom_essence_sharing',
+    title: 'Essence Sharing',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'has_person_matching', params: { sex: 'female' } },
+      { type: 'season_is',           params: { season: 'summer' } },
+    ],
+    weight: 2,
+    cooldown: 4,
+    isUnique: false,
+    description:
+      'The Sauromatian women in your settlement approach you together — an unusual show of ' +
+      'collective intention. Summer is the season of giving, they explain through an interpreter. ' +
+      'It is traditional for women who are able to open themselves to new life during these ' +
+      'weeks. The customs involved are private and sacred. They are not asking your ' +
+      'permission, exactly. But they are telling you, which is its own kind of respect.',
+    choices: [
+      {
+        id: 'allow_openly',
+        label: 'Allow it openly and without comment.',
+        description: 'You respect their right to their own traditions. Some of your men will draw their own conclusions.',
+        consequences: [],
+      },
+      {
+        id: 'forbid',
+        label: 'Forbid it. This is an Imanian settlement.',
+        description: 'They comply, silently. The warmth between the groups cools measurably.',
+        consequences: [],
+      },
+      {
+        id: 'allow_privately',
+        label: 'Allow it, but ask them to keep their observances private.',
+        description: 'A compromise. They accept it, though they do not seem pleased.',
+        consequences: [],
+      },
+    ],
+  },
+
+  {
+    id: 'dom_company_inspector',
+    title: 'The Company Inspector',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'company_standing_below', params: { value: 50 } },
+    ],
+    weight: 2,
+    cooldown: 10,
+    isUnique: false,
+    description:
+      'A Company inspector has arrived on the supply boat — a careful, pale man with a ' +
+      'leather ledger and the eyes of someone who has learned not to be surprised by ' +
+      'anything. He has come to assess the outpost\'s productivity, cultural compliance, ' +
+      'and overall viability. He will report back to the Ansberry Company\'s directorate. ' +
+      'He is polite, but thorough.',
+    choices: [
+      {
+        id: 'show_honestly',
+        label: 'Show him the books honestly and explain your situation.',
+        description: 'Whatever happens, it will be the truth. He notes your candour.',
+        consequences: [
+          { type: 'modify_standing', target: 'company', value: 3 },
+        ],
+      },
+      {
+        id: 'favorable_picture',
+        label: 'Present a favourable picture. Emphasize progress, minimize setbacks.',
+        description: 'It is not lying. It is framing. He may or may not see through it.',
+        consequences: [
+          { type: 'modify_standing', target: 'company', value: 6 },
+        ],
+      },
+      {
+        id: 'wine_and_dine',
+        label: 'Wine and dine him generously before he opens the books. (−15 gold)',
+        description: 'A man who has been well-fed is a more forgiving assessor. An investment.',
+        consequences: [
+          { type: 'modify_resource', target: 'gold',    value: -15 },
+          { type: 'modify_standing', target: 'company', value: 8  },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'dom_stranger_at_gate',
+    title: 'A Stranger at the Gate',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'min_year', params: { value: 3 } },
+    ],
+    weight: 1,
+    cooldown: 20,
+    isUnique: false,
+    description:
+      'Alone. That is the first thing you notice. A Sauromatian man, perhaps twenty-five, ' +
+      'no tribal markings you recognize, no escort, no horse. He has been standing at the ' +
+      'settlement boundary since dawn. He is not armed — or at least not visibly. He speaks ' +
+      'no trade-talk, but he does not look afraid. Among the Sauromatians, men who travel ' +
+      'alone are either very capable or very desperate. Possibly both.',
+    choices: [
+      {
+        id: 'welcome_openly',
+        label: 'Welcome him without conditions. He may choose his own path here.',
+        description: 'Word of extraordinary hospitality will reach the tribes. Every unmarried woman in the settlement takes notice.',
+        consequences: [],
+      },
+      {
+        id: 'welcome_you_choose',
+        label: 'Welcome him — but you will decide who he courts, if anyone.',
+        description: 'An unusual exercise of authority, but not without precedent in a settlement this small.',
+        consequences: [],
+      },
+      {
+        id: 'be_suspicious',
+        label: 'Detain him politely and ask questions through your interpreter.',
+        description: 'A lone man in the wilderness is statistically suspicious. He answers calmly, which is either reassuring or well-rehearsed.',
+        consequences: [],
+      },
+    ],
+  },
+
+  // ─── Five additional creative events ─────────────────────────────────────
+
+  {
+    id: 'dom_midwife_offer',
+    title: 'The Midwife\'s Knowledge',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'has_person_matching', params: { sex: 'female' } },
+      { type: 'min_year',            params: { value: 1      } },
+    ],
+    weight: 2,
+    cooldown: 10,
+    isUnique: false,
+    description:
+      'One of the older Sauromatian women approaches your settlement healer — or whoever ' +
+      'serves that function — and through gestures and trade-talk, makes an offer. She has ' +
+      'attended more births than she can count. Her knowledge of preparation, position, ' +
+      'herbs, and timing has saved lives that Imanian medicine would have lost. She asks ' +
+      'for nothing in return but to be allowed to practice her art.',
+    choices: [
+      {
+        id: 'accept_fully',
+        label: 'Accept her offer gratefully. Let her work alongside your healer.',
+        description: 'Two traditions working together. Births in this settlement will be safer.',
+        consequences: [
+          { type: 'modify_resource', target: 'medicine', value: 5 },
+        ],
+      },
+      {
+        id: 'accept_supervised',
+        label: 'Accept, but require your healer to oversee her methods.',
+        description: 'A cautious compromise. She accepts the condition without warmth.',
+        consequences: [
+          { type: 'modify_resource', target: 'medicine', value: 2 },
+        ],
+      },
+      {
+        id: 'decline',
+        label: 'Decline. You will rely on Imanian medicine.',
+        description: 'She withdraws without argument. She has seen the results of Imanian medicine.',
+        consequences: [],
+      },
+    ],
+  },
+
+  {
+    id: 'dom_sacred_wheel_witness',
+    title: 'The Wheel Turning',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'min_year',            params: { value: 1 }               },
+      { type: 'has_person_matching', params: { sex: 'male', minAge: 20 } },
+    ],
+    weight: 2,
+    cooldown: 12,
+    isUnique: false,
+    description:
+      'One of your settlers — one of the more curious, younger ones — tells you what he ' +
+      'saw last night. The Sauromatian women were gathered at the water. There was a fire, ' +
+      'low and ringed in stones, and they were speaking to it — or to something in it. ' +
+      'Calling and answering in a language he could not follow. He does not think it was ' +
+      'evil. He found it, he says carefully, moving. He asks what you think he should do.',
+    choices: [
+      {
+        id: 'report_heresy',
+        label: 'Tell him to report it formally. This cannot be permitted to go silently.',
+        description: 'He does so. The Company inspector would approve. The atmosphere in the settlement chills overnight.',
+        consequences: [
+          { type: 'modify_standing', target: 'company', value: 3 },
+        ],
+      },
+      {
+        id: 'stay_silent',
+        label: 'Tell him to say nothing. What happens at the water\'s edge is their own business.',
+        description: 'Pragmatic discretion. He nods, relieved.',
+        consequences: [],
+      },
+      {
+        id: 'participate',
+        label: 'Tell him to ask if he may join them next time.',
+        description: 'Bold. The women consider for a day. Then one of them comes to find him. Yes.',
+        consequences: [
+          { type: 'modify_standing', target: 'company', value: -4 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'dom_fire_stories',
+    title: 'Stories at the Fire',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'min_population', params: { value: 8 } },
+      { type: 'min_year',       params: { value: 1 } },
+    ],
+    weight: 2,
+    cooldown: 8,
+    isUnique: false,
+    description:
+      'The evenings are drawing in. One of the Sauromatian women — the most talkative, ' +
+      'the one who has picked up the most trade-talk — has begun telling stories at the ' +
+      'evening fire. Your men gather without being asked. The stories are long and involve ' +
+      'rivers, women who become cranes, arguments settled at the edge of the world. Nobody ' +
+      'fully understands. Everyone listens. You notice fewer men eating alone.',
+    choices: [
+      {
+        id: 'encourage',
+        label: 'Encourage her. This is good for morale.',
+        description: 'She beams. The sessions become a nightly fixture.',
+        consequences: [],
+      },
+      {
+        id: 'allow_quietly',
+        label: 'Say nothing. Let it continue on its own terms.',
+        description: 'The evenings grow richer without your intervention.',
+        consequences: [],
+      },
+      {
+        id: 'request_reciprocal',
+        label: 'Ask one of your men to share Imanian stories in return.',
+        description: 'An exchange. Both traditions, one fire.',
+        consequences: [],
+      },
+    ],
+  },
+
+  {
+    id: 'dom_talon_eyes',
+    title: 'Eyes Like Amber',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'cultural_blend_above', params: { value: 0.2 } },
+      { type: 'min_year',             params: { value: 2   } },
+      // Require a young child — the narrative describes a four-year-old.
+      { type: 'has_person_matching',  params: { maxAge: 8  } },
+    ],
+    weight: 1,
+    cooldown: 0,
+    isUnique: true,
+    description:
+      'The child is perhaps four years old — old enough to run and to be stared at. Her ' +
+      'eyes are unmistakably amber. Not hazel, not brown: the deep warm gold that the ' +
+      'Hanjoda Talon consider their most sacred marker. Your men have noticed. Some find ' +
+      'them beautiful. A few of the more superstitious have been making signs against ill ' +
+      'luck. A delegation from the Talon tribe is expected next season, and they will ' +
+      'certainly notice too.',
+    choices: [
+      {
+        id: 'celebrate_heritage',
+        label: 'Speak openly about her Talon heritage. This is a mark of honour.',
+        description: 'You make it a point of pride. The delegation will arrive to find the child treated with respect.',
+        consequences: [
+          { type: 'modify_disposition', target: 'cairn_valley_smiths', value: 8 },
+        ],
+      },
+      {
+        id: 'spiritual_framing',
+        label: 'Frame it through the Sacred Wheel. She is touched by something beyond bloodline.',
+        description: 'A syncretic reading that satisfies neither tradition perfectly, but offends neither fatally.',
+        consequences: [],
+      },
+      {
+        id: 'say_nothing',
+        label: 'Say nothing. She is a child. Her eyes are her own.',
+        description: 'You refuse to make her a symbol. The delegation will form their own opinion.',
+        consequences: [],
+      },
+    ],
+  },
+
+  {
+    id: 'dom_language_lessons',
+    title: 'Language Lessons',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'has_person_matching', params: { sex: 'female' } },
+      { type: 'min_year',            params: { value: 1      } },
+    ],
+    weight: 2,
+    cooldown: 10,
+    isUnique: false,
+    description:
+      'One of the Sauromatian women — the most patient one — has begun holding informal ' +
+      'language lessons for anyone willing to sit with her after the evening meal. She ' +
+      'points. She names. She corrects gently. Three of your men have been attending ' +
+      'consistently. Progress is slow but visible. She has not asked your permission. ' +
+      'She has simply started. Now she asks you what you think.',
+    choices: [
+      {
+        id: 'formalize',
+        label: 'Formalize the lessons. Give her time and a proper space for it.',
+        description: 'Make it official. The three men bring their notes. Two more join.',
+        consequences: [
+          { type: 'modify_resource', target: 'goods', value: -2 },
+        ],
+      },
+      {
+        id: 'allow_quietly',
+        label: 'Tell her you approve, but keep it informal.',
+        description: 'She nods and continues exactly as before.',
+        consequences: [],
+      },
+      {
+        id: 'forbid',
+        label: 'Forbid it. Language is identity, and this settlement\'s identity is Imanian.',
+        description: 'The three men are disappointed. She says nothing and does not look at you.',
+        consequences: [
+          { type: 'modify_standing', target: 'company', value: 3 },
+        ],
+      },
+    ],
+  },
 ];

@@ -376,6 +376,66 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
           </>
         )}
 
+        {/* Key Opinions */}
+        {(() => {
+          const entries = Array.from(person.relationships.entries());
+          const positives = entries
+            .filter(([, v]) => v > 0)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3);
+          const negatives = entries
+            .filter(([, v]) => v < 0)
+            .sort((a, b) => a[1] - b[1])
+            .slice(0, 3);
+
+          if (positives.length === 0 && negatives.length === 0) {
+            return null;
+          }
+
+          return (
+            <>
+              <SectionHeading>Key Opinions</SectionHeading>
+              <div className="flex flex-col gap-1.5 mb-1 text-xs">
+                {positives.length > 0 && (
+                  <div>
+                    <span className="text-stone-500 text-xs">Favours:</span>
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {positives.map(([id, score]) => (
+                        <button
+                          key={id}
+                          onClick={() => navigateTo(id)}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-950 text-green-300 hover:bg-green-900 underline decoration-dotted"
+                        >
+                          {nameOf(id)}
+                          <span className="text-green-500 font-semibold">+{score}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {negatives.length > 0 && (
+                  <div>
+                    <span className="text-stone-500 text-xs">Dislikes:</span>
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {negatives.map(([id, score]) => (
+                        <button
+                          key={id}
+                          onClick={() => navigateTo(id)}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-950 text-red-300 hover:bg-red-900 underline decoration-dotted"
+                        >
+                          {nameOf(id)}
+                          <span className="text-red-500 font-semibold">{score}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <Divider />
+            </>
+          );
+        })()}
+
         {/* Family */}
         <SectionHeading>Family</SectionHeading>
         <div className="flex flex-col gap-1 text-xs mb-1">

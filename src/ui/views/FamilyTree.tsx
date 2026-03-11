@@ -17,6 +17,7 @@
  */
 
 import { useGameStore } from '../../stores/game-store';
+import { skinToneColor } from '../components/Portrait';
 import type { Person } from '../../simulation/population/person';
 import type { GraveyardEntry } from '../../simulation/turn/game-state';
 
@@ -33,6 +34,12 @@ interface TreeNode {
   age?: number;
   parentIds: [string | null, string | null];
   childrenIds: string[];
+  /** Skin tone 0–1 for the colour dot (undefined for graveyard entries). */
+  skinTone?: number;
+  /** First 2 trait IDs for abbreviated pills (undefined for graveyard entries). */
+  traits?: string[];
+  /** Spouse IDs (only populated for living people; empty for graveyard entries). */
+  spouseIds: string[];
 }
 
 // ─── Lookup helpers ─────────────────────────────────────────────────────────
@@ -47,6 +54,9 @@ function fromPerson(p: Person): TreeNode {
     age: Math.floor(p.age),
     parentIds: p.parentIds,
     childrenIds: p.childrenIds,
+    skinTone: p.genetics.visibleTraits.skinTone,
+    traits: p.traits.slice(0, 2),
+    spouseIds: p.spouseIds,
   };
 }
 
@@ -60,6 +70,7 @@ function fromGraveyardEntry(g: GraveyardEntry): TreeNode {
     deathYear: g.deathYear,
     parentIds: g.parentIds,
     childrenIds: g.childrenIds,
+    spouseIds: [],
   };
 }
 
@@ -79,6 +90,23 @@ function useNodeLookup(): (id: string) => TreeNode | null {
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
+// Short abbreviations for trait IDs shown in tree nodes
+const TRAIT_ABBR: Record<string, string> = {
+  ambitious: 'AMB', content: 'CNT', gregarious: 'GRG', shy: 'SHY',
+  brave: 'BRV', craven: 'CRV', cruel: 'CRL', kind: 'KND',
+  greedy: 'GRD', generous: 'GEN', lustful: 'LST', chaste: 'CHT',
+  wrathful: 'WRT', patient: 'PAT', deceitful: 'DCT', honest: 'HNS',
+  proud: 'PRD', humble: 'HMB',
+  strong: 'STR', weak: 'WEK', clever: 'CLV', slow: 'SLW',
+  beautiful: 'BTY', plain: 'PLN', robust: 'RBT', sickly: 'SCK',
+  fertile: 'FRT', barren: 'BRN',
+  traditional: 'TRD', cosmopolitan: 'COS', devout: 'DEV',
+  skeptical: 'SKP', xenophobic: 'XNO', welcoming: 'WLC',
+  veteran: 'VET', scarred: 'SCR', respected_elder: 'ELD',
+  scandal: 'SCN', oath_breaker: 'OTH', hero: 'HRO',
+  coward: 'CWD', wealthy: 'WLT', indebted: 'DBT',
+};
+
 const SEX_SYMBOL: Record<'male' | 'female', string> = { male: '♂', female: '♀' };
 
 interface NodeCardProps {
@@ -97,7 +125,7 @@ function NodeCard({ node, isRoot = false, onSelect }: NodeCardProps) {
       onClick={onSelect}
       disabled={isRoot || !onSelect}
       className={[
-        'flex flex-col items-center px-2 py-1.5 rounded border text-xs leading-snug min-w-[76px] max-w-[96px]',
+        'flex flex-col items-center px-2 py-1.5 rounded border text-xs leading-snug min-w-[80px] max-w-[100px]',
         'transition-colors',
         isRoot
           ? 'border-amber-500 bg-amber-950 text-amber-200 cursor-default'
@@ -107,19 +135,41 @@ function NodeCard({ node, isRoot = false, onSelect }: NodeCardProps) {
       ].join(' ')}
       title={node.isLiving ? undefined : 'Deceased'}
     >
-      <span className="font-semibold truncate w-full text-center">
-        {node.sex === 'female' ? (
-          <span className="text-rose-400 mr-0.5">{SEX_SYMBOL.female}</span>
-        ) : (
-          <span className="text-sky-400 mr-0.5">{SEX_SYMBOL.male}</span>
+      {/* Name row with sex symbol and skin dot */}
+      <span className="flex items-center gap-1 w-full justify-center">
+        {node.skinTone !== undefined && (
+          <span
+            className="inline-block w-2 h-2 rounded-full flex-shrink-0 border border-stone-600"
+            style={{ backgroundColor: skinToneColor(node.skinTone) }}
+            aria-hidden="true"
+          />
         )}
-        {node.name}
+        <span className={node.sex === 'female' ? 'text-rose-400' : 'text-sky-400'}>
+          {SEX_SYMBOL[node.sex]}
+        </span>
+        <span className="font-semibold truncate">{node.name.split(' ')[0]}</span>
+      </span>
+      <span className="truncate w-full text-center text-stone-500 text-[10px]">
+        {node.name.split(' ').slice(1).join(' ')}
       </span>
       <span className={node.isLiving ? 'text-stone-400' : 'text-stone-600'}>
         {yearText}
       </span>
       {!node.isLiving && (
         <span className="text-stone-600 italic">deceased</span>
+      )}
+      {/* Trait abbreviation pills */}
+      {node.traits && node.traits.length > 0 && (
+        <span className="flex gap-0.5 mt-0.5 flex-wrap justify-center">
+          {node.traits.map(t => (
+            <span
+              key={t}
+              className="text-[9px] px-1 py-0 rounded bg-stone-700 text-stone-400 leading-tight"
+            >
+              {TRAIT_ABBR[t] ?? t.slice(0, 3).toUpperCase()}
+            </span>
+          ))}
+        </span>
       )}
     </button>
   );
@@ -191,6 +241,12 @@ export default function FamilyTree({ rootPersonId, onSelectPerson }: FamilyTreeP
   const paternalGM = paternalGMId ? lookup(paternalGMId) : null;
   const paternalGF = paternalGFId ? lookup(paternalGFId) : null;
 
+  // ── Spouses ──────────────────────────────────────────────────────────────
+
+  const spouses = root.spouseIds
+    .map(id => lookup(id))
+    .filter(Boolean) as TreeNode[];
+
   // ── Descendants ──────────────────────────────────────────────────────────
 
   const children = root.childrenIds
@@ -239,8 +295,28 @@ export default function FamilyTree({ rootPersonId, onSelectPerson }: FamilyTreeP
       {/* ── Connector: parents → root ── */}
       {(mother || father) && <div className="w-px h-3 bg-stone-600" />}
 
-      {/* ── Root ── */}
-      <NodeCard node={root} isRoot />
+      {/* ── Root + Spouses ── */}
+      <div className="flex items-start gap-0">
+        <NodeCard node={root} isRoot />
+        {spouses.length > 0 && (
+          <>
+            <div className="flex items-center self-[40%] mx-1">
+              <div className="w-4 h-px bg-stone-600" />
+              <span className="text-stone-500 text-xs mx-0.5" title="Spouse(s)">⚭</span>
+              <div className="w-4 h-px bg-stone-600" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {spouses.map(s => (
+                <NodeCard
+                  key={s.id}
+                  node={s}
+                  onSelect={() => onSelectPerson(s.id)}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
       {/* ── Connector: root → children ── */}
       {children.length > 0 && <div className="w-px h-3 bg-stone-600" />}

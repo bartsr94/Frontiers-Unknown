@@ -10,7 +10,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 | Phase | Status | Notes |
 |-------|--------|-------|
 | Phase 1 — Foundation | ✅ Complete | 13/13 steps done, 13/13 tests pass, zero compile errors |
-| Phase 2 — Genetics Engine | ✅ Complete | All 12 steps done, 127/127 tests pass, zero compile errors |
+| Phase 2 — Genetics Engine | ✅ Complete | All 12 steps done, 139/139 tests pass, zero compile errors |
 | Phase 3 — Living Settlement | 🔲 Not started | — |
 | Phase 4 — Polish | 🔲 Not started | — |
 
@@ -20,7 +20,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 
 ```bash
 npm run dev          # Vite dev server → http://localhost:5173
-npm test             # Run Vitest (127 passing across rng, inheritance, gender-ratio, fertility, event-filter)
+npm test             # Run Vitest (139 passing across rng, inheritance, gender-ratio, fertility, event-filter, demographics)
 npx tsc --noEmit     # Type-check without building
 ```
 
@@ -76,11 +76,13 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/ui/layout/BottomBar.tsx` | Full-width resource strip (food, cattle, goods, gold, lumber, stone, pop) |
 | `src/ui/layout/CouncilFooter.tsx` | 7-seat Expedition Council row |
 | `src/ui/views/EventView.tsx` | Event card with choices; calls `resolveEventChoice` + `nextEvent` |
-| `src/ui/views/PeopleView.tsx` | Settler roster; click row → PersonDetail panel |
+| `src/ui/views/PeopleView.tsx` | Settler roster; sort/filter (sex, status, heritage group); click row → PersonDetail panel |
 | `src/ui/views/PersonDetail.tsx` | Full person detail: genetics, heritage, family links, fertility |
-| `src/ui/views/FamilyTree.tsx` | 3-generation family tree viewer |
+| `src/ui/views/FamilyTree.tsx` | 3-generation ancestor/descendant tree; spouses shown to the side of root node |
 | `src/ui/components/Portrait.tsx` | Text-based portrait; skin tone HSL colouring; `sm`/`lg` variants |
+| `src/ui/components/heritage-helpers.ts` | `heritageAbbr(bloodline)` → `'IMA'\|'KIS-R'\|…\|'MIX'`; `GROUP_ABBR` lookup |
 | `src/ui/overlays/GameSetup.tsx` | New game config: name, difficulty, Sauromatian women toggle, tribe selection |
+| `src/ui/overlays/MarriageDialog.tsx` | Marriage overlay: two-column selector, compatibility panel, child predictions, opinion impacts |
 
 ---
 
@@ -230,5 +232,5 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/genetics/gender-ratio.test.ts` — 26/26 passing (fraction helpers, resolveGenderRatio formula, determineSex probability, lore rules)
 - `tests/genetics/fertility.test.ts` — 31/31 passing (profile shapes, fertility window, seasonal/condition modifiers, pure function contract, childbirth risk)
 - `tests/events/event-filter.test.ts` — 47/47 passing (all prerequisite types, isUnique, cooldown, filterEligibleEvents, drawEvents, ALL_EVENTS deck integrity)
-- **Total: 127/127 passing**
-- Phase 3 integration test still needed: `tests/population/demographics.test.ts` — headless 100-year sim
+- `tests/population/demographics.test.ts` — 12/12 passing (marriage → conception → birth pipeline; child parentIds/childrenIds; pregnancy cleared after birth)
+- **Total: 139/139 passing**

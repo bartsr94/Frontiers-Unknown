@@ -611,6 +611,8 @@ export const CULTURAL_EVENTS: GameEvent[] = [
       { type: 'min_population', params: { value: 11 } },
       { type: 'min_year', params: { value: 2 } },
       { type: 'has_person_matching', params: { sex: 'female', religion: 'sacred_wheel' } },
+      // The child must exist before this birth announcement fires.
+      { type: 'has_person_matching', params: { maxAge: 2 } },
     ],
     weight: 3,
     cooldown: 0,
@@ -669,6 +671,8 @@ export const CULTURAL_EVENTS: GameEvent[] = [
       { type: 'min_year', params: { value: 3 } },
       { type: 'cultural_blend_above', params: { value: 0.2 } },
       { type: 'has_person_matching', params: { sex: 'female', religion: 'sacred_wheel' } },
+      // The demographic tally is meaningless without children to count.
+      { type: 'has_person_matching', params: { maxAge: 16 } },
     ],
     weight: 2,
     cooldown: 20,
