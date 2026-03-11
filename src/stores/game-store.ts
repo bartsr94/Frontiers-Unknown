@@ -17,6 +17,10 @@ import { addResourceStocks, clampResourceStock, emptyResourceStock } from '../si
 import { filterEligibleEvents, drawEvents, ALL_EVENTS } from '../simulation/events/event-filter';
 import { applyEventChoice } from '../simulation/events/resolver';
 import { createRNG } from '../utils/rng';
+import { createTribe, TRIBE_PRESETS } from '../simulation/world/tribes';
+import { canMarry, performMarriage } from '../simulation/population/marriage';
+import { createFertilityProfile } from '../simulation/genetics/fertility';
+import { ETHNIC_DISTRIBUTIONS } from '../data/ethnic-distributions';
 import type {
   GameState,
   TurnPhase,
@@ -60,7 +64,7 @@ export interface GameStore {
 
   // ── Management phase ──────────────────────────────────────────────────────
   assignRole: (personId: string, role: WorkRole) => void;
-  arrangeMarriage: (personIds: string[]) => void;
+  arrangeMarriage: (personAId: string, personBId: string) => void;
   executeTrade: (partnerId: string, offer: TradeOffer) => void;
   sendDiplomaticAction: (tribeId: string, action: DiplomaticAction) => void;
   // ── Expedition Council ─────────────────────────────────────────
@@ -218,6 +222,63 @@ function createInitialState(config: GameConfig, settlementName: string): GameSta
     people.set(person.id, person);
   });
 
+  // Optional founding Sauromatian women (enable via GameConfig.includeSauromatianWomen).
+  if (config.includeSauromatianWomen) {
+    // Determine ethnic group from the first selected tribe, or fall back.
+    const firstPresetId = config.startingTribes[0];
+    const firstPreset = firstPresetId ? TRIBE_PRESETS[firstPresetId] : undefined;
+    const sauroGroup = firstPreset?.ethnicGroup ?? 'kiswani_riverfolk';
+    const sauroTraitDist = ETHNIC_DISTRIBUTIONS[sauroGroup];
+
+    const SAURO_FOUNDING_WOMEN: Array<{ firstName: string; familyName: string; age: number }> = [
+      { firstName: 'Amara',  familyName: 'Mwamba', age: 18 },
+      { firstName: 'Safiya', familyName: 'Nyota',  age: 22 },
+      { firstName: 'Eshe',   familyName: 'Tembo',  age: 26 },
+    ];
+
+    for (const w of SAURO_FOUNDING_WOMEN) {
+      const woman = createPerson({
+        firstName: w.firstName,
+        familyName: w.familyName,
+        sex: 'female',
+        age: w.age,
+        role: 'unassigned',
+        socialStatus: 'newcomer',
+        genetics: {
+          visibleTraits: {
+            skinTone: sauroTraitDist.skinTone.mean,
+            skinUndertone: (Object.entries(sauroTraitDist.skinUndertone.weights)
+              .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? 'warm') as Person['genetics']['visibleTraits']['skinUndertone'],
+            hairColor: (Object.entries(sauroTraitDist.hairColor.weights)
+              .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? 'black') as Person['genetics']['visibleTraits']['hairColor'],
+            hairTexture: (Object.entries(sauroTraitDist.hairTexture.weights)
+              .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? 'coily') as Person['genetics']['visibleTraits']['hairTexture'],
+            eyeColor: (Object.entries(sauroTraitDist.eyeColor.weights)
+              .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? 'brown') as Person['genetics']['visibleTraits']['eyeColor'],
+            buildType: (Object.entries(sauroTraitDist.buildType.weights)
+              .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? 'athletic') as Person['genetics']['visibleTraits']['buildType'],
+            height: (Object.entries(sauroTraitDist.height.weights)
+              .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? 'average') as Person['genetics']['visibleTraits']['height'],
+            facialStructure: (Object.entries(sauroTraitDist.facialStructure.weights)
+              .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? 'oval') as Person['genetics']['visibleTraits']['facialStructure'],
+          },
+          genderRatioModifier: 0.14, // Pure Sauromatian
+          extendedFertility: true,
+        },
+        fertility: createFertilityProfile(true),
+        heritage: {
+          bloodline: [{ group: sauroGroup, fraction: 1.0 }],
+          primaryCulture: 'kiswani_traditional',
+          culturalFluency: new Map<CultureId, number>([['kiswani_traditional', 1.0]]),
+        },
+        languages: [{ language: 'kiswani', fluency: 1.0 }],
+        religion: 'sacred_wheel',
+        culturalIdentity: 'kiswani_traditional',
+      });
+      people.set(woman.id, woman);
+    }
+  }
+
   const initialResources: ResourceStock = {
     ...emptyResourceStock(),
     food: 20,
@@ -253,6 +314,16 @@ function createInitialState(config: GameConfig, settlementName: string): GameSta
     yearsActive: 0,
   };
 
+  // Instantiate tribes from selected presets.
+  const tribes = new Map<string, ReturnType<typeof createTribe>>();
+  for (const presetId of config.startingTribes) {
+    const preset = TRIBE_PRESETS[presetId];
+    if (preset) {
+      const tribe = createTribe(preset);
+      tribes.set(tribe.id, tribe);
+    }
+  }
+
   return {
     version: '1.0.0',
     seed: Math.floor(Math.random() * 2 ** 31),
@@ -263,7 +334,7 @@ function createInitialState(config: GameConfig, settlementName: string): GameSta
     graveyard: [],
     settlement,
     culture,
-    tribes: new Map(),
+    tribes,
     company,
     eventHistory: [],
     eventCooldowns: new Map(),
@@ -332,10 +403,21 @@ export const useGameStore = create<GameStore>((set, get) => {
       const postDawnState: GameState = {
         ...gameState,
         people: dawnResult.updatedPeople,
+        graveyard: [...gameState.graveyard, ...dawnResult.newGraveyardEntries],
         settlement: {
           ...gameState.settlement,
           populationCount: dawnResult.populationCount,
         },
+        // Append birth records to event history for genealogy / event-chain queries.
+        eventHistory: [
+          ...gameState.eventHistory,
+          ...dawnResult.births.map(b => ({
+            eventId: 'birth',
+            turnNumber: gameState.turnNumber,
+            choiceId: 'born',
+            involvedPersonIds: [b.childId, b.motherId],
+          })),
+        ],
       };
 
       // Draw 1–3 events from the eligible pool.
@@ -434,8 +516,46 @@ export const useGameStore = create<GameStore>((set, get) => {
       set({ gameState: { ...gameState, people: updatedPeople } });
     },
 
-    arrangeMarriage(_personIds) {
-      // Phase 2: marriage matching logic.
+    arrangeMarriage(personAId, personBId) {
+      const { gameState } = get();
+      if (!gameState) return;
+
+      const personA = gameState.people.get(personAId);
+      const personB = gameState.people.get(personBId);
+      if (!personA || !personB) return;
+
+      const check = canMarry(personA, personB, gameState);
+      if (!check.allowed) {
+        console.warn(`[Palusteria] canMarry blocked: ${check.reason ?? 'unknown'}`);
+        return;
+      }
+
+      const result = performMarriage(personA, personB, gameState);
+
+      // Apply updated persons.
+      const updatedPeople = new Map(gameState.people);
+      updatedPeople.set(result.updatedPersonA.id, result.updatedPersonA);
+      updatedPeople.set(result.updatedPersonB.id, result.updatedPersonB);
+
+      // Apply opinion changes to bystander relationship maps.
+      for (const change of result.opinionChanges) {
+        const observer = updatedPeople.get(change.observerId);
+        if (!observer) continue;
+        const currentOpinion = observer.relationships.get(change.targetId) ?? 0;
+        const updatedRelationships = new Map(observer.relationships);
+        updatedRelationships.set(change.targetId, Math.max(-100, Math.min(100, currentOpinion + change.delta)));
+        updatedPeople.set(observer.id, { ...observer, relationships: updatedRelationships });
+      }
+
+      const updatedState: GameState = {
+        ...gameState,
+        people: updatedPeople,
+        eventHistory: [...gameState.eventHistory, result.eventRecord],
+      };
+
+      const json = serializeGameState(updatedState);
+      localStorage.setItem(SAVE_KEY, json);
+      set({ gameState: updatedState });
     },
 
     executeTrade(_partnerId, _offer) {

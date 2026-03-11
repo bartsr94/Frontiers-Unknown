@@ -10,7 +10,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 | Phase | Status | Notes |
 |-------|--------|-------|
 | Phase 1 — Foundation | ✅ Complete | 13/13 steps done, 13/13 tests pass, zero compile errors |
-| Phase 2 — Genetics Engine | 🔲 Not started | Ready to begin |
+| Phase 2 — Genetics Engine | ✅ Complete | All 12 steps done, 127/127 tests pass, zero compile errors |
 | Phase 3 — Living Settlement | 🔲 Not started | — |
 | Phase 4 — Polish | 🔲 Not started | — |
 
@@ -20,7 +20,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 
 ```bash
 npm run dev          # Vite dev server → http://localhost:5173
-npm test             # Run Vitest (tests/utils/rng.test.ts — 13 passing)
+npm test             # Run Vitest (127 passing across rng, inheritance, gender-ratio, fertility, event-filter)
 npx tsc --noEmit     # Type-check without building
 ```
 
@@ -60,16 +60,27 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/events/engine.ts` | Event/choice/consequence **type definitions only** (no logic) |
 | `src/simulation/events/event-filter.ts` | `ALL_EVENTS`, `filterEligibleEvents()`, `drawEvents()` |
 | `src/simulation/events/resolver.ts` | `applyEventChoice()` — applies consequences to `GameState` |
-| `src/simulation/events/definitions/` | 10 Phase 1 events: company, diplomacy, domestic, economic, environmental |
+| `src/simulation/events/definitions/` | 28 events: company, diplomacy, domestic, economic, environmental + 18 cultural |
 | `src/simulation/economy/resources.ts` | Production/consumption math with seasonal modifiers |
-| `src/simulation/genetics/traits.ts` | `IMANIAN_TRAITS` distribution constant (Phase 1 Imanian-only) |
-| `src/stores/game-store.ts` | Zustand store — bridges UI ↔ simulation; full turn lifecycle + council |
+| `src/simulation/genetics/traits.ts` | Trait type definitions + `IMANIAN_TRAITS` constant |
+| `src/data/ethnic-distributions.ts` | All 8 ethnic group `TraitDistribution` constants + `ETHNIC_DISTRIBUTIONS` lookup map |
+| `src/simulation/genetics/gender-ratio.ts` | `getSauromatianFraction`, `getImanianFraction`, `resolveGenderRatio`, `determineSex` |
+| `src/simulation/genetics/inheritance.ts` | `resolveInheritance()` pipeline: `averageBloodlines`, `blendTraitDistributions`, `sampleContinuous`, `sampleDiscrete` |
+| `src/simulation/genetics/fertility.ts` | `BirthResult`, `createFertilityProfile`, `getFertilityChance`, `attemptConception`, `processPregnancies` |
+| `src/simulation/population/person.ts` | `Person` interface + `createPerson()` factory; heritage/bloodline types |
+| `src/simulation/population/naming.ts` | `generateName(sex, culture, motherFamilyName, fatherFamilyName, rng)` — 3 culture pools |
+| `src/simulation/population/marriage.ts` | `canMarry`, `performMarriage`, `getMarriageability` — Sauromatian/Imanian rules |
+| `src/simulation/world/tribes.ts` | `createTribe`, `TRIBE_PRESETS` (16 presets), `updateTribeDisposition` |
+| `src/stores/game-store.ts` | Zustand store — full turn lifecycle, council, `arrangeMarriage`, tribe init |
 | `src/ui/layout/LeftNav.tsx` | Left nav with phase-aware End Turn / Confirm Turn button |
 | `src/ui/layout/BottomBar.tsx` | Full-width resource strip (food, cattle, goods, gold, lumber, stone, pop) |
 | `src/ui/layout/CouncilFooter.tsx` | 7-seat Expedition Council row |
 | `src/ui/views/EventView.tsx` | Event card with choices; calls `resolveEventChoice` + `nextEvent` |
-| `src/ui/views/PeopleView.tsx` | Settler roster with council toggle (⭐/☆) |
-| `src/ui/overlays/GameSetup.tsx` | New game configuration screen |
+| `src/ui/views/PeopleView.tsx` | Settler roster; click row → PersonDetail panel |
+| `src/ui/views/PersonDetail.tsx` | Full person detail: genetics, heritage, family links, fertility |
+| `src/ui/views/FamilyTree.tsx` | 3-generation family tree viewer |
+| `src/ui/components/Portrait.tsx` | Text-based portrait; skin tone HSL colouring; `sm`/`lg` variants |
+| `src/ui/overlays/GameSetup.tsx` | New game config: name, difficulty, Sauromatian women toggle, tribe selection |
 
 ---
 
@@ -136,22 +147,22 @@ idle
 
 ---
 
-## Phase 2 Deliverables — "Children of Two Worlds"
+## Phase 2 Deliverables — "Children of Two Worlds" ✅ Complete
 
 | Step | Deliverable | Files |
 |------|-------------|-------|
-| 1 | All ethnic trait distributions | `src/data/ethnic-distributions.ts` |
-| 2 | `resolveInheritance()` with 70/30 blend | `src/simulation/genetics/inheritance.ts` |
-| 3 | Gender ratio mechanics | `src/simulation/genetics/gender-ratio.ts` |
-| 4 | Fertility + pregnancy tracking | `src/simulation/genetics/fertility.ts` |
-| 5 | Heritage + bloodline in person factory | Update `createPerson()` in `person.ts` |
-| 6 | Name generation by culture | `src/simulation/population/naming.ts` |
-| 7 | Text-based portrait from traits | `src/ui/components/Portrait.tsx` |
-| 8 | Marriage matching system | `src/simulation/population/marriage.ts` |
-| 9 | External tribes data + basic AI | `src/simulation/world/tribes.ts` |
-| 10 | 15+ cultural/domestic events | Expand `events/definitions/` |
-| 11 | PersonDetail view | `src/ui/views/PersonDetail.tsx` |
-| 12 | Family tree viewer | `src/ui/views/FamilyTree.tsx` |
+| ✅ 1 | All ethnic trait distributions | `src/data/ethnic-distributions.ts` |
+| ✅ 2 | `resolveInheritance()` with 70/30 blend | `src/simulation/genetics/inheritance.ts` |
+| ✅ 3 | Gender ratio mechanics | `src/simulation/genetics/gender-ratio.ts` |
+| ✅ 4 | Fertility + pregnancy tracking | `src/simulation/genetics/fertility.ts` |
+| ✅ 5 | Heritage + bloodline in person factory | `src/simulation/population/person.ts` |
+| ✅ 6 | Name generation by culture | `src/simulation/population/naming.ts` |
+| ✅ 7 | Text-based portrait from traits | `src/ui/components/Portrait.tsx` |
+| ✅ 8 | Marriage matching system | `src/simulation/population/marriage.ts` |
+| ✅ 9 | External tribes data + basic AI | `src/simulation/world/tribes.ts` |
+| ✅ 10 | 18 cultural/domestic events | `src/simulation/events/definitions/cultural.ts` |
+| ✅ 11 | PersonDetail view | `src/ui/views/PersonDetail.tsx` |
+| ✅ 12 | Family tree viewer | `src/ui/views/FamilyTree.tsx` |
 
 **Exit criteria:** Marry Sauromatian women, have children with blended traits, see demographics shift over a generation.
 
@@ -215,5 +226,9 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 ## Tests
 
 - `tests/utils/rng.test.ts` — 13/13 passing (deterministic output, Gaussian distribution, nextInt bounds)
-- Phase 2 should add: `tests/genetics/inheritance.test.ts`, `tests/genetics/gender-ratio.test.ts`, `tests/genetics/fertility.test.ts`
-- Phase 2 integration: `tests/population/demographics.test.ts` — headless 100-year sim
+- `tests/genetics/inheritance.test.ts` — 10/10 passing (bloodline averaging, trait blending, 70/30 blend ratio, extendedFertility maternal chain)
+- `tests/genetics/gender-ratio.test.ts` — 26/26 passing (fraction helpers, resolveGenderRatio formula, determineSex probability, lore rules)
+- `tests/genetics/fertility.test.ts` — 31/31 passing (profile shapes, fertility window, seasonal/condition modifiers, pure function contract, childbirth risk)
+- `tests/events/event-filter.test.ts` — 47/47 passing (all prerequisite types, isUnique, cooldown, filterEligibleEvents, drawEvents, ALL_EVENTS deck integrity)
+- **Total: 127/127 passing**
+- Phase 3 integration test still needed: `tests/population/demographics.test.ts` — headless 100-year sim

@@ -156,22 +156,22 @@ export interface TraitDistribution {
  * Source: PALUSTERIA_GAME_DESIGN.md §5.3
  */
 export const IMANIAN_TRAITS: TraitDistribution = {
-  skinTone: { mean: 0.2, variance: 0.01 },
-  skinUndertone: { weights: { cool_pink: 0.60, neutral: 0.30, warm_olive: 0.10 } },
+  skinTone: { mean: 0.2, variance: 0.10 },
+  skinUndertone: { weights: { cool_pink: 0.50, neutral: 0.30, warm_olive: 0.20 } },
   hairColor: {
-    weights: { blonde: 0.35, light_brown: 0.30, dark_brown: 0.25, auburn: 0.07, red: 0.03 },
+    weights: { blonde: 0.30, light_brown: 0.30, dark_brown: 0.30, red: 0.10 },
   },
-  hairTexture: { weights: { straight: 0.55, wavy: 0.45 } },
+  hairTexture: { weights: { straight: 0.50, wavy: 0.40, curly: 0.10 } },
   eyeColor: {
-    weights: { blue: 0.35, grey: 0.30, green: 0.20, hazel: 0.10, brown: 0.05 },
+    weights: { blue: 0.30, grey: 0.20, green: 0.20, hazel: 0.15, brown: 0.15 },
   },
   buildType: {
-    weights: { lean: 0.25, athletic: 0.30, stocky: 0.20, wiry: 0.15, heavyset: 0.10 },
+    weights: { lean: 0.30, athletic: 0.30, stocky: 0.20, wiry: 0.20 },
   },
   height: {
-    weights: { below_average: 0.15, average: 0.50, tall: 0.30, very_tall: 0.05 },
+    weights: { average: 0.40, below_average: 0.20, tall: 0.20, short: 0.10, very_tall: 0.10 },
   },
   facialStructure: {
-    weights: { narrow: 0.25, oval: 0.35, angular: 0.25, broad: 0.10, round: 0.05 },
+    weights: { narrow: 0.30, oval: 0.40, angular: 0.20, round: 0.10 },
   },
 };

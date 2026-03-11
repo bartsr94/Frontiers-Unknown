@@ -5,8 +5,10 @@
  * Phase 2 will add trait badges, portrait thumbnails, and clickable detail panels.
  */
 
+import { useState } from 'react';
 import { useGameStore } from '../../stores/game-store';
 import type { WorkRole } from '../../simulation/population/person';
+import PersonDetail from './PersonDetail';
 
 const MAX_COUNCIL = 7;
 
@@ -29,6 +31,8 @@ const ROLE_COLORS: Record<WorkRole, string> = {
 };
 
 export default function PeopleView() {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
   // Select the Map reference directly (stable between renders when people haven't changed).
   // Array.from is called in the component body, not inside the selector, to avoid
   // returning a new array reference on every selector invocation (which would cause
@@ -44,7 +48,9 @@ export default function PeopleView() {
   );
 
   return (
-    <div className="p-4">
+    <div className="flex h-full overflow-hidden">
+      {/* ── Left: roster table ── */}
+      <div className="flex-1 min-w-0 overflow-y-auto p-4">
       <h2 className="text-amber-200 font-bold text-lg mb-3">
         Settlers ({sorted.length})
       </h2>
@@ -65,8 +71,10 @@ export default function PeopleView() {
             {sorted.map((person, i) => (
               <tr
                 key={person.id}
-                className={`border-t border-stone-700 transition-colors hover:bg-stone-700
-                            ${i % 2 === 0 ? 'bg-stone-800' : 'bg-stone-850'}`}
+                onClick={() => setSelectedId(id => id === person.id ? null : person.id)}
+                className={`border-t border-stone-700 transition-colors cursor-pointer
+                            hover:bg-stone-700 active:bg-stone-600
+                            ${selectedId === person.id ? 'bg-stone-700 ring-1 ring-inset ring-amber-600' : i % 2 === 0 ? 'bg-stone-800' : 'bg-stone-850'}`}
               >
                 <td className="px-4 py-2 text-amber-100 font-medium">
                   {person.firstName} {person.familyName}
@@ -119,6 +127,16 @@ export default function PeopleView() {
           </tbody>
         </table>
       </div>
+      </div> {/* end left column */}
+
+      {/* ── Right: person detail panel ── */}
+      {selectedId && (
+        <PersonDetail
+          personId={selectedId}
+          onClose={() => setSelectedId(null)}
+          onNavigate={id => setSelectedId(id)}
+        />
+      )}
     </div>
   );
 }

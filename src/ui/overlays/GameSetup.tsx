@@ -14,6 +14,7 @@ export default function GameSetup() {
 
   const [settlementName, setSettlementName] = useState('');
   const [difficulty, setDifficulty] = useState<GameConfig['difficulty']>('normal');
+  const [includeSauromatianWomen, setIncludeSauromatianWomen] = useState(false);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -22,6 +23,7 @@ export default function GameSetup() {
       difficulty,
       startingTribes: [],
       startingLocation: 'ashmark_estuary',
+      includeSauromatianWomen,
     };
     newGame(config, name);
   }
@@ -83,6 +85,27 @@ export default function GameSetup() {
               <option value="normal">Normal — By the Book</option>
               <option value="hard">Hard — The Inspector Watches</option>
             </select>
+          </div>
+
+          {/* Founding Sauromatian women */}
+          <div className="flex items-start gap-3">
+            <input
+              id="includeSauromatianWomen"
+              type="checkbox"
+              checked={includeSauromatianWomen}
+              onChange={e => setIncludeSauromatianWomen(e.target.checked)}
+              className="mt-0.5 accent-amber-600 h-4 w-4 flex-shrink-0 cursor-pointer"
+            />
+            <label
+              htmlFor="includeSauromatianWomen"
+              className="text-amber-200 text-sm leading-snug cursor-pointer"
+            >
+              Include Sauromatian women in founding settlers
+              <span className="block text-stone-400 text-xs mt-0.5 italic">
+                Adds three Kiswani women (ages 18, 22, 26) for immediate cross-cultural
+                marriage and genetics testing.
+              </span>
+            </label>
           </div>
 
           {/* Flavour text */}

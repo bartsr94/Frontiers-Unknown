@@ -18,6 +18,7 @@ import { ECONOMIC_EVENTS }      from './definitions/economic';
 import { DOMESTIC_EVENTS }      from './definitions/domestic';
 import { COMPANY_EVENTS }       from './definitions/company';
 import { DIPLOMACY_EVENTS }     from './definitions/diplomacy';
+import { CULTURAL_EVENTS }      from './definitions/cultural';
 
 // ─── Master event deck ────────────────────────────────────────────────────────
 
@@ -28,6 +29,7 @@ export const ALL_EVENTS: GameEvent[] = [
   ...DOMESTIC_EVENTS,
   ...COMPANY_EVENTS,
   ...DIPLOMACY_EVENTS,
+  ...CULTURAL_EVENTS,
 ];
 
 // ─── Prerequisite checking ────────────────────────────────────────────────────
@@ -46,6 +48,19 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
       const res = prereq.params['resource'] as ResourceType;
       const amount = prereq.params['amount'] as number;
       return state.settlement.resources[res] >= amount;
+    }
+    case 'has_person_matching': {
+      // Checks that at least one living person satisfies all supplied criteria.
+      // Supported criteria keys: sex, religion, culturalIdentity, minAge, maxAge.
+      const criteria = prereq.params as Record<string, unknown>;
+      return Array.from(state.people.values()).some(person => {
+        if (criteria['sex']             !== undefined && person.sex             !== criteria['sex'])             return false;
+        if (criteria['religion']        !== undefined && person.religion        !== criteria['religion'])        return false;
+        if (criteria['culturalIdentity']!== undefined && person.culturalIdentity!== criteria['culturalIdentity']) return false;
+        if (criteria['minAge']          !== undefined && person.age             <  (criteria['minAge'] as number))  return false;
+        if (criteria['maxAge']          !== undefined && person.age             >  (criteria['maxAge'] as number))  return false;
+        return true;
+      });
     }
     // Unimplemented Phase 3+ prerequisites — treated as satisfied so they
     // don't silently block events in early development.

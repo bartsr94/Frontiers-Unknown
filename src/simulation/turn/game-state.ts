@@ -88,7 +88,7 @@ export type TribeTrait =
   | 'desperate';
 
 /** Resources or concessions a tribe wants from the player settlement. */
-export type TribeDesire = 'steel' | 'medicine' | 'alliance' | 'men' | 'territory' | 'trade';
+export type TribeDesire = 'steel' | 'medicine' | 'alliance' | 'men' | 'territory' | 'trade' | 'food' | 'gold' | 'lumber';
 
 /** Resources or concessions a tribe can offer in trade or alliance. */
 export type TribeOffering =
@@ -99,7 +99,10 @@ export type TribeOffering =
   | 'warriors'
   | 'wives'
   | 'knowledge'
-  | 'pearls';
+  | 'pearls'
+  | 'trade_goods'
+  | 'stone'
+  | 'steel';
 
 /**
  * A neighbouring Sauromatian tribe that exists in the region.
@@ -244,6 +247,8 @@ export interface GraveyardEntry {
   id: string;
   firstName: string;
   familyName: string;
+  /** Biological sex — preserved for genealogy display. */
+  sex: 'male' | 'female';
   birthYear: number;
   deathYear: number;
   /** Human-readable cause of death (e.g., 'old_age', 'raid', 'illness'). */
@@ -286,6 +291,13 @@ export interface GameConfig {
   startingTribes: string[];
   /** Which location on the regional map the settlement is founded on. */
   startingLocation: LocationId;
+  /**
+   * When true, three founding Sauromatian women (ages 18, 22, 26) are added to
+   * the initial settlers. This enables mixed-marriage and genetics testing from
+   * turn one. The women's ethnic group is derived from the first selected tribe;
+   * falls back to kiswani_riverfolk if no tribes are selected.
+   */
+  includeSauromatianWomen?: boolean;
 }
 
 // ─── Master Game State ────────────────────────────────────────────────────────
