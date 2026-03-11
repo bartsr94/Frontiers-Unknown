@@ -192,6 +192,17 @@ export interface SettlementCulture {
   practices: CulturalPracticeId[];
   /** The governance model currently in effect. */
   governance: GovernanceStyle;
+  /**
+   * Number of consecutive turns where ≥ 2 languages each exceed 10% of the
+   * speaking population. Used to trigger creole emergence after ~5 years.
+   */
+  languageDiversityTurns: number;
+  /**
+   * Linguistic tension (0.0–1.0).
+   * Peaks near 1.0 when two languages split the settlement ~50/50.
+   * Contributes to cultural friction and gates language-conflict events.
+   */
+  languageTension: number;
 }
 
 // ─── Settlement ───────────────────────────────────────────────────────────────

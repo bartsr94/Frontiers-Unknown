@@ -59,8 +59,29 @@ export type ReligionId =
 /**
  * Language identifiers.
  * Defined here (not in culture/) for the same acyclic-import reason as ReligionId.
+ *
+ * - imanian          — spoken by Imanian settlers and colonists
+ * - kiswani          — spoken by all Kiswani Sauromatian sub-groups
+ * - hanjoda          — spoken by all Hanjoda Sauromatian sub-groups
+ * - tradetalk        — simplified pidgin; never exceeds 0.50 fluency
+ * - settlement_creole — emergent creole; appears after a generation of bilingual cohabitation
  */
-export type LanguageId = 'imanian' | 'kiswani' | 'tradetalk' | 'settlement_creole';
+export type LanguageId = 'imanian' | 'kiswani' | 'hanjoda' | 'tradetalk' | 'settlement_creole';
+
+/**
+ * Maps each ethnic group to the primary language spoken by that group.
+ * Used when initialising founding settlers, immigrants, and tribal contacts.
+ */
+export const ETHNIC_GROUP_PRIMARY_LANGUAGE: Record<EthnicGroup, LanguageId> = {
+  imanian:              'imanian',
+  kiswani_riverfolk:    'kiswani',
+  kiswani_bayuk:        'kiswani',
+  kiswani_haisla:       'kiswani',
+  hanjoda_stormcaller:  'hanjoda',
+  hanjoda_bloodmoon:    'hanjoda',
+  hanjoda_talon:        'hanjoda',
+  hanjoda_emrasi:       'hanjoda',
+};
 
 // ─── Bloodline & Heritage ─────────────────────────────────────────────────────
 

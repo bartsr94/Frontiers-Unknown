@@ -18,6 +18,7 @@ import type { Person } from './person';
 import type { GameState, EventRecord } from '../turn/game-state';
 import type { CultureId } from '../turn/game-state';
 import type { TraitId } from '../personality/traits';
+import { CONVERSATIONAL_THRESHOLD } from '../culture/language-acquisition';
 
 // ─── Marriage Types ───────────────────────────────────────────────────────────
 
@@ -75,6 +76,51 @@ export interface MarriageResult {
   opinionChanges: Array<{ observerId: string; targetId: string; delta: number }>;
   /** Event record logging this marriage for history and event-chain queries. */
   eventRecord: EventRecord;
+}
+
+// ─── Language Compatibility ──────────────────────────────────────────────────
+
+/**
+ * The degree to which two prospective spouses share a common language.
+ *
+ * - 'shared'  — both have fluency ≥ CONVERSATIONAL_THRESHOLD in the same language
+ * - 'partial' — one person can converse in a language the other understands only
+ *               a little (0 < fluency < threshold); communication is effortful
+ * - 'none'    — no linguistic overlap whatsoever
+ */
+export type LanguageCompatibility = 'shared' | 'partial' | 'none';
+
+/**
+ * Evaluates the language compatibility between two prospective spouses.
+ *
+ * @param a - One of the two people.
+ * @param b - The other person.
+ * @returns The degree of shared linguistic understanding.
+ */
+export function getLanguageCompatibility(a: Person, b: Person): LanguageCompatibility {
+  const aFluency = new Map(a.languages.map(l => [l.language, l.fluency]));
+  const bFluency = new Map(b.languages.map(l => [l.language, l.fluency]));
+
+  // Check for a truly shared language (both conversational)
+  for (const [lang, fluency] of aFluency) {
+    if (fluency >= CONVERSATIONAL_THRESHOLD && (bFluency.get(lang) ?? 0) >= CONVERSATIONAL_THRESHOLD) {
+      return 'shared';
+    }
+  }
+
+  // Check for partial understanding (one conversational, other has any knowledge)
+  for (const [lang, fluency] of aFluency) {
+    if (fluency >= CONVERSATIONAL_THRESHOLD && (bFluency.get(lang) ?? 0) > 0) {
+      return 'partial';
+    }
+  }
+  for (const [lang, fluency] of bFluency) {
+    if (fluency >= CONVERSATIONAL_THRESHOLD && (aFluency.get(lang) ?? 0) > 0) {
+      return 'partial';
+    }
+  }
+
+  return 'none';
 }
 
 // ─── Cultural Rules ───────────────────────────────────────────────────────────

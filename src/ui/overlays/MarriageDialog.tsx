@@ -14,7 +14,7 @@ import { useState } from 'react';
 import { useGameStore } from '../../stores/game-store';
 import { skinToneColor } from '../components/Portrait';
 import { heritageAbbr } from '../components/heritage-helpers';
-import { canMarry, getMarriageability } from '../../simulation/population/marriage';
+import { canMarry, getMarriageability, getLanguageCompatibility } from '../../simulation/population/marriage';
 import { averageBloodlines, blendTraitDistributions } from '../../simulation/genetics/inheritance';
 import { resolveGenderRatio } from '../../simulation/genetics/gender-ratio';
 import type { Person } from '../../simulation/population/person';
@@ -112,10 +112,15 @@ export default function MarriageDialog({ onClose }: MarriageDialogProps) {
     ? canMarry(selectedMale, selectedFemale, gameState)
     : null;
 
-  // Shared languages
+  // Language compatibility
+  const langCompat = selectedMale && selectedFemale
+    ? getLanguageCompatibility(selectedMale, selectedFemale)
+    : null;
+
+  // Shared languages display (fluency labels)
   function sharedLanguages(a: Person, b: Person): string[] {
-    const aLangs = new Set(a.languages.map(l => l.language));
-    return b.languages.filter(l => aLangs.has(l.language)).map(l => l.language);
+    const aLangs = new Set(a.languages.filter(l => l.fluency >= 0.3).map(l => l.language));
+    return b.languages.filter(l => aLangs.has(l.language) && l.fluency >= 0.3).map(l => l.language);
   }
 
   // Cultural distance label
@@ -267,6 +272,16 @@ export default function MarriageDialog({ onClose }: MarriageDialogProps) {
                   <span className="text-stone-500">Cultural distance:</span>
                   <span>{culturalDistanceLabel(selectedMale, selectedFemale)}</span>
                 </div>
+                {langCompat === 'none' && (
+                  <p className="mt-2 text-amber-400 text-xs border border-amber-700 rounded px-2 py-1 bg-amber-950/40">
+                    ⚠ No shared language — this couple will struggle to communicate.
+                  </p>
+                )}
+                {langCompat === 'partial' && (
+                  <p className="mt-2 text-stone-400 text-xs border border-stone-600 rounded px-2 py-1 bg-stone-900/40">
+                    ◌ Partial understanding — communication will take effort.
+                  </p>
+                )}
               </div>
 
               {/* Child predictions */}

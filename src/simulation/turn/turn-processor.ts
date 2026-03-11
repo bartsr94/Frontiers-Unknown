@@ -24,6 +24,13 @@ import {
 } from '../economy/resources';
 import { processPregnancies, attemptConception } from '../genetics/fertility';
 import { generateName } from '../population/naming';
+import type { LanguageId } from '../population/person';
+import {
+  applyLanguageDrift,
+  updateSettlementLanguages,
+  updateLanguageTension,
+  updateLanguageDiversityTurns,
+} from '../culture/language-acquisition';
 
 // ─── Result Types ─────────────────────────────────────────────────────────────
 
@@ -49,6 +56,7 @@ export interface DawnResult {
    *   - Ages incremented by 0.25
    *   - Newborns added (with names)
    *   - Deceased people removed
+   *   - Language drift applied to all survivors
    */
   updatedPeople: Map<string, Person>;
   /** Resource production delta for the season (positive values). */
@@ -64,6 +72,14 @@ export interface DawnResult {
    * The store appends these to GameState.graveyard.
    */
   newGraveyardEntries: GraveyardEntry[];
+  /** Updated language fraction map for the settlement (recalculated this turn). */
+  updatedLanguageFractions: Map<LanguageId, number>;
+  /** Updated linguistic tension value (0.0–1.0) for this turn. */
+  newLanguageTension: number;
+  /** Updated count of consecutive bilingual turns (used for creole emergence). */
+  newLanguageDiversityTurns: number;
+  /** True if settlement_creole emerged for the first time this turn. */
+  creoleEmerged: boolean;
 }
 
 /** Data returned by processDusk(). The store applies these to GameState. */
@@ -202,7 +218,12 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
   }
 
   // 2. Resolve due pregnancies.
-  const birthResults = processPregnancies(updatedPeople, state.turnNumber, rng);
+  const birthResults = processPregnancies(
+    updatedPeople,
+    state.turnNumber,
+    rng,
+    state.culture.languageDiversityTurns,
+  );
 
   for (const result of birthResults) {
     const mother = updatedPeople.get(result.motherId);
@@ -304,6 +325,28 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
   const production = calculateProduction(updatedPeople, state.settlement, state.currentSeason);
   const consumption = calculateConsumption(updatedPeople);
 
+  // 7. Apply language drift — each survivor gains incremental fluency in
+  //    community languages based on age and the settlement's current distribution.
+  const currentLangFractions = state.culture.languages;
+  for (const [id, person] of updatedPeople) {
+    const updatedLanguages = applyLanguageDrift(person, currentLangFractions);
+    updatedPeople.set(id, { ...person, languages: updatedLanguages });
+  }
+
+  // 8. Recalculate settlement language distribution from the updated population.
+  const updatedLanguageFractions = updateSettlementLanguages(updatedPeople);
+  const newLanguageTension = updateLanguageTension(updatedLanguageFractions);
+  const newLanguageDiversityTurns = updateLanguageDiversityTurns(
+    updatedLanguageFractions,
+    state.culture.languageDiversityTurns,
+  );
+
+  // Check if creole just emerged (first turn where diversity threshold was reached
+  // and the counter crosses 20). The store uses this flag to fire a one-time notice.
+  const creoleEmerged =
+    newLanguageDiversityTurns >= 20 &&
+    state.culture.languageDiversityTurns < 20;
+
   return {
     updatedPeople,
     production,
@@ -311,6 +354,10 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     populationCount: updatedPeople.size,
     births,
     newGraveyardEntries,
+    updatedLanguageFractions,
+    newLanguageTension,
+    newLanguageDiversityTurns,
+    creoleEmerged,
   };
 }
 

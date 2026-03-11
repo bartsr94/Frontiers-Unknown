@@ -62,6 +62,12 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
         return true;
       });
     }
+    case 'cultural_blend_above':
+      return state.culture.culturalBlend >= (prereq.params['value'] as number);
+    case 'cultural_blend_below':
+      return state.culture.culturalBlend <= (prereq.params['value'] as number);
+    case 'language_tension_above':
+      return state.culture.languageTension >= (prereq.params['threshold'] as number);
     // Unimplemented Phase 3+ prerequisites — treated as satisfied so they
     // don't silently block events in early development.
     default:

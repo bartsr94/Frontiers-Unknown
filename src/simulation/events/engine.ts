@@ -64,7 +64,9 @@ export type PrerequisiteType =
   | 'has_person_matching'
   | 'season_is'
   | 'cultural_blend_above'
-  | 'cultural_blend_below';
+  | 'cultural_blend_below'
+  /** Triggers when linguistic tension between community languages exceeds a threshold. */
+  | 'language_tension_above';
 
 // ─── Prerequisite & Requirement Interfaces ────────────────────────────────────
 

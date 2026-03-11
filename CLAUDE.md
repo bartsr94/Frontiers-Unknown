@@ -20,7 +20,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 
 ```bash
 npm run dev          # Vite dev server → http://localhost:5173
-npm test             # Run Vitest (139 passing across rng, inheritance, gender-ratio, fertility, event-filter, demographics)
+npm test             # Run Vitest (173 passing across rng, inheritance, gender-ratio, fertility, event-filter, demographics, language-acquisition)
 npx tsc --noEmit     # Type-check without building
 ```
 
@@ -64,6 +64,7 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/economy/resources.ts` | Production/consumption math with seasonal modifiers |
 | `src/simulation/genetics/traits.ts` | Trait type definitions + `IMANIAN_TRAITS` constant |
 | `src/data/ethnic-distributions.ts` | All 8 ethnic group `TraitDistribution` constants + `ETHNIC_DISTRIBUTIONS` lookup map |
+| `src/simulation/culture/language-acquisition.ts` | `resolveChildLanguages`, `applyLanguageDrift`, `updateSettlementLanguages`, `updateLanguageTension`, `updateLanguageDiversityTurns` |
 | `src/simulation/genetics/gender-ratio.ts` | `getSauromatianFraction`, `getImanianFraction`, `resolveGenderRatio`, `determineSex` |
 | `src/simulation/genetics/inheritance.ts` | `resolveInheritance()` pipeline: `averageBloodlines`, `blendTraitDistributions`, `sampleContinuous`, `sampleDiscrete` |
 | `src/simulation/genetics/fertility.ts` | `BirthResult`, `createFertilityProfile`, `getFertilityChance`, `attemptConception`, `processPregnancies` |
@@ -233,4 +234,5 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/genetics/fertility.test.ts` — 31/31 passing (profile shapes, fertility window, seasonal/condition modifiers, pure function contract, childbirth risk)
 - `tests/events/event-filter.test.ts` — 47/47 passing (all prerequisite types, isUnique, cooldown, filterEligibleEvents, drawEvents, ALL_EVENTS deck integrity)
 - `tests/population/demographics.test.ts` — 12/12 passing (marriage → conception → birth pipeline; child parentIds/childrenIds; pregnancy cleared after birth)
-- **Total: 139/139 passing**
+- `tests/culture/language-acquisition.test.ts` — 34/34 passing (learning rates, child language resolution, language drift, settlement language fractions, tension formula, diversity turn counter)
+- **Total: 173/173 passing**

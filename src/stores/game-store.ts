@@ -31,6 +31,7 @@ import type {
   GameConfig,
 } from '../simulation/turn/game-state';
 import type { Person, WorkRole, CultureId } from '../simulation/population/person';
+import { ETHNIC_GROUP_PRIMARY_LANGUAGE } from '../simulation/population/person';
 import type { GameEvent } from '../simulation/events/engine';
 
 // ─── Stub types (Phase 3) ────────────────────────────────────────────────────
@@ -271,7 +272,7 @@ function createInitialState(config: GameConfig, settlementName: string): GameSta
           primaryCulture: 'kiswani_traditional',
           culturalFluency: new Map<CultureId, number>([['kiswani_traditional', 1.0]]),
         },
-        languages: [{ language: 'kiswani', fluency: 1.0 }],
+        languages: [{ language: ETHNIC_GROUP_PRIMARY_LANGUAGE[sauroGroup], fluency: 1.0 }],
         religion: 'sacred_wheel',
         culturalIdentity: 'kiswani_traditional',
       });
@@ -303,6 +304,8 @@ function createInitialState(config: GameConfig, settlementName: string): GameSta
     culturalBlend: 0,
     practices: ['imanian_liturgy', 'company_law'],
     governance: 'patriarchal_imanian',
+    languageDiversityTurns: 0,
+    languageTension: 0,
   };
 
   const company: CompanyRelation = {
@@ -407,6 +410,16 @@ export const useGameStore = create<GameStore>((set, get) => {
         settlement: {
           ...gameState.settlement,
           populationCount: dawnResult.populationCount,
+        },
+        culture: {
+          ...gameState.culture,
+          languages: dawnResult.updatedLanguageFractions,
+          primaryLanguage:
+            Array.from(dawnResult.updatedLanguageFractions.entries()).sort(
+              (a, b) => b[1] - a[1],
+            )[0]?.[0] ?? gameState.culture.primaryLanguage,
+          languageTension: dawnResult.newLanguageTension,
+          languageDiversityTurns: dawnResult.newLanguageDiversityTurns,
         },
         // Append birth records to event history for genealogy / event-chain queries.
         eventHistory: [

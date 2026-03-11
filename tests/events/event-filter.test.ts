@@ -381,7 +381,8 @@ describe('isEventEligible', () => {
 
   it('treats unknown prerequisite types as satisfied (Phase 3+ stubs)', () => {
     const event = makeEvent({
-      prerequisites: [{ type: 'cultural_blend_above' as const, params: { value: 0.5 } }],
+      // Use a genuinely unimplemented type — cultural_blend_above is now real
+      prerequisites: [{ type: 'tribe_disposition_above' as const, params: { tribeId: 'x', value: 50 } }],
     });
     expect(isEventEligible(event, makeState())).toBe(true);
   });

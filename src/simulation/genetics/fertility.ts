@@ -23,6 +23,7 @@ import type { SeededRNG } from '../../utils/rng';
 import { clamp } from '../../utils/math';
 import { resolveInheritance, averageBloodlines } from './inheritance';
 import { determineSex } from './gender-ratio';
+import { resolveChildLanguages } from '../culture/language-acquisition';
 
 // ─── Result Types ─────────────────────────────────────────────────────────────
 
@@ -227,12 +228,15 @@ export function attemptConception(
  * @param people - All living people (read-only traversal; father lookup only).
  * @param currentTurn - The current turn number.
  * @param rng - Seeded PRNG for this turn.
+ * @param languageDiversityTurns - Current count of bilingual turns from GameState.
+ *   When this reaches 20+, newborns also hear settlement_creole from birth.
  * @returns An array of BirthResult records, one per resolved pregnancy.
  */
 export function processPregnancies(
   people: Map<string, Person>,
   currentTurn: number,
   rng: SeededRNG,
+  languageDiversityTurns = 0,
 ): BirthResult[] {
   const results: BirthResult[] = [];
 
@@ -266,6 +270,16 @@ export function processPregnancies(
     const motherHealthDelta = -10;
 
     // --- Create child ---
+    // Once the settlement has been bilingual for 20+ turns (~5 years), children
+    // born into it are exposed to the emerging creole from their first breath.
+    const childLanguages = resolveChildLanguages(mother, father);
+    if (languageDiversityTurns >= 20) {
+      const alreadyHasCreole = childLanguages.some(l => l.language === 'settlement_creole');
+      if (!alreadyHasCreole) {
+        childLanguages.push({ language: 'settlement_creole', fluency: 0.10 });
+      }
+    }
+
     const child = createPerson({
       sex,
       age: 0,
@@ -276,7 +290,7 @@ export function processPregnancies(
         primaryCulture: mother.heritage.primaryCulture,
         culturalFluency: new Map(mother.heritage.culturalFluency),
       },
-      languages: [...mother.languages],
+      languages: childLanguages,
       religion: mother.religion,
       culturalIdentity: mother.culturalIdentity,
       parentIds: [mother.id, father === mother ? null : father.id],
