@@ -15,6 +15,7 @@ import { applyEventChoice, resolveSkillCheck } from '../../src/simulation/events
 import type { GameEvent, EventConsequence, SkillCheck } from '../../src/simulation/events/engine';
 import type { Person } from '../../src/simulation/population/person';
 import type { GameState } from '../../src/simulation/turn/game-state';
+import { createRNG } from '../../src/utils/rng';
 
 // ─── Minimal state builder ────────────────────────────────────────────────────
 
@@ -371,5 +372,135 @@ describe('applyEventChoice — skill checks', () => {
       eventId: 'future_event',
       scheduledTurn: state.turnNumber + 3,
     });
+  });
+});
+
+// ─── add_person ───────────────────────────────────────────────────────────────
+
+describe('applyEventChoice — add_person', () => {
+  const rng = createRNG(42);
+
+  function makeAddPersonEvent(params: Record<string, unknown>, count = 1): GameEvent {
+    return {
+      id: 'add_person_event',
+      title: 'Add Person Event',
+      category: 'domestic',
+      prerequisites: [],
+      weight: 1,
+      cooldown: 0,
+      isUnique: false,
+      description: 'Adds people to the settlement.',
+      choices: [{
+        id: 'accept',
+        label: 'Accept',
+        description: 'They join.',
+        consequences: [{ type: 'add_person', target: 'newcomer', value: count, params }],
+      }],
+    };
+  }
+
+  it('adds a female Kiswani Riverfolk newcomer to the people map', () => {
+    const state  = makeState();
+    const event  = makeAddPersonEvent({ sex: 'female', ethnicGroup: 'kiswani_riverfolk', minAge: 28, maxAge: 42, religion: 'sacred_wheel' });
+    const result = applyEventChoice(event, 'accept', state, createRNG(42));
+    expect(result.state.people.size).toBe(1);
+    const person = [...result.state.people.values()][0]!;
+    expect(person.sex).toBe('female');
+    expect(person.religion).toBe('sacred_wheel');
+    expect(person.heritage.bloodline[0]!.group).toBe('kiswani_riverfolk');
+    expect(person.age).toBeGreaterThanOrEqual(28);
+    expect(person.age).toBeLessThan(42);
+    expect(person.socialStatus).toBe('newcomer');
+  });
+
+  it('adds multiple people when value > 1', () => {
+    const state  = makeState();
+    const event  = makeAddPersonEvent({ sex: 'female', ethnicGroup: 'kiswani_riverfolk', minAge: 6, maxAge: 14 }, 2);
+    const result = applyEventChoice(event, 'accept', state, createRNG(99));
+    expect(result.state.people.size).toBe(2);
+    [...result.state.people.values()].forEach(p => {
+      expect(p.sex).toBe('female');
+      expect(p.age).toBeGreaterThanOrEqual(6);
+      expect(p.age).toBeLessThan(14);
+    });
+  });
+
+  it('increments populationCount by the number of people added', () => {
+    const state  = makeState();
+    const event  = makeAddPersonEvent({ sex: 'female', ethnicGroup: 'imanian', minAge: 18, maxAge: 30 }, 3);
+    const result = applyEventChoice(event, 'accept', state, createRNG(7));
+    expect(result.state.settlement.populationCount).toBe(3);
+  });
+
+  it('generates an Imanian woman with correct religion and culture', () => {
+    const state  = makeState();
+    const event  = makeAddPersonEvent({ sex: 'female', ethnicGroup: 'imanian', minAge: 18, maxAge: 30, religion: 'imanian_orthodox' });
+    const result = applyEventChoice(event, 'accept', state, createRNG(11));
+    const person = [...result.state.people.values()][0]!;
+    expect(person.religion).toBe('imanian_orthodox');
+    expect(person.heritage.bloodline[0]!.group).toBe('imanian');
+    expect(person.heritage.primaryCulture).toBe('ansberite');
+  });
+
+  it('generates a Hanjoda Stormcaller male with Hanjoda culture', () => {
+    const state  = makeState();
+    const event  = makeAddPersonEvent({ sex: 'male', ethnicGroup: 'hanjoda_stormcaller', minAge: 18, maxAge: 24, religion: 'sacred_wheel' });
+    const result = applyEventChoice(event, 'accept', state, createRNG(13));
+    const person = [...result.state.people.values()][0]!;
+    expect(person.sex).toBe('male');
+    expect(person.heritage.bloodline[0]!.group).toBe('hanjoda_stormcaller');
+    expect(person.heritage.primaryCulture).toBe('hanjoda_stormcaller');
+  });
+
+  it('is a no-op when no rng is provided', () => {
+    const state  = makeState();
+    const event  = makeAddPersonEvent({ sex: 'female', ethnicGroup: 'imanian', minAge: 18, maxAge: 30 });
+    // Call without rng — should silently skip add_person
+    const result = applyEventChoice(event, 'accept', state);
+    expect(result.state.people.size).toBe(0);
+    expect(result.state.settlement.populationCount).toBe(0);
+  });
+
+  it('does not mutate the original people map', () => {
+    const state  = makeState();
+    const event  = makeAddPersonEvent({ sex: 'female', ethnicGroup: 'kiswani_riverfolk', minAge: 28, maxAge: 42 });
+    applyEventChoice(event, 'accept', state, createRNG(55));
+    expect(state.people.size).toBe(0);
+  });
+
+  it('dom_riverfolk_widow welcome_freely adds 3 people (widow + 2 daughters)', () => {
+    const state  = makeState();
+    const event: GameEvent = {
+      id: 'dom_riverfolk_widow',
+      title: 'The Riverfolk Widow',
+      category: 'domestic',
+      prerequisites: [],
+      weight: 2,
+      cooldown: 20,
+      isUnique: false,
+      description: 'A widow and her daughters.',
+      choices: [{
+        id: 'welcome_freely',
+        label: 'Welcome them without condition.',
+        description: 'They join.',
+        consequences: [
+          { type: 'modify_disposition', target: 'njaro_matu_riverfolk', value: 10 },
+          { type: 'add_person', target: 'widow',    value: 1, params: { sex: 'female', ethnicGroup: 'kiswani_riverfolk', minAge: 28, maxAge: 42, religion: 'sacred_wheel', socialStatus: 'newcomer' } },
+          { type: 'add_person', target: 'daughter', value: 2, params: { sex: 'female', ethnicGroup: 'kiswani_riverfolk', minAge: 6,  maxAge: 14, religion: 'sacred_wheel', socialStatus: 'newcomer' } },
+        ],
+      }],
+    };
+    const result = applyEventChoice(event, 'welcome_freely', state, createRNG(21));
+    expect(result.state.people.size).toBe(3);
+    expect(result.state.settlement.populationCount).toBe(3);
+    const people = [...result.state.people.values()];
+    // All should be Kiswani Riverfolk women
+    expect(people.every(p => p.sex === 'female')).toBe(true);
+    expect(people.every(p => p.heritage.bloodline[0]!.group === 'kiswani_riverfolk')).toBe(true);
+    // One adult, two children (by age ranges)
+    const adult    = people.filter(p => p.age >= 28);
+    const children = people.filter(p => p.age < 28);
+    expect(adult).toHaveLength(1);
+    expect(children).toHaveLength(2);
   });
 });

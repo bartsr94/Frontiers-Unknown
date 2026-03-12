@@ -572,7 +572,11 @@ export const useGameStore = create<GameStore>((set, get) => {
       const event = pendingEvents.find(e => e.id === eventId);
       if (!event) return;
 
-      const result = applyEventChoice(event, choiceId, gameState);
+      // Derive a deterministic RNG for event resolution from the game seed.
+      // Uses a different offset from processDawn (seed + turnNumber) to avoid
+      // consuming the same sequence as the dawn phase.
+      const rng = createRNG(gameState.seed ^ (gameState.turnNumber * 2654435761));
+      const result = applyEventChoice(event, choiceId, gameState, rng);
 
       // If the choice produced a follow-up event, insert it next in the queue.
       const updatedPending = result.followUpEventId

@@ -29,11 +29,18 @@ import type {
   DeferredEventEntry,
 } from './engine';
 import type { GameState, ResourceType, EventRecord } from '../turn/game-state';
-import type { Person } from '../population/person';
+import type { Person, EthnicGroup, ReligionId, SocialStatus, CultureId } from '../population/person';
 import {
   getDerivedSkill,
+  createPerson,
+  ETHNIC_GROUP_CULTURE,
+  ETHNIC_GROUP_PRIMARY_LANGUAGE,
 } from '../population/person';
 import type { DerivedSkillId, SkillId } from '../population/person';
+import { generateName } from '../population/naming';
+import { createFertilityProfile } from '../genetics/fertility';
+import { ETHNIC_DISTRIBUTIONS } from '../../data/ethnic-distributions';
+import type { SeededRNG } from '../../utils/rng';
 import { clamp } from '../../utils/math';
 
 // ─── Result type ─────────────────────────────────────────────────────────────
@@ -123,7 +130,7 @@ export function resolveSkillCheck(
 
 // ─── Single consequence application ──────────────────────────────────────────
 
-function applyConsequence(consequence: EventConsequence, state: GameState): GameState {
+function applyConsequence(consequence: EventConsequence, state: GameState, rng?: SeededRNG): GameState {
   switch (consequence.type) {
 
     case 'modify_resource': {
@@ -166,6 +173,86 @@ function applyConsequence(consequence: EventConsequence, state: GameState): Game
     }
 
     // ── Phase 3+ stubs ──────────────────────────────────────────────────────
+
+    case 'add_person': {
+      // Guard: person generation requires a seeded RNG.
+      if (!rng) return state;
+
+      const count = typeof consequence.value === 'number' ? consequence.value : 1;
+      const p = consequence.params ?? {};
+      const sex           = (p.sex          as 'male' | 'female') ?? 'female';
+      const ethnicGroup   = (p.ethnicGroup  as EthnicGroup)        ?? 'imanian';
+      const minAge        = (p.minAge       as number)             ?? 18;
+      const maxAge        = (p.maxAge       as number)             ?? 45;
+      const socialStatus  = (p.socialStatus as SocialStatus)       ?? 'newcomer';
+
+      const isSauromatian = ethnicGroup !== 'imanian';
+      const religion      = (p.religion as ReligionId)
+        ?? (isSauromatian ? 'sacred_wheel' : 'imanian_orthodox');
+
+      const dist           = ETHNIC_DISTRIBUTIONS[ethnicGroup];
+      const culture        = ETHNIC_GROUP_CULTURE[ethnicGroup];
+      const language       = ETHNIC_GROUP_PRIMARY_LANGUAGE[ethnicGroup];
+      const extendedFert   = sex === 'female' && isSauromatian;
+
+      const updatedPeople = new Map(state.people);
+      for (let i = 0; i < count; i++) {
+        const age = minAge + rng.next() * (maxAge - minAge);
+        const { firstName, familyName } = generateName(sex, culture, '', '', rng);
+
+        const skinTone = clamp(
+          rng.gaussian(dist.skinTone.mean, Math.sqrt(dist.skinTone.variance)),
+          0,
+          1,
+        );
+
+        const person = createPerson({
+          firstName,
+          familyName,
+          sex,
+          age,
+          role: 'unassigned',
+          socialStatus,
+          genetics: {
+            visibleTraits: {
+              skinTone,
+              skinUndertone:   rng.weightedPick(dist.skinUndertone.weights),
+              hairColor:       rng.weightedPick(dist.hairColor.weights),
+              hairTexture:     rng.weightedPick(dist.hairTexture.weights),
+              eyeColor:        rng.weightedPick(dist.eyeColor.weights),
+              buildType:       rng.weightedPick(dist.buildType.weights),
+              height:          rng.weightedPick(dist.height.weights),
+              facialStructure: rng.weightedPick(dist.facialStructure.weights),
+            },
+            genderRatioModifier: isSauromatian ? 0.14 : 0.5,
+            extendedFertility: extendedFert,
+          },
+          fertility: createFertilityProfile(extendedFert),
+          heritage: {
+            bloodline: [{ group: ethnicGroup, fraction: 1.0 }],
+            primaryCulture: culture,
+            culturalFluency: new Map<CultureId, number>([[culture, 1.0]]),
+          },
+          languages: [
+            { language, fluency: 1.0 },
+            { language: 'tradetalk', fluency: 0.2 },
+          ],
+          religion,
+        }, rng);
+
+        updatedPeople.set(person.id, person);
+      }
+
+      return {
+        ...state,
+        people: updatedPeople,
+        settlement: {
+          ...state.settlement,
+          populationCount: state.settlement.populationCount + count,
+        },
+      };
+    }
+
     default:
       return state;
   }
@@ -186,11 +273,13 @@ function applyConsequence(consequence: EventConsequence, state: GameState): Game
  * @param event    The event being resolved.
  * @param choiceId The ID of the choice the player selected.
  * @param state    Current game state (not mutated).
+ * @param rng      Optional seeded RNG — required for consequences that generate people.
  */
 export function applyEventChoice(
   event: GameEvent,
   choiceId: string,
   state: GameState,
+  rng?: SeededRNG,
 ): ApplyChoiceResult {
   const choice = event.choices.find(c => c.id === choiceId);
   if (!choice) return { state, isDeferredOutcome: false };
@@ -198,7 +287,7 @@ export function applyEventChoice(
   // 1. Always-fire consequences.
   let updatedState = state;
   for (const consequence of choice.consequences) {
-    updatedState = applyConsequence(consequence, updatedState);
+    updatedState = applyConsequence(consequence, updatedState, rng);
   }
 
   // 2. Skill check (only when there is no deferral — deferred outcomes resolve later).
@@ -209,7 +298,7 @@ export function applyEventChoice(
       ? (choice.onSuccess ?? [])
       : (choice.onFailure ?? []);
     for (const consequence of outcomeConsequences) {
-      updatedState = applyConsequence(consequence, updatedState);
+      updatedState = applyConsequence(consequence, updatedState, rng);
     }
   }
 

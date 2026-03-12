@@ -239,16 +239,23 @@ export interface EventConsequence {
    * - tribes: a tribeId string
    * - settlement resources: a ResourceType string
    * - standing/disposition: 'settlement' or a tribeId
+   * - add_person: a descriptive label (e.g. 'widow', 'imanian_woman') — for logging only
    */
   target: string;
   /**
    * The change value. Interpretation depends on `type`:
    * - modify_resource / modify_opinion / modify_disposition / modify_standing: numeric delta
+   * - add_person: number of people to add
    * - add_trait / remove_trait: the TraitId string
    * - trigger_event: the follow-up event ID string
    * - kill_person / wound_person / start_pregnancy: ignored (use `target`)
    */
   value: number | string | boolean;
+  /**
+   * Optional extra parameters used by complex consequence types.
+   * add_person keys: sex, ethnicGroup, minAge, maxAge, religion, socialStatus
+   */
+  params?: Record<string, unknown>;
 }
 
 // ─── Game Event ───────────────────────────────────────────────────────────────

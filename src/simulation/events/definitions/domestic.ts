@@ -180,13 +180,18 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
         description: 'She and her daughters are given a place to sleep and a share of the work. Word like this travels.',
         consequences: [
           { type: 'modify_disposition', target: 'njaro_matu_riverfolk', value: 10 },
+          { type: 'add_person', target: 'widow', value: 1, params: { sex: 'female', ethnicGroup: 'kiswani_riverfolk', minAge: 28, maxAge: 42, religion: 'sacred_wheel', socialStatus: 'newcomer' } },
+          { type: 'add_person', target: 'daughter', value: 2, params: { sex: 'female', ethnicGroup: 'kiswani_riverfolk', minAge: 6, maxAge: 14, religion: 'sacred_wheel', socialStatus: 'newcomer' } },
         ],
       },
       {
         id: 'welcome_conditional',
         label: 'Welcome them — but make clear the eldest daughter will marry one of your men in time.',
         description: 'A pragmatic arrangement. How it is offered will determine how it is received.',
-        consequences: [],
+        consequences: [
+          { type: 'add_person', target: 'widow', value: 1, params: { sex: 'female', ethnicGroup: 'kiswani_riverfolk', minAge: 28, maxAge: 42, religion: 'sacred_wheel', socialStatus: 'newcomer' } },
+          { type: 'add_person', target: 'daughter', value: 2, params: { sex: 'female', ethnicGroup: 'kiswani_riverfolk', minAge: 6, maxAge: 14, religion: 'sacred_wheel', socialStatus: 'newcomer' } },
+        ],
         skillCheck: {
           skill: 'diplomacy',
           difficulty: 40,
@@ -243,6 +248,7 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
         description: 'A substantial investment in the settlement\'s future.',
         consequences: [
           { type: 'modify_resource', target: 'gold', value: -150 },
+          { type: 'add_person', target: 'imanian_woman', value: 3, params: { sex: 'female', ethnicGroup: 'imanian', minAge: 18, maxAge: 30, religion: 'imanian_orthodox', socialStatus: 'newcomer' } },
         ],
       },
       {
@@ -251,6 +257,7 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
         description: 'Modest but affordable. The Company will note your restraint.',
         consequences: [
           { type: 'modify_resource', target: 'gold', value: -50 },
+          { type: 'add_person', target: 'imanian_woman', value: 1, params: { sex: 'female', ethnicGroup: 'imanian', minAge: 18, maxAge: 30, religion: 'imanian_orthodox', socialStatus: 'newcomer' } },
         ],
       },
       {
@@ -305,6 +312,7 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
         consequences: [
           { type: 'modify_resource',    target: 'steel',              value: -5 },
           { type: 'modify_disposition', target: 'thunder_veil_band',  value: 8  },
+          { type: 'add_person', target: 'hanjoda_man', value: 1, params: { sex: 'male', ethnicGroup: 'hanjoda_stormcaller', minAge: 18, maxAge: 24, religion: 'sacred_wheel', socialStatus: 'newcomer' } },
         ],
       },
       {
@@ -313,6 +321,7 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
         description: 'You push harder. Whether they concede depends on how the demand is pressed.',
         consequences: [
           { type: 'modify_resource', target: 'steel', value: -5 },
+          { type: 'add_person', target: 'hanjoda_man', value: 1, params: { sex: 'male', ethnicGroup: 'hanjoda_stormcaller', minAge: 18, maxAge: 24, religion: 'sacred_wheel', socialStatus: 'newcomer' } },
         ],
         skillCheck: {
           skill: 'bargaining',
