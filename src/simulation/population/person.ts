@@ -12,6 +12,7 @@
 import { generateId } from '../../utils/id';
 import type { GeneticProfile, VisibleTraits } from '../genetics/traits';
 import type { TraitId } from '../personality/traits';
+import type { SeededRNG } from '../../utils/rng';
 
 // ─── Ethnic & Cultural Identity ───────────────────────────────────────────────
 
@@ -251,6 +252,117 @@ export type SocialStatus =
   | 'elder'
   | 'outcast';
 
+// ─── Skills ──────────────────────────────────────────────────────────────────
+
+/** The six base skills every person has. */
+export type SkillId = 'animals' | 'bargaining' | 'combat' | 'custom' | 'leadership' | 'plants';
+
+/** Derived skills computed on demand from base skill averages. Never stored on the person. */
+export type DerivedSkillId =
+  | 'deception'
+  | 'diplomacy'
+  | 'exploring'
+  | 'farming'
+  | 'hunting'
+  | 'poetry'
+  | 'strategy';
+
+/** Named rating tier for a skill score. */
+export type SkillRating = 'fair' | 'good' | 'very_good' | 'excellent' | 'renowned' | 'heroic';
+
+/** A person's six base skill scores — integers in the range 1–100. */
+export type PersonSkills = Record<SkillId, number>;
+
+/**
+ * Maps minimum thresholds to SkillRating labels, checked from highest to lowest.
+ * Fair: 1–25 · Good: 26–45 · Very Good: 46–62 · Excellent: 63–77 · Renowned: 78–90 · Heroic: 91–100
+ */
+export const SKILL_RATING_THRESHOLDS: Array<{ min: number; rating: SkillRating }> = [
+  { min: 91, rating: 'heroic' },
+  { min: 78, rating: 'renowned' },
+  { min: 63, rating: 'excellent' },
+  { min: 46, rating: 'very_good' },
+  { min: 26, rating: 'good' },
+  { min: 1,  rating: 'fair' },
+];
+
+/** Returns the named SkillRating tier for a 1–100 skill value. */
+export function getSkillRating(value: number): SkillRating {
+  for (const { min, rating } of SKILL_RATING_THRESHOLDS) {
+    if (value >= min) return rating;
+  }
+  return 'fair';
+}
+
+/**
+ * Computes a derived skill value from a person's base skills.
+ * Returns a rounded integer.
+ */
+export function getDerivedSkill(skills: PersonSkills, id: DerivedSkillId): number {
+  switch (id) {
+    case 'deception':  return Math.round((skills.bargaining + skills.leadership) / 2);
+    case 'diplomacy':  return Math.round((skills.bargaining + skills.custom) / 2);
+    case 'exploring':  return Math.round((skills.bargaining + skills.combat) / 2);
+    case 'farming':    return Math.round((skills.animals + skills.plants) / 2);
+    case 'hunting':    return Math.round((skills.animals + skills.combat + skills.plants) / 3);
+    case 'poetry':     return Math.round((skills.custom + skills.leadership) / 2);
+    case 'strategy':   return Math.round((skills.combat + skills.leadership) / 2);
+  }
+}
+
+/** Additive bonuses applied to specific base skills based on a person's traits. */
+const SKILL_TRAIT_BONUSES: Partial<Record<TraitId, Partial<PersonSkills>>> = {
+  brave:           { combat: 15, leadership: 5 },
+  cruel:           { combat: 10 },
+  strong:          { combat: 15, animals: 10 },
+  clever:          { custom: 15, leadership: 12 },
+  ambitious:       { leadership: 12 },
+  gregarious:      { bargaining: 12 },
+  patient:         { plants: 10, animals: 8 },
+  deceitful:       { bargaining: 12 },
+  greedy:          { bargaining: 10 },
+  proud:           { leadership: 8 },
+  robust:          { animals: 10, plants: 8 },
+  veteran:         { combat: 20 },
+  hero:            { combat: 15, leadership: 10 },
+  respected_elder: { leadership: 15, custom: 10 },
+  traditional:     { custom: 10 },
+  cosmopolitan:    { bargaining: 8 },
+};
+
+const ALL_SKILL_IDS: SkillId[] = ['animals', 'bargaining', 'combat', 'custom', 'leadership', 'plants'];
+
+/**
+ * Generates a seeded, trait-influenced set of base skills for a new person.
+ *
+ * Each skill starts from a Gaussian roll centred at 28 (low end of Good), std dev 15,
+ * clamped to [1, 100]. Trait bonuses are added before the final clamp.
+ */
+export function generatePersonSkills(traits: TraitId[], rng: SeededRNG): PersonSkills {
+  const raw: Record<string, number> = {};
+  for (const id of ALL_SKILL_IDS) {
+    raw[id] = rng.gaussian(28, 15);
+  }
+
+  for (const trait of traits) {
+    const bonuses = SKILL_TRAIT_BONUSES[trait];
+    if (!bonuses) continue;
+    for (const [skillId, bonus] of Object.entries(bonuses) as [SkillId, number][]) {
+      raw[skillId] = (raw[skillId] ?? 0) + bonus;
+    }
+  }
+
+  const result = {} as PersonSkills;
+  for (const id of ALL_SKILL_IDS) {
+    result[id] = Math.max(1, Math.min(100, Math.round(raw[id])));
+  }
+  return result;
+}
+
+const DEFAULT_SKILLS: PersonSkills = {
+  animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25,
+};
+
 // ─── Person Interface ─────────────────────────────────────────────────────────
 
 /**
@@ -321,6 +433,9 @@ export interface Person {
   socialStatus: SocialStatus;
   /** Whether the player currently has this person under direct focus/control. */
   isPlayerControlled: boolean;
+
+  /** Base skill scores (1–100 integers). Use getDerivedSkill() for composite scores. */
+  skills: PersonSkills;
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
@@ -380,9 +495,11 @@ const DEFAULT_FEMALE_FERTILITY: FertilityProfile = {
  * const woman = createPerson({ firstName: 'Mira', familyName: 'Ashton', sex: 'female', age: 20 });
  * ```
  */
-export function createPerson(options: CreatePersonOptions = {}): Person {
+export function createPerson(options: CreatePersonOptions = {}, rng?: SeededRNG): Person {
   const sex = options.sex ?? 'male';
   const defaultFertility = sex === 'female' ? DEFAULT_FEMALE_FERTILITY : DEFAULT_MALE_FERTILITY;
+  const resolvedTraits = options.traits ?? [];
+  const resolvedSkills = options.skills ?? (rng ? generatePersonSkills(resolvedTraits, rng) : DEFAULT_SKILLS);
 
   return {
     id: options.id ?? generateId(),
@@ -404,7 +521,7 @@ export function createPerson(options: CreatePersonOptions = {}): Person {
     languages: options.languages ?? [{ language: 'imanian', fluency: 1.0 }],
     religion: options.religion ?? 'imanian_orthodox',
 
-    traits: options.traits ?? [],
+    traits: resolvedTraits,
 
     spouseIds: options.spouseIds ?? [],
     parentIds: options.parentIds ?? [null, null],
@@ -414,5 +531,7 @@ export function createPerson(options: CreatePersonOptions = {}): Person {
     role: options.role ?? 'unassigned',
     socialStatus: options.socialStatus ?? 'settler',
     isPlayerControlled: options.isPlayerControlled ?? false,
+
+    skills: resolvedSkills,
   };
 }

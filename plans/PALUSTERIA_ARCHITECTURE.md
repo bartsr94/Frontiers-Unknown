@@ -144,7 +144,8 @@ palusteria-game/
     │   ├── gender-ratio.test.ts        # Ratio math matches lore values
     │   └── fertility.test.ts           # Fertility window edge cases
     ├── population/
-    │   └── demographics.test.ts        # 100-year headless sim, verify pop curves
+    │   ├── demographics.test.ts        # 100-year headless sim, verify pop curves
+    │   └── skills.test.ts              # Skill rating, derived formulas, generation bounds
     ├── events/
     │   └── prerequisites.test.ts       # Event filtering correctness
     └── utils/
@@ -208,6 +209,7 @@ interface Person {
   culturalIdentity: CultureId;
 
   traits: TraitId[];                 // 2–4 from trait-definitions.ts
+  skills: PersonSkills;              // Base skill scores — integers 1–100
   
   spouseIds: string[];               // Supports polygamy
   parentIds: [string | null, string | null]; // [motherId, fatherId]
@@ -458,6 +460,33 @@ type PrerequisiteType =
   | 'max_population'
   | 'min_year'
   | 'has_resource'
+```
+
+### 4.9 Skills
+
+```typescript
+type SkillId = 'animals' | 'bargaining' | 'combat' | 'custom' | 'leadership' | 'plants';
+type DerivedSkillId = 'deception' | 'diplomacy' | 'exploring' | 'farming' | 'hunting' | 'poetry' | 'strategy';
+type SkillRating = 'fair' | 'good' | 'very_good' | 'excellent' | 'renowned' | 'heroic';
+type PersonSkills = Record<SkillId, number>; // integers 1–100
+
+// Derived skills are never stored — computed on demand:
+// Deception   = avg(bargaining, leadership)
+// Diplomacy   = avg(bargaining, custom)
+// Exploring   = avg(bargaining, combat)
+// Farming     = avg(animals, plants)
+// Hunting     = avg(animals, combat, plants)
+// Poetry      = avg(custom, leadership)
+// Strategy    = avg(combat, leadership)
+
+// Rating tiers:
+// Fair       1–25   (FR)
+// Good       26–45  (GD)
+// Very Good  46–62  (VG)
+// Excellent  63–77  (EX)
+// Renowned   78–90  (RN)
+// Heroic     91–100 (HR)
+```
   | 'tribe_exists'
   | 'tribe_disposition_above'
   | 'tribe_disposition_below'

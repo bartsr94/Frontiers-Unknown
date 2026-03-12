@@ -40,12 +40,13 @@ npx tsc --noEmit   # Type-check
 | 3 | Living Settlement — A Place Called Home | 🔄 In Progress |
 | 4 | Polish — The Ashmark Remembers | 🔲 Planned |
 
-**Phase 3 progress:** Language acquisition engine ✅ · Cultural identity & drift system ✅ · Founder character variety ✅
+**Phase 3 progress:** Language acquisition engine ✅ · Cultural identity & drift system ✅ · Founder character variety ✅ · Skills & experience tracking ✅
 
 ---
 
 ## Documentation
 
-- [CLAUDE.md](CLAUDE.md) — Developer context, current state, Phase 2 plan, ethnic group reference
+- [CLAUDE.md](CLAUDE.md) — Developer context, current state, hard rules, quick-reference file table
+- [plans/PHASE3_SKILLS.md](plans/PHASE3_SKILLS.md) — Skills system design (base skills, derived skills, generation algorithm)
 - [PALUSTERIA_ARCHITECTURE.md](PALUSTERIA_ARCHITECTURE.md) — Technical architecture and data models
 - [PALUSTERIA_GAME_DESIGN.md](PALUSTERIA_GAME_DESIGN.md) — Game design document (what and why)

@@ -11,7 +11,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 |-------|--------|-------|
 | Phase 1 — Foundation | ✅ Complete | 13/13 steps done, 13/13 tests pass, zero compile errors |
 | Phase 2 — Genetics Engine | ✅ Complete | All 12 steps done, 139/139 tests pass, zero compile errors |
-| Phase 3 — Living Settlement | 🔄 In Progress | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ |
+| Phase 3 — Living Settlement | 🔄 In Progress | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ · Skills system ✅ |
 | Phase 4 — Polish | 🔲 Not started | — |
 
 ---
@@ -20,7 +20,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 
 ```bash
 npm run dev          # Vite dev server → http://localhost:5173
-npm test             # Run Vitest (248 passing across rng, inheritance, gender-ratio, fertility, event-filter, demographics, language-acquisition, culture, marriage)
+npm test             # Run Vitest (284 passing across rng, inheritance, gender-ratio, fertility, event-filter, demographics, language-acquisition, culture, marriage, skills)
 npx tsc --noEmit     # Type-check without building
 ```
 
@@ -69,7 +69,7 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/genetics/gender-ratio.ts` | `getSauromatianFraction`, `getImanianFraction`, `resolveGenderRatio`, `determineSex` |
 | `src/simulation/genetics/inheritance.ts` | `resolveInheritance()` pipeline: `averageBloodlines`, `blendTraitDistributions`, `sampleContinuous`, `sampleDiscrete` |
 | `src/simulation/genetics/fertility.ts` | `BirthResult`, `createFertilityProfile`, `getFertilityChance`, `attemptConception`, `processPregnancies` |
-| `src/simulation/population/person.ts` | `Person` interface + `createPerson()` factory; heritage/bloodline types |
+| `src/simulation/population/person.ts` | `Person` interface + `createPerson(options, rng?)` factory; heritage/bloodline types; `SkillId`, `PersonSkills`, `getSkillRating()`, `getDerivedSkill()`, `generatePersonSkills()` |
 | `src/simulation/population/naming.ts` | `generateName(sex, culture, motherFamilyName, fatherFamilyName, rng)` — 3 culture pools |
 | `src/simulation/population/marriage.ts` | `canMarry`, `performMarriage`, `getMarriageability` — Sauromatian/Imanian rules |
 | `src/simulation/world/tribes.ts` | `createTribe`, `TRIBE_PRESETS` (16 presets), `updateTribeDisposition` |
@@ -78,8 +78,8 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/ui/layout/BottomBar.tsx` | Full-width resource strip (food, cattle, goods, gold, lumber, stone, pop) |
 | `src/ui/layout/CouncilFooter.tsx` | 7-seat Expedition Council row |
 | `src/ui/views/EventView.tsx` | Event card with choices; calls `resolveEventChoice` + `nextEvent` |
-| `src/ui/views/PeopleView.tsx` | Settler roster; sort/filter (sex, status, heritage group); click row → PersonDetail panel |
-| `src/ui/views/PersonDetail.tsx` | Full person detail: genetics, heritage, family links, fertility |
+| `src/ui/views/PeopleView.tsx` | Settler roster; sort/filter (sex, status, heritage group, **base skill**); click row → PersonDetail panel |
+| `src/ui/views/PersonDetail.tsx` | Full person detail: genetics, heritage, traits, skills (base + derived), languages, family |
 | `src/ui/views/FamilyTree.tsx` | 3-generation ancestor/descendant tree; spouses shown to the side of root node |
 | `src/ui/components/Portrait.tsx` | Text-based portrait; skin tone HSL colouring; `sm`/`lg` variants |
 | `src/ui/components/heritage-helpers.ts` | `heritageAbbr(bloodline)` → `'IMA'\|'KIS-R'\|…\|'MIX'`; `GROUP_ABBR` lookup |
@@ -182,10 +182,10 @@ idle
 | ✅ 4 | Per-turn cultural drift wired into `processDawn()` | `src/simulation/turn/turn-processor.ts` | Complete |
 | ✅ 5 | Child heritage blending via `deriveCulture()` | `src/simulation/genetics/fertility.ts` | Complete |
 | ✅ 6 | Cultural Fluency section in PersonDetail UI | `src/ui/views/PersonDetail.tsx` | Complete |
-| ✅ 7 | Founder character variety (unique physical profiles) | `src/stores/game-store.ts` | Complete |
+| ✅ 7 | Founder character variety (unique physical profiles + traits) | `src/stores/game-store.ts` | Complete |
 | ✅ 8 | Founding traders start with Tradetalk (fluency 0.4) | `src/stores/game-store.ts` | Complete |
 | ✅ 9 | Sauromatian founding women start with Tradetalk (fluency 0.3) | `src/stores/game-store.ts` | Complete |
-| 🔲 10 | Skills & experience tracking | — | Planned |
+| ✅ 10 | Skills & experience tracking | `src/simulation/population/person.ts`, `src/ui/views/PersonDetail.tsx`, `src/ui/views/PeopleView.tsx` | Complete |
 | 🔲 11 | Settlement buildings & upgrades | — | Planned |
 | 🔲 12 | Tribe relationship depth | — | Planned |
 
@@ -195,6 +195,17 @@ idle
 - **`processCulturalDrift()`**: community pull 0.025/season, spouse bonus 0.01/season, floor 0.01
 - **`deriveCulture()`**: blends both parents 50/50, seeds `settlement_native` at 0.05; `primaryCulture` = highest key or `settlement_native` if none ≥ 0.5
 - Founding Sauromatian women use `ETHNIC_GROUP_CULTURE[sauroGroup]` for correct sub-group culture (not hardcoded `kiswani_traditional`)
+
+### Skills System Notes
+
+- **6 base skills** on every `Person`: `animals`, `bargaining`, `combat`, `custom`, `leadership`, `plants` (integers 1–100)
+- **7 derived skills** computed on demand via `getDerivedSkill(skills, id)` — never stored: Deception, Diplomacy, Exploring, Farming, Hunting, Poetry, Strategy
+- **Rating tiers**: Fair 1–25 (FR) · Good 26–45 (GD) · Very Good 46–62 (VG) · Excellent 63–77 (EX) · Renowned 78–90 (RN) · Heroic 91–100 (HR)
+- **Generation**: `generatePersonSkills(traits, rng)` — Gaussian(28, 15) + trait bonuses, clamped to [1, 100], rounded
+- **Default fallback**: all 25 when no RNG provided — keeps existing tests that call `createPerson` without RNG stable
+- **`createPerson` signature**: `createPerson(options, rng?)` — if `options.skills` provided, used directly; else if `rng`, generates; else defaults to 25
+- **Founding colonists** each have 2 hardcoded traits in `FOUNDING_TRAITS` (game-store.ts) that drive differentiated skill profiles
+- **Serialisation**: `PersonSkills` is a plain `Record<SkillId, number>` — no Map handling needed, JSON round-trips automatically
 
 ---
 
@@ -266,4 +277,5 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/population/marriage.test.ts` — 12/12 passing
 - `tests/population/culture.test.ts` — 21/21 passing (deriveCulture, processCulturalDrift, buildSettlementCultureDistribution, computeCulturalBlend)
 - `tests/culture/language-acquisition.test.ts` — 34/34 passing
-- **Total: 248/248 passing**
+- `tests/population/skills.test.ts` — 36/36 passing (getSkillRating, getDerivedSkill, generatePersonSkills, createPerson integration)
+- **Total: 284/284 passing**

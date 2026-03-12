@@ -190,6 +190,37 @@ const FOUNDING_ROLES: WorkRole[] = [
 const FOUNDING_AGES: number[] = [22, 28, 31, 25, 30, 27, 35, 24, 29, 33];
 
 /**
+ * Two traits per founding settler, chosen to give each man a distinct skill
+ * profile. Traits feed directly into generatePersonSkills() bonuses so the
+ * roster has real variety rather than a flat Gaussian for everyone.
+ *
+ * Index matches FOUNDING_NAMES / FOUNDING_ROLES / FOUNDING_AGES.
+ *
+ *  0 – Edmund Farrow      farmer 22  — young, earnest, careful
+ *  1 – Aldric Vane        farmer 28  — weathered, physically powerful
+ *  2 – Corvin Ashby       farmer 31  — blunt, stubborn, strong-willed
+ *  3 – Leofric Morrow     farmer 25  — quietly clever, well-read for his class
+ *  4 – Hawthorn Crale     farmer 30  — broad-shouldered, tough, versatile
+ *  5 – Oswyn Dunmore      farmer 27  — sociable and honest; everyone's friend
+ *  6 – Bastian Thorn      farmer 35  — old hand; ex-militia, knows the old ways
+ *  7 – Idris Halven       trader 24  — charming, silver-tongued, not always honest
+ *  8 – Ren Coalwick       trader 29  — sharp, calculating, eye always on the margin
+ *  9 – Callum Marsh       guard  33  — built to intimidate; few words, fewer doubts
+ */
+const FOUNDING_TRAITS: Array<Person['traits']> = [
+  ['patient', 'humble'],        // Edmund  — careful, modest
+  ['strong',  'patient'],       // Aldric  — powerfully built, steady
+  ['strong',  'proud'],         // Corvin  — strong but difficult
+  ['clever',  'content'],       // Leofric — thinking man, not ambitious
+  ['robust',  'brave'],         // Hawthorn— tough and courageous
+  ['gregarious', 'honest'],     // Oswyn   — everyone's friend
+  ['traditional', 'veteran'],   // Bastian — old soldier, set in his ways
+  ['gregarious', 'deceitful'],  // Idris   — charming, not to be trusted
+  ['clever',  'greedy'],        // Ren     — sharp mind, mercenary instincts
+  ['brave',   'strong'],        // Callum  — straightforward bruiser
+];
+
+/**
  * Individual physical profiles for each founding settler.
  * All stay within the Imanian genetic range (fair skin, cool/neutral undertone,
  * blonde–dark-brown hair, straight–wavy, blue/grey/green eyes) while giving
@@ -238,6 +269,8 @@ function seedCouncil(people: Map<string, Person>): string[] {
 // ─── Initial game state factory ───────────────────────────────────────────────
 
 function createInitialState(config: GameConfig, settlementName: string): GameState {
+  const seed = Math.floor(Math.random() * 2 ** 31);
+  const rng = createRNG(seed);
   const people = new Map<string, Person>();
 
   FOUNDING_NAMES.forEach((name, i) => {
@@ -257,7 +290,8 @@ function createInitialState(config: GameConfig, settlementName: string): GameSta
       socialStatus: 'founding_member',
       languages,
       genetics: FOUNDING_GENETICS[i],
-    });
+      traits: FOUNDING_TRAITS[i],
+    }, rng);
     people.set(person.id, person);
   });
 
@@ -317,7 +351,7 @@ function createInitialState(config: GameConfig, settlementName: string): GameSta
           { language: 'tradetalk', fluency: 0.3 },
         ],
         religion: 'sacred_wheel',
-      });
+      }, rng);
       people.set(woman.id, woman);
     }
   }
@@ -371,7 +405,7 @@ function createInitialState(config: GameConfig, settlementName: string): GameSta
 
   return {
     version: '1.0.0',
-    seed: Math.floor(Math.random() * 2 ** 31),
+    seed,
     turnNumber: 0,
     currentSeason: 'spring',
     currentYear: 1,

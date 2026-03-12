@@ -8,6 +8,8 @@
 import { useState } from 'react';
 import { useGameStore } from '../../stores/game-store';
 import type { WorkRole } from '../../simulation/population/person';
+import { getSkillRating } from '../../simulation/population/person';
+import type { SkillId, SkillRating } from '../../simulation/population/person';
 import { skinToneColor } from '../components/Portrait';
 import { heritageAbbr } from '../components/heritage-helpers';
 import PersonDetail from './PersonDetail';
@@ -33,7 +35,34 @@ const ROLE_COLORS: Record<WorkRole, string> = {
   unassigned: 'bg-stone-800 text-stone-400',
 };
 
-type SortKey = 'name' | 'age' | 'heritage' | 'role';
+type SortKey = 'name' | 'age' | 'heritage' | 'role' | SkillId;
+
+const SKILL_SORT_LABELS: Array<{ id: SkillId; label: string }> = [
+  { id: 'animals',    label: 'Animals' },
+  { id: 'bargaining', label: 'Bargaining' },
+  { id: 'combat',     label: 'Combat' },
+  { id: 'custom',     label: 'Custom' },
+  { id: 'leadership', label: 'Leadership' },
+  { id: 'plants',     label: 'Plants' },
+];
+
+const RATING_SHORT: Record<SkillRating, string> = {
+  fair:      'FR',
+  good:      'GD',
+  very_good: 'VG',
+  excellent: 'EX',
+  renowned:  'RN',
+  heroic:    'HR',
+};
+
+const RATING_BADGE_CLASS: Record<SkillRating, string> = {
+  fair:      'bg-stone-700 text-slate-400',
+  good:      'bg-stone-700 text-green-400',
+  very_good: 'bg-stone-700 text-teal-400',
+  excellent: 'bg-stone-700 text-blue-400',
+  renowned:  'bg-stone-700 text-purple-400',
+  heroic:    'bg-stone-700 text-amber-400',
+};
 
 interface FilterState {
   sex:      'all' | 'male' | 'female';
@@ -74,9 +103,19 @@ export default function PeopleView() {
       case 'age':      return b.age - a.age;
       case 'role':     return a.role.localeCompare(b.role);
       case 'heritage': return heritageAbbr(a.heritage.bloodline).localeCompare(heritageAbbr(b.heritage.bloodline));
+      case 'animals':
+      case 'bargaining':
+      case 'combat':
+      case 'custom':
+      case 'leadership':
+      case 'plants':   return b.skills[sortKey] - a.skills[sortKey];
       default:         return `${a.firstName} ${a.familyName}`.localeCompare(`${b.firstName} ${b.familyName}`);
     }
   });
+
+  const activeSkill: SkillId | null = (['animals', 'bargaining', 'combat', 'custom', 'leadership', 'plants'] as const).includes(sortKey as SkillId)
+    ? (sortKey as SkillId)
+    : null;
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const selectBtn = (active: boolean) =>
@@ -112,6 +151,14 @@ export default function PeopleView() {
           {(['name', 'age', 'heritage', 'role'] as SortKey[]).map(k => (
             <button key={k} onClick={() => setSortKey(k)} className={selectBtn(sortKey === k)}>
               {k.charAt(0).toUpperCase() + k.slice(1)}
+            </button>
+          ))}
+
+          <span className="text-stone-700">|</span>
+
+          {SKILL_SORT_LABELS.map(({ id, label }) => (
+            <button key={id} onClick={() => setSortKey(id)} className={selectBtn(sortKey === id)}>
+              {label}
             </button>
           ))}
 
@@ -156,6 +203,7 @@ export default function PeopleView() {
                 <th className="px-2 py-2 font-semibold">Age</th>
                 <th className="px-2 py-2 font-semibold text-center">Sex</th>
                 <th className="px-2 py-2 font-semibold">Role</th>
+                {activeSkill && <th className="px-2 py-2 font-semibold text-center capitalize">{activeSkill}</th>}
                 <th className="px-2 py-2 font-semibold text-center">Wed</th>
                 <th className="px-2 py-2 font-semibold text-center" title="Expedition Council seat">⭐</th>
               </tr>
@@ -215,6 +263,19 @@ export default function PeopleView() {
                       </span>
                     </td>
 
+                    {/* Skill rating badge — only shown when sorted by a skill */}
+                    {activeSkill && (() => {
+                      const val = person.skills[activeSkill];
+                      const rating = getSkillRating(val);
+                      return (
+                        <td className="px-2 py-2 text-center">
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${RATING_BADGE_CLASS[rating]}`}>
+                            {RATING_SHORT[rating]}
+                          </span>
+                        </td>
+                      );
+                    })()}
+
                     {/* Married indicator */}
                     <td className="px-2 py-2 text-center text-stone-400" title={isMarried ? 'Married' : 'Unmarried'}>
                       {isMarried ? '◎' : '○'}
@@ -240,7 +301,7 @@ export default function PeopleView() {
               })}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-stone-500 italic">
+                  <td colSpan={activeSkill ? 8 : 7} className="px-4 py-6 text-center text-stone-500 italic">
                     No settlers match the current filter.
                   </td>
                 </tr>

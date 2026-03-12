@@ -23,6 +23,8 @@ import Portrait from '../components/Portrait';
 import FamilyTree from './FamilyTree';
 import { CULTURE_LABELS } from '../../simulation/population/culture';
 import type { EthnicGroup } from '../../simulation/population/person';
+import { getSkillRating, getDerivedSkill } from '../../simulation/population/person';
+import type { SkillId, DerivedSkillId, SkillRating } from '../../simulation/population/person';
 import type { TraitId } from '../../simulation/personality/traits';
 
 // ─── Bloodline colours ────────────────────────────────────────────────────────
@@ -117,7 +119,53 @@ const TRAIT_LABELS: Record<TraitId, string> = {
   scandal: 'Scandal', oath_breaker: 'Oath-Breaker', hero: 'Hero',
   coward: 'Coward', wealthy: 'Wealthy', indebted: 'Indebted',
 };
+// ─── Skill display helpers ───────────────────────────────────────────────────────
 
+const BASE_SKILLS: Array<{ id: SkillId; label: string }> = [
+  { id: 'animals',     label: 'Animals' },
+  { id: 'bargaining',  label: 'Bargaining' },
+  { id: 'combat',      label: 'Combat' },
+  { id: 'custom',      label: 'Custom' },
+  { id: 'leadership',  label: 'Leadership' },
+  { id: 'plants',      label: 'Plants' },
+];
+
+const DERIVED_SKILLS: Array<{ id: DerivedSkillId; label: string }> = [
+  { id: 'deception',   label: 'Deception' },
+  { id: 'diplomacy',   label: 'Diplomacy' },
+  { id: 'exploring',   label: 'Exploring' },
+  { id: 'farming',     label: 'Farming' },
+  { id: 'hunting',     label: 'Hunting' },
+  { id: 'poetry',      label: 'Poetry' },
+  { id: 'strategy',    label: 'Strategy' },
+];
+
+const RATING_LABELS: Record<SkillRating, string> = {
+  fair:      'Fair',
+  good:      'Good',
+  very_good: 'Very Good',
+  excellent: 'Excellent',
+  renowned:  'Renowned',
+  heroic:    'Heroic',
+};
+
+const RATING_BAR_CLASS: Record<SkillRating, string> = {
+  fair:      'bg-slate-400',
+  good:      'bg-green-500',
+  very_good: 'bg-teal-500',
+  excellent: 'bg-blue-500',
+  renowned:  'bg-purple-500',
+  heroic:    'bg-amber-400',
+};
+
+const RATING_TEXT_CLASS: Record<SkillRating, string> = {
+  fair:      'text-slate-400',
+  good:      'text-green-400',
+  very_good: 'text-teal-400',
+  excellent: 'text-blue-400',
+  renowned:  'text-purple-400',
+  heroic:    'text-amber-400',
+};
 // ─── Section components ───────────────────────────────────────────────────────
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
@@ -345,22 +393,71 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
         })()}
 
         {/* Traits */}
-        {person.traits.length > 0 && (
-          <>
-            <SectionHeading>Traits</SectionHeading>
-            <div className="flex flex-wrap gap-1.5 mb-1">
-              {person.traits.map(traitId => (
-                <span
-                  key={traitId}
-                  className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${TRAIT_COLORS[traitId] ?? 'bg-stone-700 text-stone-300'}`}
-                >
-                  {TRAIT_LABELS[traitId] ?? traitId}
-                </span>
-              ))}
-            </div>
-            <Divider />
-          </>
+        <SectionHeading>Traits</SectionHeading>
+        {person.traits.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5 mb-1">
+            {person.traits.map(traitId => (
+              <span
+                key={traitId}
+                className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${TRAIT_COLORS[traitId] ?? 'bg-stone-700 text-stone-300'}`}
+              >
+                {TRAIT_LABELS[traitId] ?? traitId}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-stone-600 italic text-xs mb-1">No traits.</p>
         )}
+        <Divider />
+
+        {/* Skills */}
+        <SectionHeading>Skills</SectionHeading>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2 mb-2">
+          {BASE_SKILLS.map(({ id, label }) => {
+            const value = person.skills[id];
+            const rating = getSkillRating(value);
+            return (
+              <div key={id}>
+                <div className="flex items-center justify-between text-xs mb-0.5">
+                  <span className="text-stone-300">{label}</span>
+                  <span className={`font-semibold ${RATING_TEXT_CLASS[rating]}`}>
+                    {RATING_LABELS[rating]}
+                  </span>
+                </div>
+                <div className="h-1 bg-stone-700 rounded overflow-hidden">
+                  <div
+                    className={`h-full rounded ${RATING_BAR_CLASS[rating]}`}
+                    style={{ width: `${value}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-stone-600 text-[10px] uppercase tracking-wider mb-1.5">Derived</p>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2 mb-1">
+          {DERIVED_SKILLS.map(({ id, label }) => {
+            const value = getDerivedSkill(person.skills, id);
+            const rating = getSkillRating(value);
+            return (
+              <div key={id}>
+                <div className="flex items-center justify-between text-xs mb-0.5">
+                  <span className="text-stone-400">{label}</span>
+                  <span className={`font-semibold ${RATING_TEXT_CLASS[rating]}`}>
+                    {RATING_LABELS[rating]}
+                  </span>
+                </div>
+                <div className="h-1 bg-stone-700 rounded overflow-hidden">
+                  <div
+                    className={`h-full rounded ${RATING_BAR_CLASS[rating]}`}
+                    style={{ width: `${value}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <Divider />
 
         {/* Health conditions */}
         {person.health.conditions.length > 0 && (
