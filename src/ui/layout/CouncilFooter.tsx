@@ -89,7 +89,7 @@ export default function CouncilFooter() {
   const filledCount = seats.filter(Boolean).length;
 
   return (
-    <div className="border-t-2 border-amber-700 bg-stone-950 px-3 py-2">
+    <div className="border-t-2 border-amber-700 bg-stone-950 px-4 py-3">
 
       {/* Header row — always visible, acts as collapse toggle */}
       <button
@@ -117,26 +117,26 @@ export default function CouncilFooter() {
             />
           )}
 
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             {seats.map((person, i) =>
               person ? (
                 <button
                   key={person.id}
                   onClick={() => handleCardClick(person)}
-                  className={`flex-1 min-w-0 bg-stone-800 border rounded px-2 py-1.5 text-left
+                  className={`flex-1 min-w-0 bg-stone-800 border rounded px-3 py-2.5 text-left
                               transition-colors cursor-pointer
                               ${selectedAdviserId === person.id
                                 ? 'border-amber-400 ring-1 ring-amber-400'
                                 : 'border-amber-800 hover:border-amber-600'}`}
                 >
-                  <div className="flex items-start gap-1.5">
+                  <div className="flex items-start gap-2.5">
                     <CouncilPortrait person={person} />
                     <div className="min-w-0">
-                      <p className="text-amber-100 text-xs font-semibold truncate leading-tight">
+                      <p className="text-amber-100 text-sm font-semibold truncate leading-tight">
                         {person.firstName} {person.familyName}
                       </p>
                       <span
-                        className={`mt-0.5 inline-block px-1.5 py-0.5 rounded text-[10px] font-bold leading-none
+                        className={`mt-1 inline-block px-2 py-1 rounded text-xs font-bold leading-none
                                     ${ROLE_COLORS[person.role]}`}
                       >
                         {ROLE_LABELS[person.role]}
@@ -147,9 +147,9 @@ export default function CouncilFooter() {
               ) : (
                 <div
                   key={`empty-${i}`}
-                  className="flex-1 min-w-0 border border-dashed border-stone-700 rounded px-2 py-1.5 flex items-center justify-center"
+                  className="flex-1 min-w-0 border border-dashed border-stone-700 rounded px-3 py-2.5 flex items-center justify-center"
                 >
-                  <span className="text-stone-600 text-xs">Empty</span>
+                  <span className="text-stone-600 text-sm">Empty</span>
                 </div>
               ),
             )}

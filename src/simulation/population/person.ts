@@ -242,6 +242,7 @@ export type WorkRole =
   | 'guard'
   | 'craftsman'
   | 'healer'
+  | 'builder'     // Temporarily assigned to a construction project
   | 'unassigned';
 
 /** A person's social standing within the settlement community. */

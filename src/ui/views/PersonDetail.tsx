@@ -278,38 +278,43 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
       {/* ── Scrollable body ── */}
       <div className="flex-1 overflow-y-auto p-4 space-y-0">
 
-        {/* Portrait + identity */}
-        <Portrait person={person} variant="lg" />
+        {/* Portrait with identity fields inlined to the right when a photo is available */}
+        <Portrait person={person} variant="lg">
+          <div className="grid grid-cols-2 gap-y-1 text-xs">
+            <span className="text-stone-500">Age</span>
+            <span className="text-stone-200">{person.age.toFixed(1)} years</span>
 
-        <Divider />
+            <span className="text-stone-500">Sex</span>
+            <span className={person.sex === 'female' ? 'text-rose-300' : 'text-sky-300'}>
+              {person.sex === 'female' ? '♀ Female' : '♂ Male'}
+            </span>
 
-        {/* Identity block */}
-        <div className="grid grid-cols-2 gap-y-1 text-xs text-stone-400">
-          <span className="text-stone-500">Age</span>
-          <span className="text-stone-200">{person.age.toFixed(1)} years</span>
+            <span className="text-stone-500">Role</span>
+            <span className="text-stone-200 capitalize">{person.role}</span>
 
-          <span className="text-stone-500">Sex</span>
-          <span className={person.sex === 'female' ? 'text-rose-300' : 'text-sky-300'}>
-            {person.sex === 'female' ? '♀ Female' : '♂ Male'}
-          </span>
+            <span className="text-stone-500">Status</span>
+            <span className="text-stone-300 capitalize">{person.socialStatus.replace(/_/g, ' ')}</span>
 
-          <span className="text-stone-500">Role</span>
-          <span className="text-stone-200 capitalize">{person.role}</span>
+            <span className="text-stone-500">Culture</span>
+            <span className="text-stone-300">{cultureLabels[person.heritage.primaryCulture] ?? person.heritage.primaryCulture}</span>
 
-          <span className="text-stone-500">Status</span>
-          <span className="text-stone-300 capitalize">{person.socialStatus.replace(/_/g, ' ')}</span>
+            <span className="text-stone-500">Religion</span>
+            <span className="text-stone-300">{religionLabels[person.religion] ?? person.religion}</span>
 
-          <span className="text-stone-500">Culture</span>
-          <span className="text-stone-300">{cultureLabels[person.heritage.primaryCulture] ?? person.heritage.primaryCulture}</span>
-
-          <span className="text-stone-500">Religion</span>
-          <span className="text-stone-300">{religionLabels[person.religion] ?? person.religion}</span>
-
-          <span className="text-stone-500">Health</span>
-          <span className={person.health.currentHealth > 70 ? 'text-green-300' : person.health.currentHealth > 40 ? 'text-yellow-300' : 'text-red-400'}>
-            {person.health.currentHealth}/100
-          </span>
-        </div>
+            <span className="text-stone-500">Health</span>
+            <span className={person.health.currentHealth > 70 ? 'text-green-300' : person.health.currentHealth > 40 ? 'text-yellow-300' : 'text-red-400'}>
+              {person.health.currentHealth}/100
+            </span>
+          </div>
+          {person.genetics.extendedFertility && person.sex === 'female' && (
+            <span
+              className="text-amber-500 text-xs font-medium mt-1"
+              title="Kethara's Bargain — extended fertility through the maternal line"
+            >
+              ✦ Kethara's Bargain
+            </span>
+          )}
+        </Portrait>
 
         <Divider />
 

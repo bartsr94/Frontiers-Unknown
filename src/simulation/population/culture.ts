@@ -17,6 +17,7 @@
 import type { Person, CultureId, BloodlineEntry, Heritage } from './person';
 import type { ReligionId } from './person';
 import type { SeededRNG } from '../../utils/rng';
+import type { CulturePullModifier } from '../buildings/building-effects';
 
 // ─── Culture Labels ───────────────────────────────────────────────────────────
 
@@ -268,6 +269,7 @@ export function computeReligionDistribution(
 export function processCulturalDrift(
   people: Map<string, Person>,
   _rng: SeededRNG,
+  buildingCulturePull: CulturePullModifier[] = [],
 ): Map<string, Person> {
   const communityDist = buildSettlementCultureDistribution(people);
   const result = new Map<string, Person>();
@@ -300,6 +302,16 @@ export function processCulturalDrift(
       const spouseCulture = spouse.heritage.primaryCulture;
       const current = fluency.get(spouseCulture) ?? FLUENCY_FLOOR;
       fluency.set(spouseCulture, Math.min(1.0, current + SPOUSE_RATE));
+    }
+
+    // ── Building culture pull ─────────────────────────────────────────────
+    // Each building with a cultural style nudges everyone slightly toward
+    // that culture's baseline CultureId each season.
+    for (const pull of buildingCulturePull) {
+      const targetCulture: CultureId =
+        pull.direction === 'imanian' ? 'ansberite' : 'settlement_native';
+      const current = fluency.get(targetCulture) ?? FLUENCY_FLOOR;
+      fluency.set(targetCulture, Math.min(1.0, current + pull.strength));
     }
 
     // ── Recompute primaryCulture ──────────────────────────────────────────

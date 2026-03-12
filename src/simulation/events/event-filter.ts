@@ -10,8 +10,9 @@
  */
 
 import type { GameEvent, EventPrerequisite, DeferredEventEntry } from './engine';
-import type { GameState, ResourceType } from '../turn/game-state';
+import type { GameState, ResourceType, BuildingId } from '../turn/game-state';
 import type { SeededRNG } from '../../utils/rng';
+import { hasBuilding, lacksBuilding, getOvercrowdingRatio } from '../buildings/building-effects';
 
 import { ENVIRONMENTAL_EVENTS } from './definitions/environmental';
 import { ECONOMIC_EVENTS }      from './definitions/economic';
@@ -19,6 +20,7 @@ import { DOMESTIC_EVENTS }      from './definitions/domestic';
 import { COMPANY_EVENTS }       from './definitions/company';
 import { DIPLOMACY_EVENTS }     from './definitions/diplomacy';
 import { CULTURAL_EVENTS }      from './definitions/cultural';
+import { BUILDING_EVENTS }      from './definitions/building';
 
 // ─── Master event deck ────────────────────────────────────────────────────────
 
@@ -30,6 +32,7 @@ export const ALL_EVENTS: GameEvent[] = [
   ...COMPANY_EVENTS,
   ...DIPLOMACY_EVENTS,
   ...CULTURAL_EVENTS,
+  ...BUILDING_EVENTS,
 ];
 
 // ─── Prerequisite checking ────────────────────────────────────────────────────
@@ -70,6 +73,20 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
       return state.culture.languageTension >= (prereq.params['threshold'] as number);
     // Unimplemented Phase 3+ prerequisites — treated as satisfied so they
     // don't silently block events in early development.
+    case 'has_building': {
+      const buildingId = prereq.params['buildingId'] as BuildingId;
+      return hasBuilding(state.settlement.buildings, buildingId);
+    }
+    case 'lacks_building': {
+      const buildingId = prereq.params['buildingId'] as BuildingId;
+      return lacksBuilding(state.settlement.buildings, buildingId);
+    }
+    case 'construction_active':
+      return state.settlement.constructionQueue.length > 0;
+    case 'overcrowded': {
+      const ratio = getOvercrowdingRatio(state.settlement.populationCount, state.settlement.buildings);
+      return ratio > 1.0;
+    }
     default:
       return true;
   }

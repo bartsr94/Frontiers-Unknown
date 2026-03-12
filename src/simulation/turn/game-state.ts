@@ -215,10 +215,62 @@ export interface SettlementCulture {
 export type LocationId = string;
 
 /**
- * Identifier for a building type that can be constructed in the settlement.
- * Will expand with the full building system in Phase 4.
+ * All building types that can be constructed in the settlement.
  */
-export type BuildingId = string;
+export type BuildingId =
+  | 'camp'
+  | 'longhouse'
+  | 'roundhouse'
+  | 'great_hall'
+  | 'clan_lodge'
+  | 'granary'
+  | 'workshop'
+  | 'trading_post'
+  | 'healers_hut'
+  | 'gathering_hall'
+  | 'palisade'
+  | 'stable';
+
+/** Cultural style applied to buildings that have style variants. */
+export type BuildingStyle = 'imanian' | 'sauromatian';
+
+/** A building that has been completed and stands in the settlement. */
+export interface BuiltBuilding {
+  /** Which building type this is. */
+  defId: BuildingId;
+  /**
+   * Unique instance identifier (e.g. 'granary_0').
+   * Allows future support for multiple instances of the same building type.
+   */
+  instanceId: string;
+  /** Turn number on which construction completed. 0 for the starting Camp. */
+  builtTurn: number;
+  /** Cultural style chosen when construction started. null for style-neutral buildings. */
+  style: BuildingStyle | null;
+}
+
+/** An in-progress construction project. */
+export interface ConstructionProject {
+  /** Unique project identifier. */
+  id: string;
+  /** Which building is being constructed. */
+  defId: BuildingId;
+  /** Cultural style chosen at construction start. */
+  style: BuildingStyle | null;
+  /**
+   * Accumulated progress points. Advances each season by:
+   *   assignedWorkers.length × (1 + avgCustomSkill / 100) × 100
+   */
+  progressPoints: number;
+  /** Total points needed to complete. Equals buildSeasons × 100. */
+  totalPoints: number;
+  /** IDs of people currently assigned as builders on this project. */
+  assignedWorkerIds: string[];
+  /** Turn on which this project was started. */
+  startedTurn: number;
+  /** Resources already spent (for 50% refund on cancel). */
+  resourcesSpent: Partial<ResourceStock>;
+}
 
 /** The physical settlement: its location, constructions, and resource stockpile. */
 export interface Settlement {
@@ -226,8 +278,14 @@ export interface Settlement {
   name: string;
   /** Where the settlement is established on the regional map. */
   location: LocationId;
-  /** List of building IDs currently constructed. */
-  buildings: BuildingId[];
+  /** All buildings that have been completed and are standing. */
+  buildings: BuiltBuilding[];
+  /**
+   * In-progress construction projects.
+   * Multiple projects can run simultaneously — the constraint is assigned workers,
+   * not an arbitrary queue size. A project with zero workers makes no progress.
+   */
+  constructionQueue: ConstructionProject[];
   /** Current resource stockpile. Updated each turn by the economy system. */
   resources: ResourceStock;
   /**

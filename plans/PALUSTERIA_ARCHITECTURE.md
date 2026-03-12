@@ -75,15 +75,21 @@ palusteria-game/
 │   │   ├── events/
 │   │   │   ├── engine.ts               # Type definitions only (GameEvent, EventChoice, etc.) ✅
 │   │   │   ├── event-filter.ts         # ALL_EVENTS, filterEligibleEvents(), drawEvents() ✅
-│   │   │   ├── resolver.ts             # applyEventChoice(), resolveSkillCheck() ✅
+│   │   │   ├── resolver.ts             # applyEventChoice(event, choiceId, state, rng?), resolveSkillCheck(), add_person handler ✅
 │   │   │   ├── council-advice.ts       # VoiceArchetype, generateAdvice() — pure logic ✅
-│   │   │   └── definitions/            # 28 events across 6 files ✅
+│   │   │   └── definitions/            # 33 events across 7 files ✅
 │   │   │       ├── company.ts          # Company Supply Delivery, Letter from the Company ✅
 │   │   │       ├── diplomacy.ts        # Watchers at the River (Riverfolk first contact) ✅
 │   │   │       ├── domestic.ts         # Game Tracks, Weight of Distance, Men at Work ✅
 │   │   │       ├── economic.ts         # Traveling Merchant, Good Timber Nearby ✅
 │   │   │       ├── environmental.ts    # Bountiful Season, Sudden Storm, Cold Bites Deep ✅
-│   │   │       └── cultural.ts         # 18 cultural/domestic events ✅
+│   │   │       ├── cultural.ts         # 18 cultural/domestic events ✅
+│   │   │       └── building.ts         # 5 settlement events (overcrowding, construction) ✅
+│   │   │
+│   │   ├── buildings/
+│   │   │   ├── building-definitions.ts # BuildingId (12 types), BuildingDef, BUILDING_CATALOG ✅
+│   │   │   ├── building-effects.ts     # Pure effect getters: shelter, overcrowding, culture pull, etc. ✅
+│   │   │   └── construction.ts         # canBuild, startConstruction, processConstruction ✅
 │   │   │
 │   │   └── turn/
 │   │       ├── turn-processor.ts       # Master turn loop (dawn → event → mgmt → dusk) ✅
@@ -103,7 +109,7 @@ palusteria-game/
 │   │   │   ├── PeopleView.tsx          # Population roster with sort/filter ✅
 │   │   │   ├── PersonDetail.tsx        # Individual deep-dive panel ✅
 │   │   │   ├── FamilyTree.tsx          # 3-generation genealogy browser ✅
-│   │   │   ├── SettlementView.tsx      # Buildings, resources, cultural overview (Phase 3)
+│   │   │   ├── SettlementView.tsx      # 3-panel: standing buildings, construction queue, build menu ✅
 │   │   │   ├── TradeView.tsx           # Trade interface (Phase 3)
 │   │   │   ├── DiplomacyView.tsx       # Relations with tribes and Company (Phase 3)
 │   │   │   └── MapView.tsx             # Canvas-rendered regional map (Phase 3)
@@ -172,8 +178,11 @@ palusteria-game/
     │   └── resources.test.ts           # Production/consumption math ✅
     ├── events/
     │   ├── event-filter.test.ts        # Event filtering correctness ✅
-    │   ├── resolver.test.ts            # applyEventChoice + skill checks ✅
+    │   ├── resolver.test.ts            # applyEventChoice + skill checks + add_person ✅
     │   └── council-advice.test.ts      # Archetype mapping, scoring, advice generation ✅
+    ├── buildings/
+    │   ├── construction.test.ts        # canBuild, startConstruction, processConstruction ✅
+    │   └── building-effects.test.ts    # Shelter, overcrowding, production bonuses ✅
     ├── culture/
     │   └── language-acquisition.test.ts # Language drift and child acquisition ✅
     └── utils/
@@ -578,6 +587,8 @@ interface EventConsequence {
   type: ConsequenceType;
   target: string;                    // personId, tribeId, 'settlement', etc.
   value: number | string | boolean;
+  /** Optional parameters for complex consequences (e.g. add_person: sex, ethnicGroup, minAge, maxAge, religion, socialStatus). */
+  params?: Record<string, unknown>;
 }
 
 type ConsequenceType =

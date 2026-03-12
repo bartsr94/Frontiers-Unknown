@@ -23,6 +23,13 @@ import { createTribe, TRIBE_PRESETS } from '../simulation/world/tribes';
 import { canMarry, performMarriage } from '../simulation/population/marriage';
 import { createFertilityProfile } from '../simulation/genetics/fertility';
 import { ETHNIC_DISTRIBUTIONS } from '../data/ethnic-distributions';
+import {
+  canBuild,
+  startConstruction as buildingStartConstruction,
+  assignBuilder as buildingAssignBuilder,
+  removeBuilder as buildingRemoveBuilder,
+  cancelConstruction,
+} from '../simulation/buildings/construction';
 import type {
   GameState,
   TurnPhase,
@@ -31,10 +38,13 @@ import type {
   SettlementCulture,
   CompanyRelation,
   GameConfig,
+  BuildingId,
+  BuildingStyle,
 } from '../simulation/turn/game-state';
 import type { Person, WorkRole, CultureId } from '../simulation/population/person';
 import { ETHNIC_GROUP_PRIMARY_LANGUAGE, ETHNIC_GROUP_CULTURE } from '../simulation/population/person';
 import type { GameEvent, SkillCheckResult } from '../simulation/events/engine';
+import { generateId } from '../utils/id';
 
 // ─── Stub types (Phase 3) ────────────────────────────────────────────────────
 
@@ -77,6 +87,15 @@ export interface GameStore {
   arrangeMarriage: (personAId: string, personBId: string) => void;
   executeTrade: (partnerId: string, offer: TradeOffer) => void;
   sendDiplomaticAction: (tribeId: string, action: DiplomaticAction) => void;
+  // ── Buildings ─────────────────────────────────────────────────────────────
+  /** Queue a new construction project. Deducts resources immediately. No-op if canBuild fails. */
+  startConstruction: (defId: BuildingId, style: BuildingStyle | null) => void;
+  /** Assign a person as a builder on the given project. Person's role is set to 'builder'. */
+  assignBuilder: (projectId: string, personId: string) => void;
+  /** Remove a person from the given project. Person's role reverts to 'unassigned'. */
+  removeBuilder: (projectId: string, personId: string) => void;
+  /** Cancel a project in the construction queue; refunds 50% of resource cost. */
+  cancelConstruction: (projectId: string) => void;
   // ── Expedition Council ─────────────────────────────────────────
   /** Add a person to the Expedition Council (max 7 seats). No-op if already a member. */
   assignCouncilMember: (personId: string) => void;
@@ -378,12 +397,15 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
     gold: 50,
     goods: 5,
     cattle: 5,
+    lumber: 20,
+    stone: 10,
   };
 
   const settlement: Settlement = {
     name: settlementName,
     location: config.startingLocation,
-    buildings: [],
+    buildings: [{ defId: 'camp', instanceId: 'camp_0', builtTurn: 0, style: null }],
+    constructionQueue: [],
     resources: initialResources,
     populationCount: people.size,
   };
@@ -510,6 +532,15 @@ export const useGameStore = create<GameStore>((set, get) => {
         settlement: {
           ...gameState.settlement,
           populationCount: dawnResult.populationCount,
+          buildings: (() => {
+            let blds = [...gameState.settlement.buildings];
+            // Remove replaced buildings first.
+            for (const removedId of dawnResult.removedBuildingIds) {
+              blds = blds.filter(b => b.defId !== removedId);
+            }
+            return [...blds, ...dawnResult.completedBuildings];
+          })(),
+          constructionQueue: dawnResult.updatedConstructionQueue,
         },
         culture: {
           ...gameState.culture,
@@ -712,6 +743,104 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     sendDiplomaticAction(_tribeId, _action) {
       // Phase 3: diplomacy logic.
+    },
+
+    // ── Buildings ────────────────────────────────────────────────────────────
+
+    startConstruction(defId, style) {
+      const { gameState } = get();
+      if (!gameState) return;
+      const check = canBuild(gameState.settlement, defId, style);
+      if (!check.ok) return;
+      const { project, updatedResources } = buildingStartConstruction(
+        gameState.settlement,
+        defId,
+        style,
+        gameState.turnNumber,
+      );
+      set({
+        gameState: {
+          ...gameState,
+          settlement: {
+            ...gameState.settlement,
+            resources: updatedResources,
+            constructionQueue: [...gameState.settlement.constructionQueue, project],
+          },
+        },
+      });
+    },
+
+    assignBuilder(projectId, personId) {
+      const { gameState } = get();
+      if (!gameState) return;
+      const project = gameState.settlement.constructionQueue.find(p => p.id === projectId);
+      const person = gameState.people.get(personId);
+      if (!project || !person) return;
+      const updatedProject = buildingAssignBuilder(project, personId);
+      const updatedPeople = new Map(gameState.people);
+      updatedPeople.set(personId, { ...person, role: 'builder' });
+      set({
+        gameState: {
+          ...gameState,
+          people: updatedPeople,
+          settlement: {
+            ...gameState.settlement,
+            constructionQueue: gameState.settlement.constructionQueue.map(p =>
+              p.id === projectId ? updatedProject : p,
+            ),
+          },
+        },
+      });
+    },
+
+    removeBuilder(projectId, personId) {
+      const { gameState } = get();
+      if (!gameState) return;
+      const project = gameState.settlement.constructionQueue.find(p => p.id === projectId);
+      const person = gameState.people.get(personId);
+      if (!project || !person) return;
+      const updatedProject = buildingRemoveBuilder(project, personId);
+      const updatedPeople = new Map(gameState.people);
+      updatedPeople.set(personId, { ...person, role: 'unassigned' });
+      set({
+        gameState: {
+          ...gameState,
+          people: updatedPeople,
+          settlement: {
+            ...gameState.settlement,
+            constructionQueue: gameState.settlement.constructionQueue.map(p =>
+              p.id === projectId ? updatedProject : p,
+            ),
+          },
+        },
+      });
+    },
+
+    cancelConstruction(projectId) {
+      const { gameState } = get();
+      if (!gameState) return;
+      const project = gameState.settlement.constructionQueue.find(p => p.id === projectId);
+      if (!project) return;
+      const { refund, freedWorkerIds } = cancelConstruction(project);
+      // Free workers.
+      const updatedPeople = new Map(gameState.people);
+      for (const wId of freedWorkerIds) {
+        const w = updatedPeople.get(wId);
+        if (w) updatedPeople.set(wId, { ...w, role: 'unassigned' });
+      }
+      // Refund resources.
+      const updatedResources = addResourceStocks(gameState.settlement.resources, refund);
+      set({
+        gameState: {
+          ...gameState,
+          people: updatedPeople,
+          settlement: {
+            ...gameState.settlement,
+            resources: clampResourceStock(updatedResources),
+            constructionQueue: gameState.settlement.constructionQueue.filter(p => p.id !== projectId),
+          },
+        },
+      });
     },
 
     // ── Expedition Council ────────────────────────────────────────

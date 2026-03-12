@@ -29,7 +29,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'settlers',    emoji: '👥', label: 'Settlers'   },
   { id: 'events',      emoji: '📜', label: 'Events'     },
-  { id: 'settlement',  emoji: '🏘', label: 'Settlement', stub: true },
+  { id: 'settlement',  emoji: '🏘', label: 'Settlement' },
   { id: 'trade',       emoji: '🔀', label: 'Trade',      stub: true },
   { id: 'diplomacy',   emoji: '🤝', label: 'Diplomacy',  stub: true },
   { id: 'map',         emoji: '🗺', label: 'Map',        stub: true },

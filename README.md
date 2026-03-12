@@ -40,7 +40,7 @@ npx tsc --noEmit   # Type-check
 | 3 | Living Settlement — A Place Called Home | 🔄 In Progress |
 | 4 | Polish — The Ashmark Remembers | 🔲 Planned |
 
-**Phase 3 progress:** Language acquisition engine ✅ · Cultural identity & drift system ✅ · Founder character variety ✅ · Skills & experience tracking ✅ · Council voice system ✅ · Character portrait system ✅
+**Phase 3 progress:** Language acquisition engine ✅ · Cultural identity & drift system ✅ · Founder character variety ✅ · Skills & experience tracking ✅ · Council voice system ✅ · Character portrait system ✅ · Event `add_person` consequence (people-joining events now populate the settlement) ✅ · Settlement buildings & construction system ✅
 
 ---
 

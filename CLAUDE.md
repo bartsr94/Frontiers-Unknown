@@ -11,7 +11,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 |-------|--------|-------|
 | Phase 1 — Foundation | ✅ Complete | 13/13 steps done, 13/13 tests pass, zero compile errors |
 | Phase 2 — Genetics Engine | ✅ Complete | All 12 steps done, 139/139 tests pass, zero compile errors |
-| Phase 3 — Living Settlement | 🔄 In Progress | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ · Skills system ✅ · Skilled event resolution ✅ · Council voice system ✅ · Portrait system ✅ |
+| Phase 3 — Living Settlement | 🔄 In Progress | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ · Skills system ✅ · Skilled event resolution ✅ · Council voice system ✅ · Portrait system ✅ · Settlement buildings ✅ |
 | Phase 4 — Polish | 🔲 Not started | — |
 ---
 
@@ -73,7 +73,7 @@ If the exact age stage has no portraits yet, the resolver tries: `adult` → `yo
 
 ```bash
 npm run dev          # Vite dev server → http://localhost:5173
-npm test             # Run Vitest (385 passing across rng, inheritance, gender-ratio, fertility, event-filter, resolver, council-advice, resources, demographics, marriage, culture, language-acquisition, skills)
+npm test             # Run Vitest (435 passing across rng, inheritance, gender-ratio, fertility, event-filter, resolver, council-advice, resources, demographics, marriage, culture, language-acquisition, skills, buildings)
 npx tsc --noEmit     # Type-check without building
 ```
 
@@ -112,8 +112,11 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/turn/season.ts` | `SEASON_MODIFIERS` — food/goods production multipliers per season |
 | `src/simulation/events/engine.ts` | Event/choice/consequence **type definitions only** (no logic) |
 | `src/simulation/events/event-filter.ts` | `ALL_EVENTS`, `filterEligibleEvents()`, `drawEvents()` |
-| `src/simulation/events/resolver.ts` | `applyEventChoice()` returning `ApplyChoiceResult`; `resolveSkillCheck()` helper; `ApplyChoiceResult` interface |
-| `src/simulation/events/definitions/` | 28 events: company, diplomacy, domestic, economic, environmental + 18 cultural |
+| `src/simulation/events/resolver.ts` | `applyEventChoice(event, choiceId, state, rng?)` returning `ApplyChoiceResult`; `resolveSkillCheck()` helper; `ApplyChoiceResult` interface; `add_person` consequence handler (generates full `Person` from ethnic distribution + RNG) |
+| `src/simulation/events/definitions/` | 33 events: company, diplomacy, domestic, economic, environmental + 18 cultural + 5 building |
+| `src/simulation/buildings/building-definitions.ts` | `BuildingId` (12-member union), `BuildingDef`, `BUILDING_CATALOG`, `getBuildingDisplayName(defId, style)` — static catalog of all building types |
+| `src/simulation/buildings/building-effects.ts` | Pure effect getters: `getShelterCapacity`, `getOvercrowdingRatio`, `getBuildingFlatProductionBonus`, `getLanguageDriftMultiplier`, `getBuildingCulturePull`, `getSkillGrowthBonuses`, `hasBuilding`, `lacksBuilding`, etc. |
+| `src/simulation/buildings/construction.ts` | `canBuild` → `CanBuildResult` (`{ ok: true }` / `{ ok: false; reason }`); `startConstruction`, `assignBuilder`, `removeBuilder`, `processConstruction`, `cancelConstruction` |
 | `src/simulation/economy/resources.ts` | Production/consumption math with seasonal modifiers |
 | `src/simulation/genetics/traits.ts` | Trait type definitions + `IMANIAN_TRAITS` constant |
 | `src/data/ethnic-distributions.ts` | All 8 ethnic group `TraitDistribution` constants + `ETHNIC_DISTRIBUTIONS` lookup map |
@@ -138,6 +141,7 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/ui/views/PeopleView.tsx` | Settler roster; sort/filter (sex, status, heritage group, **base skill**); click row → PersonDetail panel |
 | `src/ui/views/PersonDetail.tsx` | Full person detail: genetics, heritage, traits, skills (base + derived), languages, family |
 | `src/ui/views/FamilyTree.tsx` | 3-generation ancestor/descendant tree; spouses shown to the side of root node |
+| `src/ui/views/SettlementView.tsx` | 3-panel settlement view: standing buildings + shelter bar (left), construction queue with worker assignment (centre), build menu with costs and lock reasons (right) |
 | `src/ui/components/Portrait.tsx` | Portrait renderer; skin-tone HSL colouring; `sm`/`lg` variants; `lg` shows photo portrait via `resolvePortraitSrc` when asset exists, falls back to SVG silhouette |
 | `src/ui/components/heritage-helpers.ts` | `heritageAbbr(bloodline)` → `'IMA'\|'KIS-R'\|…\|'MIX'`; `GROUP_ABBR` lookup |
 | `src/ui/overlays/GameSetup.tsx` | New game config: name, difficulty, Sauromatian women toggle, tribe selection |
@@ -245,7 +249,7 @@ idle
 | ✅ 10 | Skills & experience tracking | `src/simulation/population/person.ts`, `src/ui/views/PersonDetail.tsx`, `src/ui/views/PeopleView.tsx` | Complete |
 | ✅ — | Council voice system & portraits | `src/simulation/events/council-advice.ts`, `src/ui/components/portrait-resolver.ts`, `src/ui/components/CouncilPortrait.tsx`, `src/ui/components/AdviceBubble.tsx`, `src/ui/layout/CouncilFooter.tsx` | Complete (bonus step) |
 | ✅ — | Portrait system (age stages, categories, registry) | `src/ui/components/portrait-resolver.ts`, `src/simulation/population/person.ts` | Complete (bonus step) |
-| 🔲 11 | Settlement buildings & upgrades | — | Planned |
+| ✅ 11 | Settlement buildings & upgrades | `src/simulation/buildings/`, `src/stores/game-store.ts`, `src/ui/views/SettlementView.tsx` | Complete |
 | 🔲 12 | Tribe relationship depth | — | Planned |
 
 ### Cultural Identity System Notes
@@ -278,6 +282,21 @@ idle
 - **Photo portrait in PersonDetail**: `Portrait.tsx` `lg` variant calls `resolvePortraitSrc`; renders `<img>` at 5.5×7 rem with SVG fallback
 - **Advice caching**: `CouncilFooter` memo-ises advice in local `Record<string, string>` keyed by `${personId}:${eventId}` — no store changes
 - **Assets location**: `public/portraits/{sex}/{group}/...png` — Vite serves these as static files
+
+### Settlement Buildings System Notes
+
+- **12 building types** (`BuildingId`): `camp` · `longhouse` · `roundhouse` · `great_hall` · `clan_lodge` · `granary` · `workshop` · `trading_post` · `healers_hut` · `gathering_hall` · `palisade` · `stable`
+- **`BuiltBuilding`**: `{ defId, instanceId, builtTurn, style: BuildingStyle | null }` — `style` is `null` for single-variant buildings
+- **`ConstructionProject`**: `{ id, defId, style, progressPoints, totalPoints, assignedWorkerIds, startedTurn, resourcesSpent }`
+- **`canBuild` returns `CanBuildResult`**: `{ ok: true }` or `{ ok: false; reason: string }` — discriminated by `ok`, **not** `allowed`
+- **Starting settlement**: Camp (`camp_0`) built at turn 0; no construction queue; starting resources include 20 lumber + 10 stone
+- **Construction progress**: 100 points per assigned worker per season; `processConstruction` in `turn-processor.ts` advances projects each dawn
+- **Overcrowding**: `getOvercrowdingRatio(pop, [])` → `2.0` (pathological — treat empty buildings array as severe); ratio >1.0 adds mortality/production penalties
+- **Style variants**: Some buildings (`roundhouse`, `longhouse`, `great_hall`, etc.) have Imanian/Sauromatian style variants affecting culture pull
+- **Building effects wired into `processDawn()`**: overcrowding mortality, construction progress, language drift multiplier, culture pull, skill growth bonuses
+- **5 building events** in `definitions/building.ts`: `bld_fever_spreads`, `bld_bitter_quarrel`, `bld_someone_leaves`, `bld_completion_toast` (deferred), `bld_traders_notice` (unique, requires trading_post)
+- **`DawnResult` additions**: `completedBuildings`, `removedBuildingIds`, `updatedConstructionQueue`, `overcrowdingRatio`
+- **`applyLanguageDrift` signature**: now accepts optional `driftMultiplier = 1.0` parameter (multiplied by Gathering Hall bonus)
 
 ---
 
@@ -343,7 +362,7 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/genetics/gender-ratio.test.ts` — 26/26 passing
 - `tests/genetics/fertility.test.ts` — 31/31 passing
 - `tests/events/event-filter.test.ts` — 47/47 passing
-- `tests/events/resolver.test.ts` — 20/20 passing (14 original + 6 skill-check / deferred-event)
+- `tests/events/resolver.test.ts` — 28/28 passing (14 original + 6 skill-check / deferred-event + 8 add_person)
 - `tests/events/council-advice.test.ts` — 95/95 passing (archetype mapping, choice scoring, hash determinism, advice generation, template coverage)
 - `tests/economy/resources.test.ts` — 24/24 passing
 - `tests/population/demographics.test.ts` — 16/16 passing (includes 4 child-culture blending tests)
@@ -351,4 +370,6 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/population/culture.test.ts` — 21/21 passing (deriveCulture, processCulturalDrift, buildSettlementCultureDistribution, computeCulturalBlend)
 - `tests/culture/language-acquisition.test.ts` — 34/34 passing
 - `tests/population/skills.test.ts` — 36/36 passing (getSkillRating, getDerivedSkill, generatePersonSkills, createPerson integration)
-- **Total: 385/385 passing**
+- `tests/buildings/construction.test.ts` — 19/19 passing (canBuild, startConstruction, assignBuilder/removeBuilder, processConstruction, cancelConstruction)
+- `tests/buildings/building-effects.test.ts` — 23/23 passing (shelterCapacity, productionBonus, childMortalityModifier, overcrowding, hasBuilding, etc.)
+- **Total: 435/435 passing**

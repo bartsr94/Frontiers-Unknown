@@ -235,6 +235,11 @@ interface PortraitProps {
   person: Person;
   /** Display variant. 'sm' = compact roster badge; 'lg' = full detail card. */
   variant?: 'sm' | 'lg';
+  /**
+   * lg variant only — rendered in the right-hand slot when a photo portrait is
+   * available (replaces the prose description, which only shows for the SVG fallback).
+   */
+  children?: React.ReactNode;
 }
 
 /**
@@ -243,7 +248,7 @@ interface PortraitProps {
  * - `sm` variant: a small coloured circle + a single italic description tag line
  * - `lg` variant: a larger portrait card showing image asset (with SVG silhouette fallback)
  */
-export default function Portrait({ person, variant = 'sm' }: PortraitProps) {
+export default function Portrait({ person, variant = 'sm', children }: PortraitProps) {
   const v = person.genetics.visibleTraits;
   const bgColor = skinToneColor(v.skinTone);
   const [imgError, setImgError] = useState(false);
@@ -268,7 +273,6 @@ export default function Portrait({ person, variant = 'sm' }: PortraitProps) {
 
   // ── Full variant ───────────────────────────────────────────────────────────
 
-  const prose = buildProseDescription(person);
   const portraitSrc = resolvePortraitSrc(person);
   const showImage = !!portraitSrc && !imgError;
 
@@ -281,7 +285,7 @@ export default function Portrait({ person, variant = 'sm' }: PortraitProps) {
         {/* Portrait frame: real image when available, SVG silhouette otherwise */}
         <div
           className="relative flex-shrink-0 rounded border border-stone-600 overflow-hidden"
-          style={{ backgroundColor: bgColor, width: '5.5rem', height: '7rem' }}
+          style={{ backgroundColor: bgColor, width: '8.47rem', height: '10.78rem' }}
           aria-hidden="true"
         >
           {showImage ? (
@@ -300,18 +304,24 @@ export default function Portrait({ person, variant = 'sm' }: PortraitProps) {
           )}
         </div>
 
-        {/* Prose description */}
+        {/* Right slot: identity children when portrait is shown; prose description for SVG fallback */}
         <div className="flex flex-col gap-1.5 text-sm flex-1 min-w-0">
-          <p className="text-stone-200 leading-relaxed italic">
-            {prose}
-          </p>
-          {person.genetics.extendedFertility && person.sex === 'female' && (
-            <span
-              className="text-amber-500 text-xs font-medium"
-              title="Kethara's Bargain — extended fertility through the maternal line"
-            >
-              ✦ Kethara's Bargain
-            </span>
+          {showImage ? (
+            children ?? null
+          ) : (
+            <>
+              <p className="text-stone-200 leading-relaxed italic">
+                {buildProseDescription(person)}
+              </p>
+              {person.genetics.extendedFertility && person.sex === 'female' && (
+                <span
+                  className="text-amber-500 text-xs font-medium"
+                  title="Kethara's Bargain — extended fertility through the maternal line"
+                >
+                  ✦ Kethara's Bargain
+                </span>
+              )}
+            </>
           )}
         </div>
       </div>

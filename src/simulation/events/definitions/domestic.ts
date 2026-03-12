@@ -292,7 +292,8 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
     title: 'A Sauromatian Proposal',
     category: 'domestic',
     prerequisites: [
-      { type: 'has_person_matching', params: { sex: 'female', minAge: 16 } },
+      // The tribe is offering a husband to one of your Sauromatian women specifically.
+      { type: 'has_person_matching', params: { sex: 'female', minAge: 16, religion: 'sacred_wheel' } },
       { type: 'tribe_exists',        params: { tribeId: 'thunder_veil_band' } },
     ],
     weight: 2,
@@ -357,7 +358,9 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
     category: 'domestic',
     prerequisites: [
       { type: 'has_person_matching', params: { sex: 'male', minAge: 25 } },
-      { type: 'has_person_matching', params: { sex: 'female'           } },
+      // The narrative is specific: he has feelings for one of the Sauromatian women.
+      // minAge: 16 ensures she is of marriageable age, not a child.
+      { type: 'has_person_matching', params: { sex: 'female', minAge: 16, religion: 'sacred_wheel' } },
     ],
     weight: 2,
     cooldown: 12,
@@ -399,6 +402,8 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
     prerequisites: [
       { type: 'season_is',  params: { season: 'autumn' } },
       { type: 'min_year',   params: { value: 1 } },
+      // All three choices reference Sauromatian women's traditions — event needs them present.
+      { type: 'has_person_matching', params: { sex: 'female', religion: 'sacred_wheel' } },
     ],
     weight: 3,
     cooldown: 4,
@@ -547,7 +552,8 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
     title: 'Essence Sharing',
     category: 'domestic',
     prerequisites: [
-      { type: 'has_person_matching', params: { sex: 'female' } },
+      // Sauromatian sacred summer fertility tradition — requires adult Sauromatian women.
+      { type: 'has_person_matching', params: { sex: 'female', religion: 'sacred_wheel', minAge: 14 } },
       { type: 'season_is',           params: { season: 'summer' } },
     ],
     weight: 2,
@@ -688,7 +694,8 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
     title: 'The Midwife\'s Knowledge',
     category: 'domestic',
     prerequisites: [
-      { type: 'has_person_matching', params: { sex: 'female' } },
+      // An older Sauromatian woman with traditional midwifery knowledge.
+      { type: 'has_person_matching', params: { sex: 'female', religion: 'sacred_wheel', minAge: 20 } },
       { type: 'min_year',            params: { value: 1      } },
     ],
     weight: 2,
@@ -741,6 +748,8 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
     prerequisites: [
       { type: 'min_year',            params: { value: 1 }               },
       { type: 'has_person_matching', params: { sex: 'male', minAge: 20 } },
+      // The ceremony the settler witnesses is performed by Sauromatian women.
+      { type: 'has_person_matching', params: { sex: 'female', religion: 'sacred_wheel' } },
     ],
     weight: 2,
     cooldown: 12,
@@ -784,6 +793,8 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
     prerequisites: [
       { type: 'min_population', params: { value: 8 } },
       { type: 'min_year',       params: { value: 1 } },
+      // The storyteller is one of the Sauromatian women.
+      { type: 'has_person_matching', params: { sex: 'female', religion: 'sacred_wheel' } },
     ],
     weight: 2,
     cooldown: 8,
@@ -865,7 +876,8 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
     title: 'Language Lessons',
     category: 'domestic',
     prerequisites: [
-      { type: 'has_person_matching', params: { sex: 'female' } },
+      // A Sauromatian woman teaching Kiswani and learning Imanian — needs a real adult.
+      { type: 'has_person_matching', params: { sex: 'female', religion: 'sacred_wheel', minAge: 16 } },
       { type: 'min_year',            params: { value: 1      } },
     ],
     weight: 2,

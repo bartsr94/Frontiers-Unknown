@@ -17,6 +17,7 @@ import BottomBar from './BottomBar';
 import CouncilFooter from './CouncilFooter';
 import PeopleView from '../views/PeopleView';
 import EventView from '../views/EventView';
+import SettlementView from '../views/SettlementView';
 
 function StubView({ name }: { name: string }) {
   return (
@@ -33,7 +34,7 @@ export default function GameScreen() {
     switch (activeView) {
       case 'settlers':   return <PeopleView />;
       case 'events':     return <EventView />;
-      case 'settlement': return <StubView name="Settlement" />;
+      case 'settlement': return <SettlementView />;
       case 'trade':      return <StubView name="Trade" />;
       case 'diplomacy':  return <StubView name="Diplomacy" />;
       case 'map':        return <StubView name="Map" />;

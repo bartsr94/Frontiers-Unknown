@@ -21,8 +21,8 @@ export default function CouncilPortrait({ person }: CouncilPortraitProps) {
       <img
         src={src}
         alt={`${person.firstName} ${person.familyName}`}
-        width={40}
-        height={50}
+        width={60}
+        height={75}
         className="rounded object-cover flex-shrink-0"
         onError={(e) => {
           // Swap to swatch fallback if image fails to load
@@ -40,8 +40,8 @@ export default function CouncilPortrait({ person }: CouncilPortraitProps) {
     <span
       className="inline-block rounded-sm flex-shrink-0"
       style={{
-        width:           '40px',
-        height:          '50px',
+        width:           '60px',
+        height:          '75px',
         backgroundColor: skinToneColor(tone),
       }}
       aria-hidden

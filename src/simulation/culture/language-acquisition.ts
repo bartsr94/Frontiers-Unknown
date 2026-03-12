@@ -83,8 +83,9 @@ export function getLanguageLearningRate(age: number): number {
 export function applyLanguageDrift(
   person: Person,
   settlementLangFractions: Map<LanguageId, number>,
+  driftMultiplier = 1.0,
 ): LanguageFluency[] {
-  const rate = getLanguageLearningRate(person.age);
+  const rate = getLanguageLearningRate(person.age) * driftMultiplier;
 
   // Build a working map of the person's current fluencies for quick lookup.
   const fluencyMap = new Map<LanguageId, number>(

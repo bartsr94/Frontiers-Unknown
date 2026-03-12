@@ -254,7 +254,7 @@ export const CULTURAL_EVENTS: GameEvent[] = [
       'with one of the Sauromatian women, her arm extended, pointing up at the ' +
       'sky in what appears to be a theological challenge. One man tells her the ' +
       'Wheel is a superstition for people who have never learned to reason. She ' +
-      'replies — in serviceable Imanian — that the Architect seems to have ' +
+      'replies — in serviceable Imanian — that the Radiant One seems to have ' +
       'arranged things so that Imanian men come here to beg for Sauromatian ' +
       'daughters, which does not speak well for his foresight.',
     choices: [

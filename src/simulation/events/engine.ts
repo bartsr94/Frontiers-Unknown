@@ -70,7 +70,15 @@ export type PrerequisiteType =
   | 'cultural_blend_above'
   | 'cultural_blend_below'
   /** Triggers when linguistic tension between community languages exceeds a threshold. */
-  | 'language_tension_above';
+  | 'language_tension_above'
+  /** Checks whether a specific building is present in the settlement. */
+  | 'has_building'
+  /** Checks whether a specific building is absent from the settlement. */
+  | 'lacks_building'
+  /** True when at least one construction project is in the queue. */
+  | 'construction_active'
+  /** True when settlement population exceeds shelter capacity. */
+  | 'overcrowded';
 
 // ─── Prerequisite & Requirement Interfaces ────────────────────────────────────
 

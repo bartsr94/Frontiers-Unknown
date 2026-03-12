@@ -14,7 +14,7 @@
  *   DUSK   → seasonal effects, quota check (autumn), tribe updates
  */
 
-import type { GameState, Season, ResourceStock, GraveyardEntry } from './game-state';
+import type { GameState, Season, ResourceStock, GraveyardEntry, BuiltBuilding, ConstructionProject } from './game-state';
 import type { Person } from '../population/person';
 import type { SeededRNG } from '../../utils/rng';
 import { clamp } from '../../utils/math';
@@ -24,7 +24,7 @@ import {
 } from '../economy/resources';
 import { processPregnancies, attemptConception } from '../genetics/fertility';
 import { generateName } from '../population/naming';
-import type { LanguageId, ReligionId } from '../population/person';
+import type { LanguageId, ReligionId, SkillId } from '../population/person';
 import {
   applyLanguageDrift,
   updateSettlementLanguages,
@@ -36,6 +36,15 @@ import {
   computeCulturalBlend,
   computeReligionDistribution,
 } from '../population/culture';
+import { processConstruction } from '../buildings/construction';
+import {
+  getOvercrowdingRatio,
+  getOvercrowdingMortalityModifiers,
+  getChildMortalityModifier,
+  getLanguageDriftMultiplier,
+  getBuildingCulturePull,
+  getSkillGrowthBonuses,
+} from '../buildings/building-effects';
 
 // ─── Result Types ─────────────────────────────────────────────────────────────
 
@@ -95,6 +104,14 @@ export interface DawnResult {
    * Recalculated each dawn from the surviving population.
    */
   updatedReligions: Map<ReligionId, number>;
+  /** Buildings completed this dawn (added to Settlement.buildings by the store). */
+  completedBuildings: BuiltBuilding[];
+  /** Building IDs removed because a completed building replaced them (upgrade chain). */
+  removedBuildingIds: import('./game-state').BuildingId[];
+  /** Updated construction queue after this season's progress. */
+  updatedConstructionQueue: ConstructionProject[];
+  /** Overcrowding ratio this dawn (populationCount / shelterCapacity). */
+  overcrowdingRatio: number;
 }
 
 /** Data returned by processDusk(). The store applies these to GameState. */
@@ -209,18 +226,19 @@ function toGraveyardEntry(person: Person, deathYear: number, cause: string): Gra
  * Processes the Dawn Phase of a turn.
  *
  * Operations (in order):
- *   1. Age all people by 0.25 years (one season).
- *   2. Resolve due pregnancies → births + potential maternal deaths.
- *      Newborns receive a culturally appropriate name from generateName().
- *   3. Process natural death (age-based probability, modified by traits).
- *   4. Process child mortality (under-5, reduced by medicine stock).
- *   5. Calculate resource production for surviving people.
- *   6. Calculate resource consumption for surviving people.
- *
- * @param state - Current game state (not mutated).
- * @param rng - Seeded RNG instance for this turn.
- * @returns A DawnResult with updated people, resource deltas, birth notifications,
- *   and graveyard entries to apply.
+ *   1.  Age all people by 0.25 years (one season).
+ *   2.  Resolve due pregnancies → births + potential maternal deaths.
+ *   2b. Attempt conception for married couples.
+ *   3.  Process natural death (age-based probability, modified by traits + overcrowding).
+ *   4.  Process child mortality (under-5, reduced by medicine stock, buildings, overcrowding).
+ *   4.5 Advance construction projects; complete buildings; free workers.
+ *   5.  Calculate resource production (role-based + building bonuses − overcrowding penalty).
+ *   6.  Calculate resource consumption.
+ *   7.  Apply language drift (multiplied by Gathering Hall if present).
+ *   8.  Apply cultural drift (community + spouse + building culture pull).
+ *   8b. Recalculate settlement language metrics.
+ *   8.5 Apply skill growth bonuses from buildings.
+ *   9.  Recalculate cultural blend and religion distribution.
  */
 export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
   const newGraveyardEntries: GraveyardEntry[] = [];
@@ -231,6 +249,13 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
   for (const [id, person] of state.people) {
     updatedPeople.set(id, { ...person, age: person.age + 0.25 });
   }
+
+  // Compute overcrowding ratio early — used by mortality steps below.
+  const overcrowdingRatio = getOvercrowdingRatio(
+    updatedPeople.size,
+    state.settlement.buildings ?? [],
+  );
+  const overcrowdingMortality = getOvercrowdingMortalityModifiers(overcrowdingRatio);
 
   // 2. Resolve due pregnancies.
   const birthResults = processPregnancies(
@@ -316,9 +341,14 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     }
   }
 
-  // 3. Process natural deaths (age-based).
+  // 3. Process natural deaths (age-based, elderly overcrowding modifier).
   for (const person of Array.from(updatedPeople.values())) {
-    const deathChance = calculateNaturalDeathChance(person);
+    let deathChance = calculateNaturalDeathChance(person);
+    // Overcrowding worsens chances for the elderly (60+).
+    if (person.age >= 60) {
+      deathChance *= overcrowdingMortality.elderlyDeathMultiplier;
+    }
+    deathChance = clamp(deathChance, 0, 0.95);
     if (deathChance > 0 && rng.next() < deathChance) {
       newGraveyardEntries.push(toGraveyardEntry(person, state.currentYear, 'old_age'));
       updatedPeople.delete(person.id);
@@ -326,31 +356,72 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
   }
 
   // 4. Process child mortality (under-5).
+  // Building modifier (Healer's Hut) and overcrowding modifier both apply.
   const medicineStock = state.settlement.resources.medicine;
+  const buildingChildModifier = getChildMortalityModifier(state.settlement.buildings ?? []);
   for (const person of Array.from(updatedPeople.values())) {
     if (person.age >= 5) continue;
-    const deathChance = calculateChildMortalityChance(person, medicineStock);
+    let deathChance = calculateChildMortalityChance(person, medicineStock);
+    deathChance *= buildingChildModifier;
+    deathChance *= overcrowdingMortality.childMortalityMultiplier;
+    deathChance = clamp(deathChance, 0, 0.50);
     if (deathChance > 0 && rng.next() < deathChance) {
       newGraveyardEntries.push(toGraveyardEntry(person, state.currentYear, 'childhood_illness'));
       updatedPeople.delete(person.id);
     }
   }
 
-  // 5 & 6. Calculate production and consumption using the surviving population.
-  const production = calculateProduction(updatedPeople, state.settlement, state.currentSeason);
+  // 4.5. Advance construction projects.
+  const constructionResult = processConstruction(
+    state.settlement.constructionQueue ?? [],
+    updatedPeople,
+    state.turnNumber,
+    rng,
+  );
+  // Reset completed workers to 'unassigned'.
+  for (const workerId of constructionResult.completedWorkerIds) {
+    const w = updatedPeople.get(workerId);
+    if (w) updatedPeople.set(workerId, { ...w, role: 'unassigned' });
+  }
+
+  // Updated buildings list (completed buildings added, replaced ones removed).
+  let currentBuildings = [...(state.settlement.buildings ?? [])];
+  for (const removedId of constructionResult.removedBuildingIds) {
+    currentBuildings = currentBuildings.filter(b => b.defId !== removedId);
+  }
+  currentBuildings = [...currentBuildings, ...constructionResult.completedBuildings];
+
+  // 5 & 6. Calculate production and consumption using updated buildings + overcrowding.
+  const updatedSettlementForProduction = {
+    ...state.settlement,
+    buildings: currentBuildings,
+    constructionQueue: constructionResult.updatedQueue,
+  };
+  const production = calculateProduction(
+    updatedPeople,
+    updatedSettlementForProduction,
+    state.currentSeason,
+    overcrowdingRatio,
+  );
   const consumption = calculateConsumption(updatedPeople);
 
   // 7. Apply language drift — each survivor gains incremental fluency in
   //    community languages based on age and the settlement's current distribution.
+  //    Gathering Hall multiplies the drift rate.
+  const langDriftMultiplier = getLanguageDriftMultiplier(currentBuildings);
   const currentLangFractions = state.culture.languages;
   for (const [id, person] of updatedPeople) {
-    const updatedLanguages = applyLanguageDrift(person, currentLangFractions);
+    const updatedLanguages = applyLanguageDrift(
+      person,
+      currentLangFractions,
+      langDriftMultiplier,
+    );
     updatedPeople.set(id, { ...person, languages: updatedLanguages });
   }
 
-  // 8. Apply cultural drift — each survivor shifts slightly toward the dominant
-  //    community culture. Spouse bonds add an additional pull.
-  const culturallyDrifted = processCulturalDrift(updatedPeople, rng);
+  // 8. Apply cultural drift — community pull + spouse bonds + building culture pull.
+  const buildingCulturePull = getBuildingCulturePull(currentBuildings);
+  const culturallyDrifted = processCulturalDrift(updatedPeople, rng, buildingCulturePull);
   for (const [id, person] of culturallyDrifted) {
     updatedPeople.set(id, person);
   }
@@ -362,6 +433,19 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     updatedLanguageFractions,
     state.culture.languageDiversityTurns,
   );
+
+  // 8.5. Apply skill growth bonuses from buildings.
+  for (const [id, person] of updatedPeople) {
+    const bonuses = getSkillGrowthBonuses(currentBuildings, person, state.councilMemberIds);
+    const skillKeys = Object.keys(bonuses) as SkillId[];
+    if (skillKeys.length > 0) {
+      const newSkills = { ...person.skills };
+      for (const skill of skillKeys) {
+        newSkills[skill] = Math.min(100, (newSkills[skill] ?? 0) + (bonuses[skill] ?? 0));
+      }
+      updatedPeople.set(id, { ...person, skills: newSkills });
+    }
+  }
 
   // 9. Recalculate cultural blend and religion distribution from the updated population.
   const updatedCultureBlend = computeCulturalBlend(updatedPeople);
@@ -386,6 +470,10 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     creoleEmerged,
     updatedCultureBlend,
     updatedReligions,
+    completedBuildings: constructionResult.completedBuildings,
+    removedBuildingIds: constructionResult.removedBuildingIds,
+    updatedConstructionQueue: constructionResult.updatedQueue,
+    overcrowdingRatio,
   };
 }
 

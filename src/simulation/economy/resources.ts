@@ -4,20 +4,23 @@
  * Pure calculation functions that return resource deltas each turn.
  * The Zustand store applies these deltas to the settlement's resource stock.
  *
- * Phase 1 rules (simplified):
- *   - Every person consumes 1 food per season.
- *   - Farmers produce 3 food per season.
- *   - Traders produce 1 good per season.
- *   - Every 2 cattle produce 1 food per season (dairy/butchery bonus).
- *   - All other roles produce nothing.
- *
- * Phase 3 will expand this to all resource types, seasonal modifiers,
- * building bonuses, Company quota contributions, and trade calculations.
+ * Production rules:
+ *   - Farmers produce 3 food per season (seasonal modifier applies).
+ *   - Traders produce 1 good per season (seasonal modifier applies).
+ *   - Every 2 cattle produce 1 food per season (dairy/butchery bonus, seasonal).
+ *   - guard, craftsman, healer, unassigned → base 0 (buildings add role bonuses).
+ *   - Buildings add flat and per-role bonuses on top of role-based production.
+ *   - Overcrowding reduces all production by 10% when ratio > 1.25.
  */
 
 import type { Person } from '../population/person';
-import type { Settlement, ResourceType, ResourceStock, Season } from '../turn/game-state';
+import type { Settlement, ResourceType, ResourceStock, Season, BuiltBuilding } from '../turn/game-state';
 import { SEASON_MODIFIERS } from '../turn/season';
+import {
+  getBuildingFlatProductionBonus,
+  getRoleProductionBonus,
+  getOvercrowdingProductionMultiplier,
+} from '../buildings/building-effects';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -68,44 +71,80 @@ export function clampResourceStock(stock: ResourceStock): ResourceStock {
 /**
  * Calculates the total resource production for this season based on
  * the current population's work roles, the settlement's cattle herd,
- * and the settlement's buildings.
+ * seasonal modifiers, and active buildings.
  *
- * Phase 1 rules:
+ * Production rules:
  *   - farmers → +3 food each, scaled by seasonal foodProduction modifier
  *   - traders → +1 goods each, scaled by seasonal goodsProduction modifier
  *   - cattle  → +1 food per 2 head, also scaled by foodProduction modifier
- *   - guard, craftsman, healer, unassigned → 0
+ *   - buildings add flat bonuses (e.g. Granary +2 food) and per-role bonuses
+ *     (e.g. Workshop +1 goods per craftsman)
+ *   - overcrowding > 1.25 reduces all production by 10%
  *
  * @param people - All living people in the settlement.
- * @param settlement - Current settlement state (used for cattle count).
+ * @param settlement - Current settlement state (cattle + buildings).
  * @param season - Current season; modifiers are applied from SEASON_MODIFIERS.
+ * @param overcrowdingRatio - Current population/shelter ratio for penalty calc.
  * @returns A ResourceStock containing positive deltas to apply to the stockpile.
  */
 export function calculateProduction(
   people: Map<string, Person>,
   settlement: Settlement,
   season: Season,
+  overcrowdingRatio: number = 1.0,
 ): ResourceStock {
   const mods = SEASON_MODIFIERS[season];
+  const buildings: BuiltBuilding[] = settlement.buildings;
 
-  // Accumulate base worker production.
-  let baseFood = 0;
-  let baseGoods = 0;
+  // ── Base role production ──────────────────────────────────────────────────
+  const delta = emptyResourceStock();
 
   for (const person of people.values()) {
+    // Base production by role (seasonal modifiers applied below).
+    let personFood = 0;
+    let personGoods = 0;
     switch (person.role) {
-      case 'farmer':  baseFood  += 3; break;
-      case 'trader':  baseGoods += 1; break;
-      // guard, craftsman, healer, unassigned: no production in Phase 1
+      case 'farmer':    personFood  = 3; break;
+      case 'trader':    personGoods = 1; break;
+      case 'craftsman':
+      case 'healer':
+      case 'guard':
+      case 'builder':
+      case 'unassigned': break;
     }
+
+    // Per-role building bonuses (not seasonally scaled — steady workshop output).
+    const roleBonus = getRoleProductionBonus(buildings, person.role);
+    personGoods += roleBonus.goods ?? 0;
+    personFood  += roleBonus.food  ?? 0;
+
+    delta.food  += personFood;
+    delta.goods += personGoods;
   }
 
-  // Cattle food bonus: every 2 cattle produce 1 food (dairy/butchery), also seasonal.
-  const cattleBonus = Math.floor(settlement.resources.cattle / 2);
+  // Apply seasonal modifiers to accumulated food and goods.
+  delta.food  = Math.floor(delta.food  * mods.foodProduction);
+  delta.goods = Math.floor(delta.goods * mods.goodsProduction);
 
-  const delta = emptyResourceStock();
-  delta.food  = Math.floor((baseFood + cattleBonus) * mods.foodProduction);
-  delta.goods = Math.floor(baseGoods * mods.goodsProduction);
+  // Cattle food bonus: every 2 cattle produce 1 food (dairy/butchery), seasonal.
+  const cattleBonus = Math.floor(settlement.resources.cattle / 2);
+  delta.food += Math.floor(cattleBonus * mods.foodProduction);
+
+  // ── Flat building bonuses ────────────────────────────────────────────────
+  const flatBonus = getBuildingFlatProductionBonus(buildings);
+  for (const [key, value] of Object.entries(flatBonus) as [keyof ResourceStock, number][]) {
+    delta[key] += value;
+  }
+
+  // ── Horse breeding from Stable ───────────────────────────────────────────
+  // flatProductionBonus: { horses: 1 } on Stable is already included above.
+
+  // ── Overcrowding production penalty ─────────────────────────────────────
+  const productionMult = getOvercrowdingProductionMultiplier(overcrowdingRatio);
+  if (productionMult < 1.0) {
+    delta.food  = Math.floor(delta.food  * productionMult);
+    delta.goods = Math.floor(delta.goods * productionMult);
+  }
 
   return delta;
 }
