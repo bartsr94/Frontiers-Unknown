@@ -11,7 +11,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 |-------|--------|-------|
 | Phase 1 — Foundation | ✅ Complete | 13/13 steps done, 13/13 tests pass, zero compile errors |
 | Phase 2 — Genetics Engine | ✅ Complete | All 12 steps done, 139/139 tests pass, zero compile errors |
-| Phase 3 — Living Settlement | 🔄 In Progress | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ · Skills system ✅ · Skilled event resolution ✅ |
+| Phase 3 — Living Settlement | 🔄 In Progress | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ · Skills system ✅ · Skilled event resolution ✅ · Council voice system ✅ · Character portraits ✅ |
 | Phase 4 — Polish | 🔲 Not started | — |
 
 ---
@@ -20,7 +20,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 
 ```bash
 npm run dev          # Vite dev server → http://localhost:5173
-npm test             # Run Vitest (290 passing across rng, inheritance, gender-ratio, fertility, event-filter, demographics, language-acquisition, culture, marriage, skills, resolver)
+npm test             # Run Vitest (385 passing across rng, inheritance, gender-ratio, fertility, event-filter, resolver, council-advice, resources, demographics, marriage, culture, language-acquisition, skills)
 npx tsc --noEmit     # Type-check without building
 ```
 
@@ -76,12 +76,16 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/stores/game-store.ts` | Zustand store — full turn lifecycle, council, `arrangeMarriage`, tribe init |
 | `src/ui/layout/LeftNav.tsx` | Left nav with phase-aware End Turn / Confirm Turn button |
 | `src/ui/layout/BottomBar.tsx` | Full-width resource strip (food, cattle, goods, gold, lumber, stone, pop) |
-| `src/ui/layout/CouncilFooter.tsx` | 7-seat Expedition Council row |
-| `src/ui/views/EventView.tsx` | Event card with choices; calls `resolveEventChoice` + `nextEvent` |
+| `src/simulation/events/council-advice.ts` | Council voice engine: `VoiceArchetype`, `getVoiceArchetype`, `scoreChoiceForPerson`, `hashPersonEvent`, `generateAdvice` — pure logic, deterministic via djb2 hash |
+| `src/ui/components/portrait-resolver.ts` | `resolvePortraitSrc(person)` — maps dominant bloodline × sex to a `/portraits/…` static asset path |
+| `src/ui/components/CouncilPortrait.tsx` | 40×50px portrait `<img>` with skin-tone swatch fallback |
+| `src/ui/components/AdviceBubble.tsx` | Italic speech bubble rendered above the selected adviser seat in CouncilFooter |
+| `src/ui/layout/CouncilFooter.tsx` | 7-seat Expedition Council row; portraits, click-to-select adviser, trait-driven `AdviceBubble` with per-(person × event) advice caching |
+| `src/ui/views/EventView.tsx` | Event card with choices; calls `resolveEventChoice` + `nextEvent`; choice descriptions shown as hover tooltips |
 | `src/ui/views/PeopleView.tsx` | Settler roster; sort/filter (sex, status, heritage group, **base skill**); click row → PersonDetail panel |
 | `src/ui/views/PersonDetail.tsx` | Full person detail: genetics, heritage, traits, skills (base + derived), languages, family |
 | `src/ui/views/FamilyTree.tsx` | 3-generation ancestor/descendant tree; spouses shown to the side of root node |
-| `src/ui/components/Portrait.tsx` | Text-based portrait; skin tone HSL colouring; `sm`/`lg` variants |
+| `src/ui/components/Portrait.tsx` | Portrait renderer; skin-tone HSL colouring; `sm`/`lg` variants; `lg` shows photo portrait via `resolvePortraitSrc` when asset exists, falls back to SVG silhouette |
 | `src/ui/components/heritage-helpers.ts` | `heritageAbbr(bloodline)` → `'IMA'\|'KIS-R'\|…\|'MIX'`; `GROUP_ABBR` lookup |
 | `src/ui/overlays/GameSetup.tsx` | New game config: name, difficulty, Sauromatian women toggle, tribe selection |
 | `src/ui/overlays/MarriageDialog.tsx` | Marriage overlay: two-column selector, compatibility panel, child predictions, opinion impacts |
@@ -186,6 +190,7 @@ idle
 | ✅ 8 | Founding traders start with Tradetalk (fluency 0.4) | `src/stores/game-store.ts` | Complete |
 | ✅ 9 | Sauromatian founding women start with Tradetalk (fluency 0.3) | `src/stores/game-store.ts` | Complete |
 | ✅ 10 | Skills & experience tracking | `src/simulation/population/person.ts`, `src/ui/views/PersonDetail.tsx`, `src/ui/views/PeopleView.tsx` | Complete |
+| ✅ — | Council voice system & portraits | `src/simulation/events/council-advice.ts`, `src/ui/components/portrait-resolver.ts`, `src/ui/components/CouncilPortrait.tsx`, `src/ui/components/AdviceBubble.tsx`, `src/ui/layout/CouncilFooter.tsx` | Complete (bonus step) |
 | 🔲 11 | Settlement buildings & upgrades | — | Planned |
 | 🔲 12 | Tribe relationship depth | — | Planned |
 
@@ -206,6 +211,19 @@ idle
 - **`createPerson` signature**: `createPerson(options, rng?)` — if `options.skills` provided, used directly; else if `rng`, generates; else defaults to 25
 - **Founding colonists** each have 2 hardcoded traits in `FOUNDING_TRAITS` (game-store.ts) that drive differentiated skill profiles
 - **Serialisation**: `PersonSkills` is a plain `Record<SkillId, number>` — no Map handling needed, JSON round-trips automatically
+
+### Council Voice System Notes
+
+- **`VoiceArchetype`** (6 types): `bold`, `pragmatist`, `diplomat`, `traditionalist`, `cautious`, `schemer` — determined by highest-weighted personality traits
+- **Priority order**: bold → pragmatist → diplomat → traditionalist → cautious → schemer (default cautious)
+- **`scoreChoiceForPerson(person, choice)`**: sums trait biases + skill confidence + cultural bias; highest-scored choice = implied recommendation
+- **`hashPersonEvent(personId, eventId)`**: djb2 hash → non-negative seed, fully deterministic; never consumes the main RNG stream
+- **`generateAdvice(person, event, seed)`**: picks from `ADVICE_TEMPLATES[archetype][category]` + `SKILL_SUFFIXES[archetype][tier]` based on skill rating
+- **`ADVICE_TEMPLATES`**: 48-cell matrix (`Record<VoiceArchetype, Record<EventCategory, string[]>>`) — 3–4 authored fragments per cell
+- **Portraits in footer**: `CouncilPortrait` shows photo asset from `public/portraits/` if available; skin-tone swatch otherwise
+- **Photo portrait in PersonDetail**: `Portrait.tsx` `lg` variant calls `resolvePortraitSrc`; renders `<img>` at 5.5×7 rem with SVG fallback
+- **Advice caching**: `CouncilFooter` memo-ises advice in local `Record<string, string>` keyed by `${personId}:${eventId}` — no store changes
+- **Assets location**: `public/portraits/{sex}/{group}/...png` — Vite serves these as static files
 
 ---
 
@@ -271,12 +289,12 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/genetics/gender-ratio.test.ts` — 26/26 passing
 - `tests/genetics/fertility.test.ts` — 31/31 passing
 - `tests/events/event-filter.test.ts` — 47/47 passing
-- `tests/events/resolver.test.ts` — 14/14 passing
+- `tests/events/resolver.test.ts` — 20/20 passing (14 original + 6 skill-check / deferred-event)
+- `tests/events/council-advice.test.ts` — 95/95 passing (archetype mapping, choice scoring, hash determinism, advice generation, template coverage)
 - `tests/economy/resources.test.ts` — 24/24 passing
-- `tests/population/demographics.test.ts` — 16/16 passing (includes 4 new child-culture blending tests)
+- `tests/population/demographics.test.ts` — 16/16 passing (includes 4 child-culture blending tests)
 - `tests/population/marriage.test.ts` — 12/12 passing
 - `tests/population/culture.test.ts` — 21/21 passing (deriveCulture, processCulturalDrift, buildSettlementCultureDistribution, computeCulturalBlend)
 - `tests/culture/language-acquisition.test.ts` — 34/34 passing
 - `tests/population/skills.test.ts` — 36/36 passing (getSkillRating, getDerivedSkill, generatePersonSkills, createPerson integration)
-- `tests/events/resolver.test.ts` — 20/20 passing (14 original + 6 new skill-check / deferred-event tests)
-- **Total: 290/290 passing**
+- **Total: 385/385 passing**

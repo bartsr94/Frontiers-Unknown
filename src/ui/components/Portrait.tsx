@@ -12,7 +12,9 @@
  *   'lg'  — full portrait card for detail views
  */
 
+import { useState } from 'react';
 import type { Person, CultureId } from '../../simulation/population/person';
+import { resolvePortraitSrc } from './portrait-resolver';
 import type {
   Undertone,
   HairColor,
@@ -239,11 +241,12 @@ interface PortraitProps {
  * Renders a portrait swatch + appearance description for a person.
  *
  * - `sm` variant: a small coloured circle + a single italic description tag line
- * - `lg` variant: a larger silhouette swatch, the full description, and ethnic origin
+ * - `lg` variant: a larger portrait card showing image asset (with SVG silhouette fallback)
  */
 export default function Portrait({ person, variant = 'sm' }: PortraitProps) {
   const v = person.genetics.visibleTraits;
   const bgColor = skinToneColor(v.skinTone);
+  const [imgError, setImgError] = useState(false);
 
   // ── Compact variant ────────────────────────────────────────────────────────
   if (variant === 'sm') {
@@ -266,6 +269,8 @@ export default function Portrait({ person, variant = 'sm' }: PortraitProps) {
   // ── Full variant ───────────────────────────────────────────────────────────
 
   const prose = buildProseDescription(person);
+  const portraitSrc = resolvePortraitSrc(person);
+  const showImage = !!portraitSrc && !imgError;
 
   return (
     <div
@@ -273,17 +278,26 @@ export default function Portrait({ person, variant = 'sm' }: PortraitProps) {
       style={{ background: `linear-gradient(135deg, ${bgColor}33 0%, #1c1208 100%)` }}
     >
       <div className="flex gap-3 items-start p-3">
-        {/* Silhouette swatch */}
+        {/* Portrait frame: real image when available, SVG silhouette otherwise */}
         <div
-          className="relative flex-shrink-0 w-14 h-18 rounded border border-stone-600 overflow-hidden"
-          style={{ backgroundColor: bgColor, width: '3.5rem', height: '4.5rem' }}
+          className="relative flex-shrink-0 rounded border border-stone-600 overflow-hidden"
+          style={{ backgroundColor: bgColor, width: '5.5rem', height: '7rem' }}
           aria-hidden="true"
         >
-          <svg viewBox="0 0 56 72" className="absolute inset-0 w-full h-full" aria-hidden="true">
-            <circle cx="28" cy="22" r="12" fill="rgba(0,0,0,0.20)" />
-            <ellipse cx="28" cy="60" rx="19" ry="14" fill="rgba(0,0,0,0.20)" />
-            <circle cx="28" cy="18" r="12.5" fill={hairColorSwatchHex(v.hairColor)} opacity="0.50" />
-          </svg>
+          {showImage ? (
+            <img
+              src={portraitSrc!}
+              alt={`${person.firstName} ${person.familyName}`}
+              className="absolute inset-0 w-full h-full object-cover"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <svg viewBox="0 0 56 72" className="absolute inset-0 w-full h-full" aria-hidden="true">
+              <circle cx="28" cy="22" r="12" fill="rgba(0,0,0,0.20)" />
+              <ellipse cx="28" cy="60" rx="19" ry="14" fill="rgba(0,0,0,0.20)" />
+              <circle cx="28" cy="18" r="12.5" fill={hairColorSwatchHex(v.hairColor)} opacity="0.50" />
+            </svg>
+          )}
         </div>
 
         {/* Prose description */}

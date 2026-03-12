@@ -1,9 +1,9 @@
 # Palusteria: Children of the Ashmark — Architecture & Implementation Guide
 
-**Version:** 1.1 (updated after Phase 1 completion)  
+**Version:** 1.2 (updated after Phase 3 partial completion)  
 **Document Type:** Technical Architecture (How)  
 **Companion Document:** `PALUSTERIA_GAME_DESIGN.md` (What & Why)  
-**Stack:** React 19 + TypeScript (strict) + Vite + Zustand + Tailwind CSS + HTML5 Canvas
+**Stack:** React 19 + TypeScript (strict) + Vite + Zustand + Tailwind CSS
 
 ---
 
@@ -41,16 +41,16 @@ palusteria-game/
 │   │
 │   ├── simulation/                     # ⚠️ PURE LOGIC — no React, no DOM, no imports from ui/
 │   │   ├── genetics/
-│   │   │   ├── traits.ts               # Ethnic trait distributions (data)
-│   │   │   ├── inheritance.ts          # resolveInheritance(), trait sampling
-│   │   │   ├── gender-ratio.ts         # Gender ratio calculation
-│   │   │   └── fertility.ts            # Fertility windows, pregnancy tracking
+│   │   │   ├── traits.ts               # Ethnic trait distributions (data) ✅
+│   │   │   ├── inheritance.ts          # resolveInheritance(), trait sampling ✅
+│   │   │   ├── gender-ratio.ts         # Gender ratio calculation ✅
+│   │   │   └── fertility.ts            # Fertility windows, pregnancy tracking ✅
 │   │   │
 │   │   ├── population/
-│   │   │   ├── person.ts               # Person interface, createPerson() factory
-│   │   │   ├── household.ts            # Family grouping, household dynamics
-│   │   │   ├── marriage.ts             # Marriage matching, polygamy rules
-│   │   │   ├── naming.ts               # Culturally appropriate name generation
+│   │   │   ├── person.ts               # Person interface, createPerson() factory, skills ✅
+│   │   │   ├── culture.ts              # CultureId, processCulturalDrift, deriveCulture ✅
+│   │   │   ├── marriage.ts             # Marriage matching, polygamy rules ✅
+│   │   │   ├── naming.ts               # Culturally appropriate name generation ✅
 │   │   │   └── relationships.ts        # Opinion system, social bond calculations
 │   │   │
 │   │   ├── personality/
@@ -59,39 +59,36 @@ palusteria-game/
 │   │   │   └── state.ts                # PersonState stub (future mood/needs slot)
 │   │   │
 │   │   ├── economy/
-│   │   │   ├── resources.ts            # Resource types, production, consumption math
+│   │   │   ├── resources.ts            # Resource types, production, consumption math ✅
 │   │   │   ├── trade.ts                # Trade pricing and exchange calculations
 │   │   │   └── company.ts              # Company relations, quota math, support tiers
 │   │   │
 │   │   ├── culture/
-│   │   │   ├── settlement-culture.ts      # Settlement culture tracker calculations
-│   │   │   ├── language-acquisition.ts    # Language learning rates, drift, child acquisition, creolization ✅
-│   │   │   └── religion.ts                # Religious composition, tension calculations
+│   │   │   ├── language-acquisition.ts # Language learning rates, drift, child acquisition ✅
+│   │   │   └── religion.ts             # Religious composition, tension calculations
 │   │   │
 │   │   ├── world/
-│   │   │   ├── tribes.ts               # External tribe state and AI behavior
+│   │   │   ├── tribes.ts               # External tribe state and AI behavior ✅
 │   │   │   ├── diplomacy.ts            # Disposition calculation, trade/war logic
 │   │   │   └── region.ts               # Map data, location definitions, distances
 │   │   │
 │   │   ├── events/
 │   │   │   ├── engine.ts               # Type definitions only (GameEvent, EventChoice, etc.) ✅
 │   │   │   ├── event-filter.ts         # ALL_EVENTS, filterEligibleEvents(), drawEvents() ✅
-│   │   │   ├── resolver.ts             # applyEventChoice() — applies consequences to state ✅
-│   │   │   ├── combat.ts               # Abstract combat resolution math (Phase 2/3)
-│   │   │   └── definitions/            # Event data files (10 Phase 1 events across 5 files) ✅
+│   │   │   ├── resolver.ts             # applyEventChoice(), resolveSkillCheck() ✅
+│   │   │   ├── council-advice.ts       # VoiceArchetype, generateAdvice() — pure logic ✅
+│   │   │   └── definitions/            # 28 events across 6 files ✅
 │   │   │       ├── company.ts          # Company Supply Delivery, Letter from the Company ✅
 │   │   │       ├── diplomacy.ts        # Watchers at the River (Riverfolk first contact) ✅
 │   │   │       ├── domestic.ts         # Game Tracks, Weight of Distance, Men at Work ✅
 │   │   │       ├── economic.ts         # Traveling Merchant, Good Timber Nearby ✅
 │   │   │       ├── environmental.ts    # Bountiful Season, Sudden Storm, Cold Bites Deep ✅
-│   │   │       ├── cultural.ts         # (Phase 2)
-│   │   │       ├── military.ts         # (Phase 2/3)
-│   │   │       └── personal.ts         # (Phase 2)
+│   │   │       └── cultural.ts         # 18 cultural/domestic events ✅
 │   │   │
 │   │   └── turn/
-│   │       ├── turn-processor.ts       # Master turn loop (dawn → event → mgmt → dusk)
-│   │       ├── season.ts               # Seasonal modifier definitions
-│   │       └── game-state.ts           # Central GameState interface
+│   │       ├── turn-processor.ts       # Master turn loop (dawn → event → mgmt → dusk) ✅
+│   │       ├── season.ts               # Seasonal modifier definitions ✅
+│   │       └── game-state.ts           # Central GameState interface ✅
 │   │
 │   ├── ui/                             # React components — rendering only
 │   │   ├── layout/
@@ -99,20 +96,24 @@ palusteria-game/
 │   │   │   ├── LeftNav.tsx             # Left nav + phase-aware End Turn button ✅
 │   │   │   ├── TopBar.tsx              # Season, year, resources header bar ✅
 │   │   │   ├── BottomBar.tsx           # Full-width resource strip ✅
-│   │   │   └── CouncilFooter.tsx       # 7-seat Expedition Council row ✅
+│   │   │   └── CouncilFooter.tsx       # 7-seat council row; portraits, click-select, advice bubble ✅
 │   │   │
 │   │   ├── views/
 │   │   │   ├── EventView.tsx           # KoDP-style event card with choices ✅
-│   │   │   ├── PeopleView.tsx          # Population roster with council toggle ✅
-│   │   │   ├── PersonDetail.tsx        # Individual deep-dive panel (Phase 2)
-│   │   │   ├── FamilyTree.tsx          # Genealogy browser (Phase 2)
+│   │   │   ├── PeopleView.tsx          # Population roster with sort/filter ✅
+│   │   │   ├── PersonDetail.tsx        # Individual deep-dive panel ✅
+│   │   │   ├── FamilyTree.tsx          # 3-generation genealogy browser ✅
 │   │   │   ├── SettlementView.tsx      # Buildings, resources, cultural overview (Phase 3)
 │   │   │   ├── TradeView.tsx           # Trade interface (Phase 3)
 │   │   │   ├── DiplomacyView.tsx       # Relations with tribes and Company (Phase 3)
 │   │   │   └── MapView.tsx             # Canvas-rendered regional map (Phase 3)
 │   │   │
 │   │   ├── components/
-│   │   │   ├── Portrait.tsx            # Procedural portrait renderer
+│   │   │   ├── Portrait.tsx            # Portrait renderer; sm/lg; lg shows photo asset if available ✅
+│   │   │   ├── portrait-resolver.ts    # resolvePortraitSrc() — bloodline × sex → /portraits/… path ✅
+│   │   │   ├── CouncilPortrait.tsx     # 40×50px img with skin-tone swatch fallback ✅
+│   │   │   ├── AdviceBubble.tsx        # Italic speech bubble for adviser voice ✅
+│   │   │   ├── heritage-helpers.ts     # heritageAbbr(), GROUP_ABBR lookup ✅
 │   │   │   ├── TraitBadge.tsx          # Personality trait pill/badge
 │   │   │   ├── ResourceBar.tsx         # Resource display widget
 │   │   │   ├── OpinionMeter.tsx        # Relationship visualization
@@ -138,23 +139,34 @@ palusteria-game/
 │   └── stores/
 │       └── game-store.ts              # Zustand store — bridges simulation ↔ UI
 │
+│
+├── public/
+│   └── portraits/                      # Static portrait photo assets served by Vite
+│       ├── male/{group}/*.png
+│       └── female/{group}/*.png
+│
 └── tests/
     ├── genetics/
-    │   ├── inheritance.test.ts         # Trait blending produces expected ranges
-    │   ├── gender-ratio.test.ts        # Ratio math matches lore values
-    │   └── fertility.test.ts           # Fertility window edge cases
+    │   ├── inheritance.test.ts         # Trait blending ranges ✅
+    │   ├── gender-ratio.test.ts        # Ratio math matches lore values ✅
+    │   └── fertility.test.ts           # Fertility window edge cases ✅
     ├── population/
-    │   ├── demographics.test.ts        # 100-year headless sim, verify pop curves
-    │   └── skills.test.ts              # Skill rating, derived formulas, generation bounds
+    │   ├── demographics.test.ts        # Population simulation sanity checks ✅
+    │   ├── marriage.test.ts            # Marriage rule correctness ✅
+    │   ├── culture.test.ts             # Cultural drift and blending ✅
+    │   └── skills.test.ts              # Skill rating, derived formulas, generation ✅
+    ├── economy/
+    │   └── resources.test.ts           # Production/consumption math ✅
     ├── events/
-    │   └── prerequisites.test.ts       # Event filtering correctness
+    │   ├── event-filter.test.ts        # Event filtering correctness ✅
+    │   ├── resolver.test.ts            # applyEventChoice + skill checks ✅
+    │   └── council-advice.test.ts      # Archetype mapping, scoring, advice generation ✅
+    ├── culture/
+    │   └── language-acquisition.test.ts # Language drift and child acquisition ✅
     └── utils/
-        └── rng.test.ts                 # Deterministic output from known seeds
-```
+        └── rng.test.ts                 # Deterministic output from known seeds ✅
 
 ---
-
-## 3. Hard Architectural Rules
 
 ### 3.1 Simulation/UI Separation
 
@@ -278,13 +290,25 @@ type EthnicGroup =
   // Future: 'weri' | 'avari' | 'confederate'
 
 type CultureId =
+  // Imanian
   | 'imanian_homeland'
   | 'ansberite'
   | 'townborn'
-  | 'kiswani_traditional'
-  | 'hanjoda_traditional'
+  // Kiswani sub-groups
+  | 'kiswani_riverfolk'
+  | 'kiswani_bayuk'
+  | 'kiswani_haisla'
+  // Hanjoda sub-groups
+  | 'hanjoda_stormcaller'
+  | 'hanjoda_bloodmoon'
+  | 'hanjoda_talon'
+  | 'hanjoda_emrasi'
+  // Sauromatian
   | 'sauro_borderfolk'
   | 'sauro_wildborn'
+  | 'kiswani_traditional'
+  | 'hanjoda_traditional'
+  // Settlement-born
   | 'settlement_native';
 ```
 

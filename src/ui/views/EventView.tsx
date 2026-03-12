@@ -225,6 +225,7 @@ export default function EventView() {
             <button
               key={c.id}
               onClick={() => handleChoiceClick(c.id)}
+              title={c.description || undefined}
               className="w-full text-left bg-stone-700 hover:bg-stone-600 active:bg-stone-800
                          border border-stone-600 hover:border-amber-700
                          rounded px-4 py-3 transition-colors"
@@ -232,11 +233,6 @@ export default function EventView() {
               <span className="text-amber-200 font-semibold text-sm block">
                 {c.label}
               </span>
-              {c.description && (
-                <span className="text-stone-400 text-xs mt-0.5 block">
-                  {c.description}
-                </span>
-              )}
               {c.skillCheck && (
                 <span className="text-stone-500 text-xs mt-1 block italic">
                   Skill check: {c.skillCheck.attemptLabel ?? c.skillCheck.skill} (difficulty {c.skillCheck.difficulty})
