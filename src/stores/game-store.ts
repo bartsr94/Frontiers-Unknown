@@ -12,6 +12,7 @@
 
 import { create } from 'zustand';
 import { createPerson } from '../simulation/population/person';
+import { generateName } from '../simulation/population/naming';
 import { processDawn, processDusk } from '../simulation/turn/turn-processor';
 import { addResourceStocks, clampResourceStock, emptyResourceStock } from '../simulation/economy/resources';
 import { filterEligibleEvents, drawEvents, ALL_EVENTS, drainDeferredEvents, getEventById } from '../simulation/events/event-filter';
@@ -50,10 +51,15 @@ export interface GameStore {
   gameState: GameState | null;
   currentPhase: TurnPhase;
   pendingEvents: GameEvent[];
-  currentEventIndex: number;  /** The skill check result from the last resolved event choice. Cleared on next choice. */
+  currentEventIndex: number;
+  /** The skill check result from the last resolved event choice. Cleared on next choice. */
   lastSkillCheckResult: SkillCheckResult | null;
   /** The full result object from the last resolved event choice. */
   lastChoiceResult: ApplyChoiceResult | null;
+  /** Resource production delta from the last Dawn phase; applied in endTurn(). */
+  _pendingProduction: ResourceStock | undefined;
+  /** Resource consumption delta from the last Dawn phase; applied in endTurn(). */
+  _pendingConsumption: ResourceStock | undefined;
   // ── Game lifecycle ────────────────────────────────────────────────────────
   newGame: (config: GameConfig, settlementName: string) => void;
   loadGame: (saveData: string) => void;
@@ -171,86 +177,75 @@ const SAVE_KEY = 'palusteria_save';
 
 // ─── Founding settlers ───────────────────────────────────────────────────────
 
-const FOUNDING_NAMES: Array<{ firstName: string; familyName: string }> = [
-  { firstName: 'Edmund',   familyName: 'Farrow'   },
-  { firstName: 'Aldric',   familyName: 'Vane'     },
-  { firstName: 'Corvin',   familyName: 'Ashby'    },
-  { firstName: 'Leofric',  familyName: 'Morrow'   },
-  { firstName: 'Hawthorn', familyName: 'Crale'    },
-  { firstName: 'Oswyn',    familyName: 'Dunmore'  },
-  { firstName: 'Bastian',  familyName: 'Thorn'    },
-  { firstName: 'Idris',    familyName: 'Halven'   },
-  { firstName: 'Ren',      familyName: 'Coalwick' },
-  { firstName: 'Callum',   familyName: 'Marsh'    },
-];
-
-/** Initial roles spread across the 10 founding men. */
-const FOUNDING_ROLES: WorkRole[] = [
-  'farmer', 'farmer', 'farmer', 'farmer', 'farmer',
-  'farmer', 'farmer', 'trader', 'trader', 'guard',
-];
-
-/** Ages spread across 20–35 to give variety in the roster. */
-const FOUNDING_AGES: number[] = [22, 28, 31, 25, 30, 27, 35, 24, 29, 33];
-
-/**
- * Two traits per founding settler, chosen to give each man a distinct skill
- * profile. Traits feed directly into generatePersonSkills() bonuses so the
- * roster has real variety rather than a flat Gaussian for everyone.
- *
- * Index matches FOUNDING_NAMES / FOUNDING_ROLES / FOUNDING_AGES.
- *
- *  0 – Edmund Farrow      farmer 22  — young, earnest, careful
- *  1 – Aldric Vane        farmer 28  — weathered, physically powerful
- *  2 – Corvin Ashby       farmer 31  — blunt, stubborn, strong-willed
- *  3 – Leofric Morrow     farmer 25  — quietly clever, well-read for his class
- *  4 – Hawthorn Crale     farmer 30  — broad-shouldered, tough, versatile
- *  5 – Oswyn Dunmore      farmer 27  — sociable and honest; everyone's friend
- *  6 – Bastian Thorn      farmer 35  — old hand; ex-militia, knows the old ways
- *  7 – Idris Halven       trader 24  — charming, silver-tongued, not always honest
- *  8 – Ren Coalwick       trader 29  — sharp, calculating, eye always on the margin
- *  9 – Callum Marsh       guard  33  — built to intimidate; few words, fewer doubts
- */
-const FOUNDING_TRAITS: Array<Person['traits']> = [
-  ['patient', 'humble'],        // Edmund  — careful, modest
-  ['strong',  'patient'],       // Aldric  — powerfully built, steady
-  ['strong',  'proud'],         // Corvin  — strong but difficult
-  ['clever',  'content'],       // Leofric — thinking man, not ambitious
-  ['robust',  'brave'],         // Hawthorn— tough and courageous
-  ['gregarious', 'honest'],     // Oswyn   — everyone's friend
-  ['traditional', 'veteran'],   // Bastian — old soldier, set in his ways
-  ['gregarious', 'deceitful'],  // Idris   — charming, not to be trusted
-  ['clever',  'greedy'],        // Ren     — sharp mind, mercenary instincts
-  ['brave',   'strong'],        // Callum  — straightforward bruiser
-];
-
-/**
- * Individual physical profiles for each founding settler.
- * All stay within the Imanian genetic range (fair skin, cool/neutral undertone,
- * blonde–dark-brown hair, straight–wavy, blue/grey/green eyes) while giving
- * each man a distinct appearance.
- */
-const FOUNDING_GENETICS: Array<Person['genetics']> = [
-  // 0 – Edmund Farrow, farmer 22 — pale, fresh-faced, slight build
-  { visibleTraits: { skinTone: 0.14, skinUndertone: 'cool_pink', hairColor: 'blonde',      hairTexture: 'straight', eyeColor: 'blue',  buildType: 'lean',     height: 'average',       facialStructure: 'oval'    }, genderRatioModifier: 0.5, extendedFertility: false },
+/** All properties for each founding male settler, colocated for easy editing. */
+const FOUNDING_SETTLERS: Array<{
+  firstName:  string;
+  familyName: string;
+  role:       WorkRole;
+  age:        number;
+  traits:     Person['traits'];
+  genetics:   Person['genetics'];
+}> = [
+  // 0 – Edmund Farrow, farmer 22 — young, earnest, careful
+  {
+    firstName: 'Edmund', familyName: 'Farrow', role: 'farmer', age: 22,
+    traits: ['patient', 'humble'],
+    genetics: { visibleTraits: { skinTone: 0.14, skinUndertone: 'cool_pink', hairColor: 'blonde',      hairTexture: 'straight', eyeColor: 'blue',  buildType: 'lean',     height: 'average',       facialStructure: 'oval'    }, genderRatioModifier: 0.5, extendedFertility: false },
+  },
   // 1 – Aldric Vane, farmer 28 — weathered and broad-shouldered
-  { visibleTraits: { skinTone: 0.22, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'wavy',     eyeColor: 'grey',  buildType: 'athletic', height: 'tall',          facialStructure: 'broad'   }, genderRatioModifier: 0.5, extendedFertility: false },
+  {
+    firstName: 'Aldric', familyName: 'Vane', role: 'farmer', age: 28,
+    traits: ['strong', 'patient'],
+    genetics: { visibleTraits: { skinTone: 0.22, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'wavy',     eyeColor: 'grey',  buildType: 'athletic', height: 'tall',          facialStructure: 'broad'   }, genderRatioModifier: 0.5, extendedFertility: false },
+  },
   // 2 – Corvin Ashby, farmer 31 — stocky, blunt-featured
-  { visibleTraits: { skinTone: 0.19, skinUndertone: 'cool_pink', hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'blue',  buildType: 'stocky',   height: 'below_average', facialStructure: 'angular' }, genderRatioModifier: 0.5, extendedFertility: false },
+  {
+    firstName: 'Corvin', familyName: 'Ashby', role: 'farmer', age: 31,
+    traits: ['strong', 'proud'],
+    genetics: { visibleTraits: { skinTone: 0.19, skinUndertone: 'cool_pink', hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'blue',  buildType: 'stocky',   height: 'below_average', facialStructure: 'angular' }, genderRatioModifier: 0.5, extendedFertility: false },
+  },
   // 3 – Leofric Morrow, farmer 25 — lean, narrow-faced, green-eyed
-  { visibleTraits: { skinTone: 0.16, skinUndertone: 'neutral',   hairColor: 'light_brown', hairTexture: 'wavy',     eyeColor: 'green', buildType: 'lean',     height: 'average',       facialStructure: 'narrow'  }, genderRatioModifier: 0.5, extendedFertility: false },
+  {
+    firstName: 'Leofric', familyName: 'Morrow', role: 'farmer', age: 25,
+    traits: ['clever', 'content'],
+    genetics: { visibleTraits: { skinTone: 0.16, skinUndertone: 'neutral',   hairColor: 'light_brown', hairTexture: 'wavy',     eyeColor: 'green', buildType: 'lean',     height: 'average',       facialStructure: 'narrow'  }, genderRatioModifier: 0.5, extendedFertility: false },
+  },
   // 4 – Hawthorn Crale, farmer 30 — tall, grey-eyed, round features
-  { visibleTraits: { skinTone: 0.25, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'grey',  buildType: 'athletic', height: 'tall',          facialStructure: 'round'   }, genderRatioModifier: 0.5, extendedFertility: false },
+  {
+    firstName: 'Hawthorn', familyName: 'Crale', role: 'farmer', age: 30,
+    traits: ['robust', 'brave'],
+    genetics: { visibleTraits: { skinTone: 0.25, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'grey',  buildType: 'athletic', height: 'tall',          facialStructure: 'round'   }, genderRatioModifier: 0.5, extendedFertility: false },
+  },
   // 5 – Oswyn Dunmore, farmer 27 — fair and blue-eyed, wavy blonde
-  { visibleTraits: { skinTone: 0.13, skinUndertone: 'cool_pink', hairColor: 'blonde',      hairTexture: 'wavy',     eyeColor: 'blue',  buildType: 'lean',     height: 'tall',          facialStructure: 'oval'    }, genderRatioModifier: 0.5, extendedFertility: false },
+  {
+    firstName: 'Oswyn', familyName: 'Dunmore', role: 'farmer', age: 27,
+    traits: ['gregarious', 'honest'],
+    genetics: { visibleTraits: { skinTone: 0.13, skinUndertone: 'cool_pink', hairColor: 'blonde',      hairTexture: 'wavy',     eyeColor: 'blue',  buildType: 'lean',     height: 'tall',          facialStructure: 'oval'    }, genderRatioModifier: 0.5, extendedFertility: false },
+  },
   // 6 – Bastian Thorn, farmer 35 — the old hand, heavyset and weathered
-  { visibleTraits: { skinTone: 0.26, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'grey',  buildType: 'heavyset', height: 'average',       facialStructure: 'broad'   }, genderRatioModifier: 0.5, extendedFertility: false },
+  {
+    firstName: 'Bastian', familyName: 'Thorn', role: 'farmer', age: 35,
+    traits: ['traditional', 'veteran'],
+    genetics: { visibleTraits: { skinTone: 0.26, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'grey',  buildType: 'heavyset', height: 'average',       facialStructure: 'broad'   }, genderRatioModifier: 0.5, extendedFertility: false },
+  },
   // 7 – Idris Halven, trader 24 — presentable, sharp green eyes
-  { visibleTraits: { skinTone: 0.17, skinUndertone: 'cool_pink', hairColor: 'light_brown', hairTexture: 'wavy',     eyeColor: 'green', buildType: 'lean',     height: 'tall',          facialStructure: 'narrow'  }, genderRatioModifier: 0.5, extendedFertility: false },
+  {
+    firstName: 'Idris', familyName: 'Halven', role: 'trader', age: 24,
+    traits: ['gregarious', 'deceitful'],
+    genetics: { visibleTraits: { skinTone: 0.17, skinUndertone: 'cool_pink', hairColor: 'light_brown', hairTexture: 'wavy',     eyeColor: 'green', buildType: 'lean',     height: 'tall',          facialStructure: 'narrow'  }, genderRatioModifier: 0.5, extendedFertility: false },
+  },
   // 8 – Ren Coalwick, trader 29 — unremarkable face, watchful grey eyes
-  { visibleTraits: { skinTone: 0.21, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'grey',  buildType: 'athletic', height: 'average',       facialStructure: 'angular' }, genderRatioModifier: 0.5, extendedFertility: false },
+  {
+    firstName: 'Ren', familyName: 'Coalwick', role: 'trader', age: 29,
+    traits: ['clever', 'greedy'],
+    genetics: { visibleTraits: { skinTone: 0.21, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'grey',  buildType: 'athletic', height: 'average',       facialStructure: 'angular' }, genderRatioModifier: 0.5, extendedFertility: false },
+  },
   // 9 – Callum Marsh, guard 33 — broad, blue-eyed, built to intimidate
-  { visibleTraits: { skinTone: 0.23, skinUndertone: 'cool_pink', hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'blue',  buildType: 'stocky',   height: 'tall',          facialStructure: 'broad'   }, genderRatioModifier: 0.5, extendedFertility: false },
+  {
+    firstName: 'Callum', familyName: 'Marsh', role: 'guard', age: 33,
+    traits: ['brave', 'strong'],
+    genetics: { visibleTraits: { skinTone: 0.23, skinUndertone: 'cool_pink', hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'blue',  buildType: 'stocky',   height: 'tall',          facialStructure: 'broad'   }, genderRatioModifier: 0.5, extendedFertility: false },
+  },
 ];
 
 // ─── Council seeding ─────────────────────────────────────────────────────────
@@ -272,13 +267,16 @@ function seedCouncil(people: Map<string, Person>): string[] {
 
 // ─── Initial game state factory ───────────────────────────────────────────────
 
-function createInitialState(config: GameConfig, settlementName: string): GameState {
-  const seed = Math.floor(Math.random() * 2 ** 31);
-  const rng = createRNG(seed);
+function createInitialState(config: GameConfig, settlementName: string, seed?: number): GameState {
+  // Generate a high-quality seed via the Web Crypto API when none is provided.
+  // This avoids Math.random() (forbidden by Hard Rule #1) while still allowing
+  // a deterministic seed to be passed in for replays and testing.
+  const resolvedSeed = seed ?? (crypto.getRandomValues(new Uint32Array(1))[0]! >>> 0);
+  const rng = createRNG(resolvedSeed);
   const people = new Map<string, Person>();
 
-  FOUNDING_NAMES.forEach((name, i) => {
-    const role = FOUNDING_ROLES[i];
+  FOUNDING_SETTLERS.forEach(settler => {
+    const { firstName, familyName, role, age, traits, genetics } = settler;
     // Traders arrive with a working knowledge of Tradetalk — it would be
     // absurd to seek trade contacts without any common tongue.
     const languages: Person['languages'] = role === 'trader'
@@ -286,15 +284,15 @@ function createInitialState(config: GameConfig, settlementName: string): GameSta
       : [{ language: 'imanian', fluency: 1.0 }];
 
     const person = createPerson({
-      firstName: name.firstName,
-      familyName: name.familyName,
+      firstName,
+      familyName,
       sex: 'male',
-      age: FOUNDING_AGES[i],
+      age,
       role,
       socialStatus: 'founding_member',
       languages,
-      genetics: FOUNDING_GENETICS[i],
-      traits: FOUNDING_TRAITS[i],
+      genetics,
+      traits,
     }, rng);
     people.set(person.id, person);
   });
@@ -307,18 +305,23 @@ function createInitialState(config: GameConfig, settlementName: string): GameSta
     const sauroGroup = firstPreset?.ethnicGroup ?? 'kiswani_riverfolk';
     const sauroTraitDist = ETHNIC_DISTRIBUTIONS[sauroGroup];
 
-    const SAURO_FOUNDING_WOMEN: Array<{ firstName: string; familyName: string; age: number }> = [
-      { firstName: 'Amara',  familyName: 'Mwamba', age: 18 },
-      { firstName: 'Safiya', familyName: 'Nyota',  age: 22 },
-      { firstName: 'Eshe',   familyName: 'Tembo',  age: 26 },
-    ];
+    // Ages spread across 18–26 to give variety; names generated from the correct
+    // ethnic naming pool so they match the tribe the player selected.
+    const SAURO_FOUNDING_AGES: number[] = [18, 22, 26];
 
-    for (const w of SAURO_FOUNDING_WOMEN) {
+    for (const womanAge of SAURO_FOUNDING_AGES) {
+      const { firstName, familyName } = generateName(
+        'female',
+        ETHNIC_GROUP_CULTURE[sauroGroup],
+        '',
+        '',
+        rng,
+      );
       const woman = createPerson({
-        firstName: w.firstName,
-        familyName: w.familyName,
+        firstName,
+        familyName,
         sex: 'female',
-        age: w.age,
+        age: womanAge,
         role: 'unassigned',
         socialStatus: 'newcomer',
         genetics: {
@@ -409,7 +412,7 @@ function createInitialState(config: GameConfig, settlementName: string): GameSta
 
   return {
     version: '1.0.0',
-    seed,
+    seed: resolvedSeed,
     turnNumber: 0,
     currentSeason: 'spring',
     currentYear: 1,
@@ -448,6 +451,11 @@ export const useGameStore = create<GameStore>((set, get) => {
     gameState: initialState,
     currentPhase: 'idle',
     pendingEvents: [],
+    currentEventIndex: 0,
+    lastSkillCheckResult: null,
+    lastChoiceResult: null,
+    _pendingProduction: undefined,
+    _pendingConsumption: undefined,
     currentEventIndex: 0,
     lastSkillCheckResult: null,
     lastChoiceResult: null,
@@ -543,11 +551,9 @@ export const useGameStore = create<GameStore>((set, get) => {
         currentPhase: allPending.length > 0 ? 'event' : 'management',
         pendingEvents: allPending,
         currentEventIndex: 0,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        _pendingProduction: dawnResult.production as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        _pendingConsumption: dawnResult.consumption as any,
-      } as Partial<GameStore>);
+        _pendingProduction: dawnResult.production,
+        _pendingConsumption: dawnResult.consumption,
+      });
     },
 
     resolveEventChoice(eventId, choiceId) {
@@ -630,7 +636,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         currentPhase: 'idle',
         _pendingProduction: undefined,
         _pendingConsumption: undefined,
-      } as Partial<GameStore>);
+      });
     },
 
     // ── Management phase — stubs (Phase 2+) ───────────────────────────────

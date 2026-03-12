@@ -145,10 +145,10 @@ export function getFertilityChance(woman: Person, season: Season): number {
   }
 
   // Trait modifiers — check before health conditions so 'barren' short-circuits cleanly
-  if (woman.traits.includes('barren' as string & typeof woman.traits[number])) {
+  if (woman.traits.includes('barren')) {
     return 0;
   }
-  if (woman.traits.includes('fertile' as string & typeof woman.traits[number])) {
+  if (woman.traits.includes('fertile')) {
     base *= 1.3;
   }
 

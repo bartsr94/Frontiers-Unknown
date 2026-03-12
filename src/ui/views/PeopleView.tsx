@@ -14,26 +14,9 @@ import { skinToneColor } from '../components/Portrait';
 import { heritageAbbr } from '../components/heritage-helpers';
 import PersonDetail from './PersonDetail';
 import MarriageDialog from '../overlays/MarriageDialog';
+import { ROLE_LABELS, ROLE_COLORS } from '../shared/role-display';
 
 const MAX_COUNCIL = 7;
-
-const ROLE_LABELS: Record<WorkRole, string> = {
-  farmer:     'Farmer',
-  trader:     'Trader',
-  guard:      'Guard',
-  craftsman:  'Craftsman',
-  healer:     'Healer',
-  unassigned: 'Unassigned',
-};
-
-const ROLE_COLORS: Record<WorkRole, string> = {
-  farmer:     'bg-green-900 text-green-200',
-  trader:     'bg-amber-900 text-amber-200',
-  guard:      'bg-red-900 text-red-200',
-  craftsman:  'bg-stone-700 text-stone-200',
-  healer:     'bg-cyan-900 text-cyan-200',
-  unassigned: 'bg-stone-800 text-stone-400',
-};
 
 type SortKey = 'name' | 'age' | 'heritage' | 'role' | SkillId;
 

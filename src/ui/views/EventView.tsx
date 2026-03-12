@@ -11,7 +11,7 @@
  * returns to determine the next phase.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useGameStore } from '../../stores/game-store';
 import type { SkillCheckResult } from '../../simulation/events/engine';
 
@@ -77,6 +77,10 @@ export default function EventView() {
 
   // Reset to 'choosing' when the event changes.
   const event = pendingEvents[currentIndex];
+  useEffect(() => {
+    setViewPhase('choosing');
+    setSelectedChoiceId(null);
+  }, [event?.id]);
 
   // ── No events ─────────────────────────────────────────────────────────────
   if (pendingEvents.length === 0) {

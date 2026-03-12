@@ -19,6 +19,7 @@ import type { GameState, EventRecord } from '../turn/game-state';
 import type { CultureId } from '../turn/game-state';
 import type { TraitId } from '../personality/traits';
 import { CONVERSATIONAL_THRESHOLD } from '../culture/language-acquisition';
+import { SAUROMATIAN_CULTURE_IDS } from './culture';
 
 // ─── Marriage Types ───────────────────────────────────────────────────────────
 
@@ -125,22 +126,6 @@ export function getLanguageCompatibility(a: Person, b: Person): LanguageCompatib
 
 // ─── Cultural Rules ───────────────────────────────────────────────────────────
 
-/** CultureIds that follow Sauromatian polygynous marriage tradition. */
-const SAUROMATIAN_CULTURES: ReadonlySet<CultureId> = new Set([
-  'kiswani_traditional',
-  'hanjoda_traditional',
-  'kiswani_riverfolk',
-  'kiswani_bayuk',
-  'kiswani_haisla',
-  'hanjoda_stormcaller',
-  'hanjoda_bloodmoon',
-  'hanjoda_talon',
-  'hanjoda_emrasi',
-  'sauro_borderfolk',
-  'sauro_wildborn',
-  'settlement_native',
-]);
-
 /**
  * Returns the marriage rules appropriate for the given cultural identity.
  *
@@ -151,7 +136,7 @@ const SAUROMATIAN_CULTURES: ReadonlySet<CultureId> = new Set([
  * @returns The applicable MarriageRules.
  */
 export function getMarriageRules(primaryCulture: CultureId): MarriageRules {
-  if (SAUROMATIAN_CULTURES.has(primaryCulture)) {
+  if (SAUROMATIAN_CULTURE_IDS.has(primaryCulture) || primaryCulture === 'settlement_native') {
     return { tradition: 'sauromatian', maxWives: 6, maxConcubines: 0 };
   }
   // Imanian (imanian_homeland, ansberite) and townborn default

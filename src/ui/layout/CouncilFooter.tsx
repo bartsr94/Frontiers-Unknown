@@ -22,24 +22,10 @@ import type { WorkRole, Person } from '../../simulation/population/person';
 import { generateAdvice, hashPersonEvent } from '../../simulation/events/council-advice';
 import CouncilPortrait from '../components/CouncilPortrait';
 import AdviceBubble from '../components/AdviceBubble';
+import { ROLE_LABELS as BASE_ROLE_LABELS, ROLE_COLORS } from '../shared/role-display';
 
-const ROLE_LABELS: Record<WorkRole, string> = {
-  farmer:     'Farmer',
-  trader:     'Trader',
-  guard:      'Guard',
-  craftsman:  'Craftsman',
-  healer:     'Healer',
-  unassigned: '—',
-};
-
-const ROLE_COLORS: Record<WorkRole, string> = {
-  farmer:     'bg-green-900 text-green-300',
-  trader:     'bg-amber-900 text-amber-300',
-  guard:      'bg-red-900 text-red-300',
-  craftsman:  'bg-stone-700 text-stone-300',
-  healer:     'bg-cyan-900 text-cyan-300',
-  unassigned: 'bg-stone-800 text-stone-500',
-};
+// CouncilFooter shows '—' for unassigned seats rather than the full word.
+const ROLE_LABELS: Record<WorkRole, string> = { ...BASE_ROLE_LABELS, unassigned: '—' };
 
 const MAX_SEATS = 7;
 

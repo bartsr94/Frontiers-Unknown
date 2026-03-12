@@ -116,27 +116,14 @@ const HANJODA_TRIBE_NAMES: readonly string[] = [
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Picks a random element from a readonly array using the seeded RNG.
- * Never returns undefined — caller guarantees the array is non-empty.
- */
-function pickRandom<T>(arr: readonly T[], rng: SeededRNG): T {
-  const index = Math.floor(rng.next() * arr.length);
-  const item = arr[Math.max(0, Math.min(index, arr.length - 1))];
-  // The clamp above guarantees a valid index as long as arr is non-empty.
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  return item!;
-}
-
-/**
  * Determines whether a CultureId follows Sauromatian naming conventions.
  * Sauromatian cultures use the maternal family-name line.
  */
 function isSauromatianCulture(culture: CultureId): boolean {
   return (
-    culture === 'kiswani_traditional' ||
-    culture === 'hanjoda_traditional' ||
-    culture === 'sauro_borderfolk' ||
-    culture === 'sauro_wildborn'
+    culture.startsWith('kiswani_') ||
+    culture.startsWith('hanjoda_') ||
+    culture.startsWith('sauro_')
   );
 }
 
@@ -149,25 +136,36 @@ type NamePool = {
 };
 
 function getNamePool(culture: CultureId): NamePool {
-  switch (culture) {
-    case 'kiswani_traditional':
-    case 'sauro_borderfolk':
-      return { male: KISWANI_MALE_NAMES, female: KISWANI_FEMALE_NAMES, family: KISWANI_CLAN_NAMES };
-
-    case 'hanjoda_traditional':
-    case 'sauro_wildborn':
-      return { male: HANJODA_MALE_NAMES, female: HANJODA_FEMALE_NAMES, family: HANJODA_TRIBE_NAMES };
-
-    case 'townborn':
-    case 'settlement_native':
-      // Hybrid: first name from Kiswani pool, family name from Imanian pool
-      return { male: KISWANI_MALE_NAMES, female: KISWANI_FEMALE_NAMES, family: IMANIAN_FAMILY_NAMES };
-
-    case 'imanian_homeland':
-    case 'ansberite':
-    default:
-      return { male: IMANIAN_MALE_NAMES, female: IMANIAN_FEMALE_NAMES, family: IMANIAN_FAMILY_NAMES };
+  // All Kiswani sub-group identities (including pan-tribal and borderland)
+  if (
+    culture === 'kiswani_traditional' ||
+    culture === 'kiswani_riverfolk' ||
+    culture === 'kiswani_bayuk' ||
+    culture === 'kiswani_haisla' ||
+    culture === 'sauro_borderfolk'
+  ) {
+    return { male: KISWANI_MALE_NAMES, female: KISWANI_FEMALE_NAMES, family: KISWANI_CLAN_NAMES };
   }
+
+  // All Hanjoda sub-group identities (including pan-tribal and wildborn)
+  if (
+    culture === 'hanjoda_traditional' ||
+    culture === 'hanjoda_stormcaller' ||
+    culture === 'hanjoda_bloodmoon' ||
+    culture === 'hanjoda_talon' ||
+    culture === 'hanjoda_emrasi' ||
+    culture === 'sauro_wildborn'
+  ) {
+    return { male: HANJODA_MALE_NAMES, female: HANJODA_FEMALE_NAMES, family: HANJODA_TRIBE_NAMES };
+  }
+
+  if (culture === 'townborn' || culture === 'settlement_native') {
+    // Hybrid: first name from Kiswani pool, family name from Imanian pool
+    return { male: KISWANI_MALE_NAMES, female: KISWANI_FEMALE_NAMES, family: IMANIAN_FAMILY_NAMES };
+  }
+
+  // Imanian (imanian_homeland, ansberite) and any future additions
+  return { male: IMANIAN_MALE_NAMES, female: IMANIAN_FEMALE_NAMES, family: IMANIAN_FAMILY_NAMES };
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -199,12 +197,12 @@ export function generateName(
   const pool = getNamePool(culture);
 
   const firstName = sex === 'female'
-    ? pickRandom(pool.female, rng)
-    : pickRandom(pool.male, rng);
+    ? rng.pick(pool.female)
+    : rng.pick(pool.male);
 
   // Choose family-name line by cultural tradition
   const lineageName = isSauromatianCulture(culture) ? motherFamilyName : fatherFamilyName;
-  const familyName = lineageName.length > 0 ? lineageName : pickRandom(pool.family, rng);
+  const familyName = lineageName.length > 0 ? lineageName : rng.pick(pool.family);
 
   return { firstName, familyName };
 }

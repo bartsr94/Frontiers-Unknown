@@ -6,15 +6,10 @@
  */
 
 import type { WorkRole } from '../../simulation/population/person';
+import { ROLE_LABELS as BASE_ROLE_LABELS } from '../shared/role-display';
 
-const ROLE_LABELS: Record<WorkRole, string> = {
-  farmer:     'Farmer',
-  trader:     'Trader',
-  guard:      'Guard',
-  craftsman:  'Craftsman',
-  healer:     'Healer',
-  unassigned: 'Adviser',
-};
+// AdviceBubble labels unassigned council seats as 'Adviser' rather than 'Unassigned'.
+const ROLE_LABELS: Record<WorkRole, string> = { ...BASE_ROLE_LABELS, unassigned: 'Adviser' };
 
 interface AdviceBubbleProps {
   text:         string;
