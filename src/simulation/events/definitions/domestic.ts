@@ -27,9 +27,18 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
         label: 'Organize a proper hunting party — four men, full kit.',
         description: 'Commit properly and the return will be worth it. Costs a little in supplies.',
         consequences: [
-          { type: 'modify_resource', target: 'food', value: 10 },
           { type: 'modify_resource', target: 'goods', value: -1 },
         ],
+        skillCheck: {
+          skill: 'hunting',
+          difficulty: 35,
+          actorSelection: 'best_council',
+          attemptLabel: 'Lead the hunt',
+        },
+        successText: 'The hunting party returns laden with deer. The men are in good spirits and the stores are fuller for it.',
+        failureText: 'Despite the promising tracks, the party returns nearly empty-handed. The forest gave nothing today.',
+        onSuccess: [{ type: 'modify_resource', target: 'food', value: 15 }],
+        onFailure:  [{ type: 'modify_resource', target: 'food', value: 3  }],
       },
       {
         id: 'light_foray',
@@ -66,6 +75,16 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
         label: 'Speak plainly: this is the life we chose.',
         description: 'He signed his contract. Acknowledge his honesty without softening the truth.',
         consequences: [],
+        skillCheck: {
+          skill: 'leadership',
+          difficulty: 40,
+          actorSelection: 'best_council',
+          attemptLabel: 'Address the man',
+        },
+        successText: 'He listens. When you are done he nods — the quiet nod of a man who needed to hear it said plainly. He is back at his post the next morning.',
+        failureText: 'The words land wrong. He says nothing more, but the distance in his eyes does not go away. You will need to spend something to keep him here.',
+        onSuccess: [],
+        onFailure:  [{ type: 'modify_resource', target: 'gold', value: -3 }],
       },
       {
         id: 'give_bonus',
@@ -101,11 +120,24 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       {
         id: 'back_the_project',
         label: 'Approve it. Give them the materials they need.',
-        description:
-          'Investment in infrastructure pays off. Better storage means less food spoilage.',
+        description: 'Investment in infrastructure pays off. Whether the project delivers its full potential depends on who leads it.',
         consequences: [
           { type: 'modify_resource', target: 'lumber', value: -3 },
-          { type: 'modify_resource', target: 'food', value: 5 },
+        ],
+        skillCheck: {
+          skill: 'custom',
+          difficulty: 30,
+          actorSelection: 'best_council',
+          attemptLabel: 'Oversee the project',
+        },
+        successText: 'The project exceeds expectations — better drainage, tighter storage, a chimney that actually draws. The men are genuinely proud of it.',
+        failureText: 'The project is done, but the execution is rougher than hoped. The basics are addressed. The refinements will need another attempt.',
+        onSuccess: [
+          { type: 'modify_resource', target: 'food',  value: 7 },
+          { type: 'modify_resource', target: 'goods', value: 2 },
+        ],
+        onFailure: [
+          { type: 'modify_resource', target: 'food', value: 2 },
         ],
       },
       {
@@ -153,9 +185,21 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       {
         id: 'welcome_conditional',
         label: 'Welcome them — but make clear the eldest daughter will marry one of your men in time.',
-        description: 'A pragmatic arrangement. She understands and agrees. The tribe may not be pleased.',
-        consequences: [
-          { type: 'modify_disposition', target: 'njaro_matu_riverfolk', value: 4 },
+        description: 'A pragmatic arrangement. How it is offered will determine how it is received.',
+        consequences: [],
+        skillCheck: {
+          skill: 'diplomacy',
+          difficulty: 40,
+          actorSelection: 'best_council',
+          attemptLabel: 'State the terms',
+        },
+        successText: 'The terms are stated plainly, without cruelty. She understands and agrees. When word reaches the tribe, the arrangement will read as an honest compact.',
+        failureText: 'The condition is stated too quickly, too clinically. She agrees because she has no other choice. Word of how the offer was made will reach the tribe.',
+        onSuccess: [
+          { type: 'modify_disposition', target: 'njaro_matu_riverfolk', value: 8 },
+        ],
+        onFailure: [
+          { type: 'modify_disposition', target: 'njaro_matu_riverfolk', value: -3 },
         ],
       },
       {
@@ -218,11 +262,20 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       {
         id: 'request_craftsmen',
         label: 'Decline — but request skilled craftsmen instead. (−80 gold)',
-        description: 'You need tools, not wives. The Company accepts the counter-proposal.',
+        description: 'A counter-proposal. Whether the Company sends its best depends on how the request is made.',
         consequences: [
-          { type: 'modify_resource', target: 'gold',  value: -80 },
-          { type: 'modify_resource', target: 'goods', value: 8 },
+          { type: 'modify_resource', target: 'gold', value: -80 },
         ],
+        skillCheck: {
+          skill: 'bargaining',
+          difficulty: 38,
+          actorSelection: 'best_council',
+          attemptLabel: 'Make the case',
+        },
+        successText: 'The counter-proposal is well-argued. The Company notes the practical reasoning and sends good men.',
+        failureText: 'The request is accepted but filed under "eccentric preference". The craftsmen who arrive are competent, but not their best.',
+        onSuccess: [{ type: 'modify_resource', target: 'goods', value: 10 }],
+        onFailure:  [{ type: 'modify_resource', target: 'goods', value: 5  }],
       },
     ],
   },
@@ -257,11 +310,25 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       {
         id: 'negotiate',
         label: 'Accept, but negotiate for more — he should bring cattle or trade goods.',
-        description: 'You push harder. They confer privately. There is a chance they withdraw.',
+        description: 'You push harder. Whether they concede depends on how the demand is pressed.',
         consequences: [
-          { type: 'modify_resource',    target: 'steel',             value: -5  },
-          { type: 'modify_resource',    target: 'cattle',            value: 3   },
-          { type: 'modify_disposition', target: 'thunder_veil_band', value: 3   },
+          { type: 'modify_resource', target: 'steel', value: -5 },
+        ],
+        skillCheck: {
+          skill: 'bargaining',
+          difficulty: 45,
+          actorSelection: 'best_council',
+          attemptLabel: 'Push for better terms',
+        },
+        successText: 'A hard negotiation, well conducted. They concede cattle and goods above the original offer. The tribe respects a man who knows when to push.',
+        failureText: 'The counter-offer is accepted, but barely. They concede one animal and no more. The arrangement is made; the goodwill is not.',
+        onSuccess: [
+          { type: 'modify_resource',    target: 'cattle',            value: 4 },
+          { type: 'modify_disposition', target: 'thunder_veil_band', value: 6 },
+        ],
+        onFailure: [
+          { type: 'modify_resource',    target: 'cattle',            value: 1 },
+          { type: 'modify_disposition', target: 'thunder_veil_band', value: 1 },
         ],
       },
       {
@@ -353,10 +420,20 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       {
         id: 'joint_celebration',
         label: 'Blend both traditions — a joint celebration, Imanian and Sauromatian together.',
-        description: 'Not all are comfortable. But something new begins here — a shared memory.',
+        description: 'Something new could begin here. How well it comes together depends on who shapes the evening.',
         consequences: [
-          { type: 'modify_resource',    target: 'food',              value: -8 },
+          { type: 'modify_resource', target: 'food', value: -8 },
         ],
+        skillCheck: {
+          skill: 'custom',
+          difficulty: 38,
+          actorSelection: 'best_council',
+          attemptLabel: 'Shape the evening',
+        },
+        successText: 'The celebration finds its footing. Both traditions have space. By late evening it is simply a good meal shared between people who might, slowly, become neighbours in more than geography.',
+        failureText: 'The blend creates friction rather than synthesis. The food is good, the company awkward. The moment passes without becoming a memory.',
+        onSuccess: [],
+        onFailure:  [{ type: 'modify_standing', target: 'company', value: -2 }],
       },
     ],
   },
@@ -440,10 +517,18 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       {
         id: 'enforce_traditions',
         label: 'Agree. Reinstate formal observance of Imanian customs.',
-        description: 'He is gratified. Some of the younger men roll their eyes. The Sauromatian women notice the change.',
-        consequences: [
-          { type: 'modify_standing', target: 'company', value: 4 },
-        ],
+        description: 'He is gratified in principle. Whether the reinstatement is handled well is another matter.',
+        consequences: [],
+        skillCheck: {
+          skill: 'leadership',
+          difficulty: 35,
+          actorSelection: 'best_council',
+          attemptLabel: 'Reinstate the customs',
+        },
+        successText: 'The reinstatement is handled with measured authority. The elder is gratified. Even some of the younger men find comfort in familiar rhythms.',
+        failureText: 'The enforcement carries more edge than it needed. The elder is satisfied, but the manner has left marks. The Sauromatian women have noticed every word.',
+        onSuccess: [{ type: 'modify_standing', target: 'company', value: 6 }],
+        onFailure:  [{ type: 'modify_standing', target: 'company', value: 2 }],
       },
     ],
   },
@@ -515,19 +600,36 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       {
         id: 'favorable_picture',
         label: 'Present a favourable picture. Emphasize progress, minimize setbacks.',
-        description: 'It is not lying. It is framing. He may or may not see through it.',
-        consequences: [
-          { type: 'modify_standing', target: 'company', value: 6 },
-        ],
+        description: 'It is not lying. It is framing. What he takes from it depends on the framer.',
+        consequences: [],
+        skillCheck: {
+          skill: 'deception',
+          difficulty: 42,
+          actorSelection: 'best_council',
+          attemptLabel: 'Frame the narrative',
+        },
+        successText: 'The presentation is polished, the emphasis well-chosen. He closes his ledger with the expression of a man who has received what he came for.',
+        failureText: 'He listens attentively and writes something in the margin of his notes. His "very thorough" has the sound of an epitaph.',
+        onSuccess: [{ type: 'modify_standing', target: 'company', value: 8 }],
+        onFailure:  [{ type: 'modify_standing', target: 'company', value: 1 }],
       },
       {
         id: 'wine_and_dine',
         label: 'Wine and dine him generously before he opens the books. (−15 gold)',
-        description: 'A man who has been well-fed is a more forgiving assessor. An investment.',
+        description: 'Good hospitality still requires a good host. A well-fed man is more forgiving — if the evening is well-spent.',
         consequences: [
-          { type: 'modify_resource', target: 'gold',    value: -15 },
-          { type: 'modify_standing', target: 'company', value: 8  },
+          { type: 'modify_resource', target: 'gold', value: -15 },
         ],
+        skillCheck: {
+          skill: 'diplomacy',
+          difficulty: 35,
+          actorSelection: 'best_council',
+          attemptLabel: 'Host the inspector',
+        },
+        successText: 'A fine evening. He is expansive by the second glass and by the third he is defending the settlement to an imaginary critic. His report will be generous.',
+        failureText: 'He eats well and thanks you sincerely. He is a professional. The hospitality makes him friendly, not pliable.',
+        onSuccess: [{ type: 'modify_standing', target: 'company', value: 12 }],
+        onFailure:  [{ type: 'modify_standing', target: 'company', value: 5  }],
       },
     ],
   },
@@ -601,10 +703,18 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       {
         id: 'accept_supervised',
         label: 'Accept, but require your healer to oversee her methods.',
-        description: 'A cautious compromise. She accepts the condition without warmth.',
-        consequences: [
-          { type: 'modify_resource', target: 'medicine', value: 2 },
-        ],
+        description: 'A cautious compromise. How much benefit it yields depends on how lightly the oversight sits.',
+        consequences: [],
+        skillCheck: {
+          skill: 'plants',
+          difficulty: 35,
+          actorSelection: 'best_council',
+          attemptLabel: 'Oversee the arrangement',
+        },
+        successText: 'The oversight is handled with a light hand. Your healer steps back far enough to let her work, close enough to learn. Births in this settlement will be safer.',
+        failureText: 'The supervision creates more barrier than bridge. Knowledge passes, but slowly, through the friction of mistrust.',
+        onSuccess: [{ type: 'modify_resource', target: 'medicine', value: 5 }],
+        onFailure:  [{ type: 'modify_resource', target: 'medicine', value: 1 }],
       },
       {
         id: 'decline',

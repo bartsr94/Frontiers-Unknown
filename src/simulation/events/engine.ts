@@ -7,6 +7,8 @@
  * `src/simulation/events/definitions/`.
  */
 
+import type { SkillId, DerivedSkillId } from '../population/person';
+
 // ─── Consequence Types ───────────────────────────────────────────────────────
 
 /** All possible state changes an event choice can produce. */
@@ -25,7 +27,9 @@ export type ConsequenceType =
   | 'kill_person'
   | 'start_pregnancy'
   /** Immediately queues another named event to fire next. */
-  | 'trigger_event';
+  | 'trigger_event'
+  /** Schedules a deferred follow-up event to fire after N turns. `target` = eventId, `value` = turns to wait. */
+  | 'queue_deferred_event';
 
 // ─── Event Category ──────────────────────────────────────────────────────────
 
@@ -112,6 +116,63 @@ export interface ActorRequirement {
   criteria: Record<string, unknown>;
 }
 
+// ─── Skill Check Interfaces ──────────────────────────────────────────────────
+
+/**
+ * Defines the skill-based resolution attached to an EventChoice.
+ * The resolver finds the best actor, compares their score to the difficulty,
+ * and routes to `onSuccess` or `onFailure` consequences accordingly.
+ */
+export interface SkillCheck {
+  /** Which base or derived skill is tested. */
+  skill: SkillId | DerivedSkillId;
+  /**
+   * Target difficulty (1–100). Actor's score is compared directly:
+   *   score >= difficulty  → success
+   *   score <  difficulty  → failure
+   * Reference: Fair 15–25 · Good 26–40 · VG 41–55 · Ex 56–72 · Rn 73–85 · Hr 86+
+   */
+  difficulty: number;
+  /**
+   * How the actor is selected:
+   * - `'best_council'`     — highest scorer among current council members (default)
+   * - `'best_settlement'`  — highest scorer among all living settlers
+   * - `'actor_slot'`       — uses the person bound to the named actorSlot
+   */
+  actorSelection: 'best_council' | 'best_settlement' | 'actor_slot';
+  /** Required when actorSelection is 'actor_slot'. Names the ActorRequirement slot. */
+  actorSlot?: string;
+  /** Optional narrative intro shown on the skill-check result screen. */
+  attemptLabel?: string;
+}
+
+/** The outcome of a resolved skill check. Stored in EventRecord for display. */
+export interface SkillCheckResult {
+  actorId: string;
+  /** Cached full name — preserved even if actor later dies. */
+  actorName: string;
+  skill: SkillId | DerivedSkillId;
+  actorScore: number;
+  difficulty: number;
+  passed: boolean;
+}
+
+/**
+ * An event scheduled to fire at a future turn as the resolution of an
+ * earlier player choice — the chain / deferred event mechanism.
+ */
+export interface DeferredEventEntry {
+  /** The event ID to fire when scheduledTurn is reached. */
+  eventId: string;
+  /** The turn number on which this event enters the pending queue. */
+  scheduledTurn: number;
+  /**
+   * Pass-through data from the original choice context.
+   * Common keys: actorId, originEventId, originChoiceId.
+   */
+  context: Record<string, unknown>;
+}
+
 // ─── Event Choice ─────────────────────────────────────────────────────────────
 
 /** A single player choice presented on the event card. */
@@ -127,13 +188,43 @@ export interface EventChoice {
    * is unavailable (greyed out or hidden).
    */
   requirements?: ChoiceRequirement[];
-  /** All state mutations applied when the player selects this choice. */
+  /**
+   * Consequences that always apply regardless of skill check outcome.
+   * If a skillCheck is present, these fire first; then onSuccess or onFailure.
+   */
   consequences: EventConsequence[];
   /**
-   * If set, this event ID is queued immediately after this choice's consequences
-   * are applied — creating an event chain.
+   * If set, this event ID is queued immediately after consequences are applied.
+   * Mutually exclusive with deferredEventId.
    */
   followUpEventId?: string;
+
+  // ── Skill-Check Resolution ────────────────────────────────────────────────
+  /** Optional skill check. When present, the resolver routes through onSuccess/onFailure. */
+  skillCheck?: SkillCheck;
+  /** Consequences applied when the skill check passes. */
+  onSuccess?: EventConsequence[];
+  /** Consequences applied when the skill check fails. */
+  onFailure?: EventConsequence[];
+
+  // ── Chain / Deferred Resolution ──────────────────────────────────────────
+  /**
+   * If set, schedules this event ID to fire after `deferredTurns` turns.
+   * The outcome is not shown immediately — the player sees a pending notice
+   * and the resolution event fires later in the event phase.
+   * Mutually exclusive with followUpEventId.
+   */
+  deferredEventId?: string;
+  /** Number of turns to wait before the deferred event fires. Default: 4. */
+  deferredTurns?: number;
+
+  // ── Outcome Narrative Text ────────────────────────────────────────────────
+  /** Narrative shown on the outcome screen after a successful skill check. */
+  successText?: string;
+  /** Narrative shown on the outcome screen after a failed skill check. */
+  failureText?: string;
+  /** Narrative shown on the pending screen when outcome is deferred. */
+  pendingText?: string;
 }
 
 // ─── Event Consequence ────────────────────────────────────────────────────────
@@ -200,4 +291,9 @@ export interface GameEvent {
    * people and binds them to template variables before displaying the event.
    */
   actorRequirements?: ActorRequirement[];
+  /**
+   * If true, this event can only fire from the deferred queue — it is never
+   * eligible for normal deck draws. Used for chain-event resolution events.
+   */
+  isDeferredOutcome?: boolean;
 }

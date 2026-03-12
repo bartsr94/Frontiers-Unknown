@@ -10,10 +10,11 @@
  */
 
 import type { Person, Heritage, EthnicGroup, ReligionId, LanguageId } from '../population/person';
-import type { GameEvent } from '../events/engine';
+import type { GameEvent, SkillCheckResult, DeferredEventEntry } from '../events/engine';
 
 // Re-export shared identity types so consumers only need one import path.
 export type { EthnicGroup, ReligionId, LanguageId, CultureId } from '../population/person';
+export type { SkillCheckResult, DeferredEventEntry } from '../events/engine';
 
 // ─── Economy ───────────────────────────────────────────────────────────────────
 
@@ -284,6 +285,8 @@ export interface EventRecord {
   choiceId: string;
   /** IDs of all people involved as actors or affected targets. */
   involvedPersonIds: string[];
+  /** Populated when the choice included a skill check. Used by the outcome screen. */
+  skillCheckResult?: SkillCheckResult;
 }
 
 // ─── Game Configuration ───────────────────────────────────────────────────────
@@ -369,6 +372,13 @@ export interface GameState {
    * Capped at 7. Players assign and remove members via the Settlers view.
    */
   councilMemberIds: string[];
+
+  /**
+   * Events scheduled to fire at a future turn as the resolution of an earlier
+   * player choice. Checked every dawn and prepended to pendingEvents when due.
+   * Plain array — JSON-safe, no Map serialisation needed.
+   */
+  deferredEvents: DeferredEventEntry[];
 
   /** Immutable configuration from game start. */
   config: GameConfig;

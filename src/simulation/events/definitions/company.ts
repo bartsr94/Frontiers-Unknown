@@ -56,8 +56,18 @@ export const COMPANY_EVENTS: GameEvent[] = [
       {
         id: 'confident_reply',
         label: "Send back a confident response: the Company won't be disappointed.",
-        description: 'Bold words. Now make good on them.',
-        consequences: [{ type: 'modify_standing', target: 'company', value: 5 }],
+        description: 'Bold words. How well they land depends on the pen behind them.',
+        consequences: [],
+        skillCheck: {
+          skill: 'leadership',
+          difficulty: 35,
+          actorSelection: 'best_council',
+          attemptLabel: 'Write the reply',
+        },
+        successText: 'The letter strikes the right tone — specific, direct, and confident without grandstanding. The Company will read this as the reply of a capable expedition leader.',
+        failureText: 'The confidence sounds better in your head than on parchment. The Company notes it without particular warmth.',
+        onSuccess: [{ type: 'modify_standing', target: 'company', value: 8 }],
+        onFailure:  [{ type: 'modify_standing', target: 'company', value: 3 }],
       },
       {
         id: 'cautious_reply',

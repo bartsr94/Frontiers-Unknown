@@ -9,7 +9,7 @@
  * when they need filtering and drawing functionality.
  */
 
-import type { GameEvent, EventPrerequisite } from './engine';
+import type { GameEvent, EventPrerequisite, DeferredEventEntry } from './engine';
 import type { GameState, ResourceType } from '../turn/game-state';
 import type { SeededRNG } from '../../utils/rng';
 
@@ -86,6 +86,10 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
  *  3. All prerequisites must be satisfied.
  */
 export function isEventEligible(event: GameEvent, state: GameState): boolean {
+  // 0. Deferred-outcome events are only surfaced by drainDeferredEvents,
+  //    never drawn from the normal pool.
+  if (event.isDeferredOutcome) return false;
+
   // 1. Unique events fire at most once per game.
   if (event.isUnique && state.eventHistory.some(r => r.eventId === event.id)) {
     return false;
@@ -153,4 +157,40 @@ export function drawEvents(eligible: GameEvent[], count: number, rng: SeededRNG)
   }
 
   return drawn;
+}
+
+// ─── Deferred event helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Partitions the deferred event list into entries that are due this turn
+ * and those that should remain pending.
+ *
+ * @param state - Current game state.
+ * @returns `due` contains events whose scheduledTurn ≤ state.turnNumber;
+ *          `remaining` will be written back to state.deferredEvents.
+ */
+export function drainDeferredEvents(
+  state: GameState,
+): { due: DeferredEventEntry[]; remaining: DeferredEventEntry[] } {
+  const due: DeferredEventEntry[] = [];
+  const remaining: DeferredEventEntry[] = [];
+  for (const entry of state.deferredEvents ?? []) {
+    if (entry.scheduledTurn <= state.turnNumber) {
+      due.push(entry);
+    } else {
+      remaining.push(entry);
+    }
+  }
+  return { due, remaining };
+}
+
+/**
+ * Looks up a single event by ID from the master deck.
+ * Used to surface deferred events that are now due.
+ *
+ * @param id - The event ID to find.
+ * @returns The matching `GameEvent`, or `undefined` if not found.
+ */
+export function getEventById(id: string): GameEvent | undefined {
+  return ALL_EVENTS.find(e => e.id === id);
 }

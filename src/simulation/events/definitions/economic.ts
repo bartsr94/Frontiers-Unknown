@@ -31,11 +31,20 @@ export const ECONOMIC_EVENTS: GameEvent[] = [
       {
         id: 'trade_gold',
         label: 'Pay him 5 gold. Keep the food stores intact.',
-        description: 'Gold is easier to replenish than a winter food reserve.',
+        description: 'Gold is easier to replenish than a winter food reserve. Whether you get his best prices is another matter.',
         consequences: [
           { type: 'modify_resource', target: 'gold', value: -5 },
-          { type: 'modify_resource', target: 'goods', value: 3 },
         ],
+        skillCheck: {
+          skill: 'bargaining',
+          difficulty: 45,
+          actorSelection: 'best_council',
+          attemptLabel: 'Negotiate',
+        },
+        successText: 'A sharp eye and a harder expression get you the better end of the deal. He throws in an extra crate.',
+        failureText: 'The merchant is pleasant but unmovable. You take what is on offer.',
+        onSuccess: [{ type: 'modify_resource', target: 'goods', value: 5 }],
+        onFailure:  [{ type: 'modify_resource', target: 'goods', value: 3 }],
       },
       {
         id: 'decline',
@@ -63,8 +72,18 @@ export const ECONOMIC_EVENTS: GameEvent[] = [
       {
         id: 'harvest_now',
         label: 'Send a crew out immediately.',
-        description: 'Strike while the opportunity is there. Lumber is always useful.',
-        consequences: [{ type: 'modify_resource', target: 'lumber', value: 10 }],
+        description: 'Strike while the opportunity is there. Good judgment on the timber maximises the yield.',
+        consequences: [],
+        skillCheck: {
+          skill: 'plants',
+          difficulty: 28,
+          actorSelection: 'best_council',
+          attemptLabel: 'Select and fell the timber',
+        },
+        successText: 'Good judgment on which trees to take and how to fell them efficiently. The haul is better than expected.',
+        failureText: 'The crew works hard but the selection could have been sharper. Decent timber in decent quantity.',
+        onSuccess: [{ type: 'modify_resource', target: 'lumber', value: 12 }],
+        onFailure:  [{ type: 'modify_resource', target: 'lumber', value: 7  }],
       },
       {
         id: 'note_and_wait',

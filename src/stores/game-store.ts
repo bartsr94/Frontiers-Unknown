@@ -14,8 +14,9 @@ import { create } from 'zustand';
 import { createPerson } from '../simulation/population/person';
 import { processDawn, processDusk } from '../simulation/turn/turn-processor';
 import { addResourceStocks, clampResourceStock, emptyResourceStock } from '../simulation/economy/resources';
-import { filterEligibleEvents, drawEvents, ALL_EVENTS } from '../simulation/events/event-filter';
+import { filterEligibleEvents, drawEvents, ALL_EVENTS, drainDeferredEvents, getEventById } from '../simulation/events/event-filter';
 import { applyEventChoice } from '../simulation/events/resolver';
+import type { ApplyChoiceResult } from '../simulation/events/resolver';
 import { createRNG } from '../utils/rng';
 import { createTribe, TRIBE_PRESETS } from '../simulation/world/tribes';
 import { canMarry, performMarriage } from '../simulation/population/marriage';
@@ -32,7 +33,7 @@ import type {
 } from '../simulation/turn/game-state';
 import type { Person, WorkRole, CultureId } from '../simulation/population/person';
 import { ETHNIC_GROUP_PRIMARY_LANGUAGE, ETHNIC_GROUP_CULTURE } from '../simulation/population/person';
-import type { GameEvent } from '../simulation/events/engine';
+import type { GameEvent, SkillCheckResult } from '../simulation/events/engine';
 
 // ─── Stub types (Phase 3) ────────────────────────────────────────────────────
 
@@ -49,8 +50,10 @@ export interface GameStore {
   gameState: GameState | null;
   currentPhase: TurnPhase;
   pendingEvents: GameEvent[];
-  currentEventIndex: number;
-
+  currentEventIndex: number;  /** The skill check result from the last resolved event choice. Cleared on next choice. */
+  lastSkillCheckResult: SkillCheckResult | null;
+  /** The full result object from the last resolved event choice. */
+  lastChoiceResult: ApplyChoiceResult | null;
   // ── Game lifecycle ────────────────────────────────────────────────────────
   newGame: (config: GameConfig, settlementName: string) => void;
   loadGame: (saveData: string) => void;
@@ -160,6 +163,7 @@ function deserializeGameState(json: string): GameState {
       religions: new Map(s.culture.religions as [import('../simulation/population/person').ReligionId, number][]),
     },
     eventCooldowns: new Map(s.eventCooldowns),
+    deferredEvents: s.deferredEvents ?? [],
   };
 }
 
@@ -419,6 +423,7 @@ function createInitialState(config: GameConfig, settlementName: string): GameSta
     eventCooldowns: new Map(),
     pendingEvents: [],
     councilMemberIds: seedCouncil(people),
+    deferredEvents: [],
     config,
   };
 }
@@ -444,6 +449,8 @@ export const useGameStore = create<GameStore>((set, get) => {
     currentPhase: 'idle',
     pendingEvents: [],
     currentEventIndex: 0,
+    lastSkillCheckResult: null,
+    lastChoiceResult: null,
 
     // ── Game lifecycle ────────────────────────────────────────────────────
     newGame(config, settlementName) {
@@ -511,15 +518,30 @@ export const useGameStore = create<GameStore>((set, get) => {
         ],
       };
 
+      // Drain any deferred events whose turn has arrived, and prepend them
+      // to the normal draw so they are resolved first.
+      const { due: dueDeferred, remaining: remainingDeferred } = drainDeferredEvents(postDawnState);
+      const deferredGameEvents = dueDeferred
+        .map(entry => getEventById(entry.eventId))
+        .filter((e): e is GameEvent => e !== undefined);
+
+      const stateAfterDrain: GameState = {
+        ...postDawnState,
+        deferredEvents: remainingDeferred,
+      };
+
       // Draw 1–3 events from the eligible pool.
-      const eligible  = filterEligibleEvents(ALL_EVENTS, postDawnState);
+      const eligible  = filterEligibleEvents(ALL_EVENTS, stateAfterDrain);
       const drawCount = 1 + rng.nextInt(0, 2);
       const drawn     = drawEvents(eligible, drawCount, rng);
 
+      // Deferred events are prepended so they resolve before new draws.
+      const allPending = [...deferredGameEvents, ...drawn];
+
       set({
-        gameState: postDawnState,
-        currentPhase: drawn.length > 0 ? 'event' : 'management',
-        pendingEvents: drawn,
+        gameState: stateAfterDrain,
+        currentPhase: allPending.length > 0 ? 'event' : 'management',
+        pendingEvents: allPending,
         currentEventIndex: 0,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         _pendingProduction: dawnResult.production as any,
@@ -535,8 +557,24 @@ export const useGameStore = create<GameStore>((set, get) => {
       const event = pendingEvents.find(e => e.id === eventId);
       if (!event) return;
 
-      const updatedState = applyEventChoice(event, choiceId, gameState);
-      set({ gameState: updatedState });
+      const result = applyEventChoice(event, choiceId, gameState);
+
+      // If the choice produced a follow-up event, insert it next in the queue.
+      const updatedPending = result.followUpEventId
+        ? (() => {
+            const followUp = getEventById(result.followUpEventId);
+            const front = followUp ? [followUp] : [];
+            const remaining = pendingEvents.filter(e => e.id !== eventId);
+            return [...front, ...remaining];
+          })()
+        : pendingEvents;
+
+      set({
+        gameState: result.state,
+        pendingEvents: updatedPending,
+        lastSkillCheckResult: result.skillCheckResult ?? null,
+        lastChoiceResult: result,
+      });
     },
 
     nextEvent() {

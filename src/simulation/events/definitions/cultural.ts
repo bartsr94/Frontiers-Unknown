@@ -38,14 +38,21 @@ export const CULTURAL_EVENTS: GameEvent[] = [
       {
         id: 'receive_gifts',
         label: 'Receive their gifts and invite them to eat with you.',
-        description:
-          'Hospitality costs little and earns a great deal. The elder ' +
-          'approves visibly; the riders relax.',
+        description: 'Hospitality costs little and earns a great deal — if it is given well.',
         consequences: [
-          { type: 'modify_resource', target: 'food', value: 6 },
+          { type: 'modify_resource', target: 'food',  value: 6 },
           { type: 'modify_resource', target: 'goods', value: 3 },
-          { type: 'modify_disposition', target: 'deep_canopy_sisters', value: 8 },
         ],
+        skillCheck: {
+          skill: 'diplomacy',
+          difficulty: 38,
+          actorSelection: 'best_council',
+          attemptLabel: 'Host the envoy',
+        },
+        successText: 'Something reaches across the language gap. The elder pauses before leaving and speaks a phrase the interpreter renders as "not what we feared." The riders relax.',
+        failureText: 'The hospitality is genuine but the conversation stumbles at every turn. They eat, they nod, they leave. A beginning, of a kind.',
+        onSuccess: [{ type: 'modify_disposition', target: 'deep_canopy_sisters', value: 10 }],
+        onFailure:  [{ type: 'modify_disposition', target: 'deep_canopy_sisters', value: 4  }],
       },
       {
         id: 'formal_meeting',
@@ -273,11 +280,24 @@ export const CULTURAL_EVENTS: GameEvent[] = [
       {
         id: 'formal_rule',
         label: 'Establish a rule: no religious debate in common spaces.',
-        description:
-          'Both sides accept it as a neutral measure. The woman nods once, ' +
-          'which feels like approval.',
+        description: 'The measure is neutral in principle. Whether both sides read it that way depends on how it is announced.',
         consequences: [
           { type: 'modify_standing', target: 'company', value: 1 },
+        ],
+        skillCheck: {
+          skill: 'leadership',
+          difficulty: 36,
+          actorSelection: 'best_council',
+          attemptLabel: 'Announce the rule',
+        },
+        successText: 'The rule is announced with exactly the right weight — firm enough to be respected, impartial enough to be fair. Both sides accept it. The fire is quieter for a week.',
+        failureText: 'The rule is clear, but the delivery reads as a rebuke directed at one side. The peace holds. The perception does not.',
+        onSuccess: [
+          { type: 'modify_opinion', target: 'sauromatian_women',    value: 4 },
+          { type: 'modify_opinion', target: 'traditional_imanians', value: 2 },
+        ],
+        onFailure: [
+          { type: 'modify_opinion', target: 'sauromatian_women', value: -2 },
         ],
       },
     ],
@@ -306,12 +326,22 @@ export const CULTURAL_EVENTS: GameEvent[] = [
       {
         id: 'adopt_technique',
         label: 'Publicly acknowledge the technique and have her teach it to the team.',
-        description:
-          'Practical and respectful. The team is a little sheepish, then a ' +
-          'little grateful.',
-        consequences: [
+        description: 'Practical and respectful. How well the integration lands depends on how it is handled.',
+        consequences: [],
+        skillCheck: {
+          skill: 'custom',
+          difficulty: 36,
+          actorSelection: 'best_council',
+          attemptLabel: 'Integrate the technique',
+        },
+        successText: 'The technique is absorbed with respect and reciprocity. The team is better for it, and she knows it was received properly.',
+        failureText: 'The technique is adopted in pieces. Some men learn it well; others default to old habits. A partial improvement all the same.',
+        onSuccess: [
           { type: 'modify_resource', target: 'goods', value: 4 },
-          { type: 'modify_opinion', target: 'sauromatian_women', value: 6 },
+          { type: 'modify_opinion',  target: 'sauromatian_women', value: 6 },
+        ],
+        onFailure: [
+          { type: 'modify_resource', target: 'goods', value: 2 },
         ],
       },
       {
@@ -359,13 +389,20 @@ export const CULTURAL_EVENTS: GameEvent[] = [
       {
         id: 'formalise',
         label: 'Commission her as the settlement translator and language tutor.',
-        description:
-          'Gives her a recognised role. The Company may query it, ' +
-          'but the benefit is real.',
+        description: 'Gives her a recognised role. Whether the Company finds the arrangement defensible depends on how it is framed.',
         consequences: [
           { type: 'modify_opinion', target: 'sauromatian_women', value: 8 },
-          { type: 'modify_standing', target: 'company', value: -1 },
         ],
+        skillCheck: {
+          skill: 'custom',
+          difficulty: 35,
+          actorSelection: 'best_council',
+          attemptLabel: 'Establish the role',
+        },
+        successText: 'The arrangement finds a form the Company can live with. She gets a recognised role; the men get a teacher; the ledger shows a legitimate investment.',
+        failureText: 'The formalisation looks too informal. A Company note arrives shortly after: the arrangement is flagged for review.',
+        onSuccess: [],
+        onFailure:  [{ type: 'modify_standing', target: 'company', value: -2 }],
       },
       {
         id: 'leave_informal',
@@ -462,12 +499,23 @@ export const CULTURAL_EVENTS: GameEvent[] = [
       {
         id: 'acknowledge_concern',
         label: 'Thank him and acknowledge the situation has evolved. Be direct about intent.',
-        description:
-          'He appreciates honesty even when he does not like the answer. ' +
-          'He nods and leaves. He will still be watching.',
+        description: 'He appreciates honesty, even when he does not like the answer. The question is whether the answer is delivered well.',
         consequences: [
-          { type: 'modify_opinion', target: 'traditional_imanians', value: 3 },
           { type: 'modify_standing', target: 'company', value: 1 },
+        ],
+        skillCheck: {
+          skill: 'leadership',
+          difficulty: 40,
+          actorSelection: 'best_council',
+          attemptLabel: 'Address the concern',
+        },
+        successText: 'You navigate the meeting with authority and honesty. He hears something that satisfies his need to be taken seriously. He nods and leaves — still watching, but quieter.',
+        failureText: 'The acknowledgement reads as hedging. He leaves with his concerns received but not addressed. That is almost worse than being dismissed.',
+        onSuccess: [
+          { type: 'modify_opinion', target: 'traditional_imanians', value: 5 },
+        ],
+        onFailure: [
+          { type: 'modify_opinion', target: 'traditional_imanians', value: -2 },
         ],
       },
       {
@@ -571,14 +619,21 @@ export const CULTURAL_EVENTS: GameEvent[] = [
       {
         id: 'admit_as_observers',
         label: 'Admit them as observers. They have a stake in what is decided.',
-        description:
-          'Sets a precedent. The Company will have opinions eventually. ' +
-          'The women listen without speaking, which proves harder than anyone expected.',
+        description: 'Sets a precedent. How well the session is managed determines whether the precedent feels reasonable or reckless.',
         consequences: [
-          { type: 'modify_opinion', target: 'sauromatian_women', value: 10 },
           { type: 'modify_opinion', target: 'traditional_imanians', value: -5 },
           { type: 'modify_standing', target: 'company', value: -2 },
         ],
+        skillCheck: {
+          skill: 'leadership',
+          difficulty: 45,
+          actorSelection: 'best_council',
+          attemptLabel: 'Run the session',
+        },
+        successText: 'The session unfolds with more dignity than many expected. The women observe in silence. By the end the precedent feels like a reasonable step rather than a dangerous one.',
+        failureText: 'The session lurches. Two men walk out. One woman is asked to leave after speaking without permission. The right idea, badly executed.',
+        onSuccess: [{ type: 'modify_opinion', target: 'sauromatian_women', value: 12 }],
+        onFailure:  [{ type: 'modify_opinion', target: 'sauromatian_women', value: 3  }],
       },
       {
         id: 'defer',
@@ -687,13 +742,20 @@ export const CULTURAL_EVENTS: GameEvent[] = [
       {
         id: 'embrace_wheel',
         label: 'Let the Sauromatian women explain Kethara\'s Bargain to those who will listen.',
-        description:
-          'You are not endorsing theology. You are letting people understand ' +
-          'their own reality.',
+        description: 'A delicate thing — opening a theological door in a settlement that has mostly kept them closed.',
         consequences: [
-          { type: 'modify_opinion', target: 'sauromatian_women', value: 8 },
           { type: 'modify_opinion', target: 'traditional_imanians', value: -4 },
         ],
+        skillCheck: {
+          skill: 'custom',
+          difficulty: 35,
+          actorSelection: 'best_council',
+          attemptLabel: 'Create the space',
+        },
+        successText: 'The conversation that follows is more thoughtful than expected. Some men listen with genuine curiosity. The arithmetic of daughters and sacred bargains becomes something shared rather than something foreign.',
+        failureText: 'The discussion opens badly — too many objections, too little patience. The women explain as best they can. Some men remain closed to it.',
+        onSuccess: [{ type: 'modify_opinion', target: 'sauromatian_women', value: 10 }],
+        onFailure:  [{ type: 'modify_opinion', target: 'sauromatian_women', value: 4  }],
       },
       {
         id: 'record_only',
@@ -811,12 +873,18 @@ export const CULTURAL_EVENTS: GameEvent[] = [
       {
         id: 'omit',
         label: 'Report on workforce metrics only and omit the women from the count.',
-        description:
-          'Simpler now. Creates a discrepancy when a Company inspector eventually arrives.',
-        consequences: [
-          { type: 'modify_standing', target: 'company', value: 2 },
-          { type: 'modify_standing', target: 'company', value: -5 },
-        ],
+        description: 'Simpler now. Whether the omission holds under scrutiny is another matter.',
+        consequences: [],
+        skillCheck: {
+          skill: 'deception',
+          difficulty: 42,
+          actorSelection: 'best_council',
+          attemptLabel: 'Craft the numbers',
+        },
+        successText: 'The metrics read clean, the women do not appear in the headcount, and the Secretary\'s questions receive brisk, technical answers. For now, it holds.',
+        failureText: 'The numbers do not quite add up. The Secretary is a careful reader. A follow-up letter arrives three weeks later with more specific questions.',
+        onSuccess: [{ type: 'modify_standing', target: 'company', value: 2  }],
+        onFailure:  [{ type: 'modify_standing', target: 'company', value: -4 }],
       },
     ],
   },
@@ -841,12 +909,25 @@ export const CULTURAL_EVENTS: GameEvent[] = [
       {
         id: 'support',
         label: 'Give him your backing and attend the first session yourself.',
-        description:
-          'Your presence makes it serious. People come out of obligation and ' +
-          'stay out of interest.',
+        description: 'Your presence makes it serious — or makes it a performance. The outcome depends on how you read the room.',
         consequences: [
-          { type: 'modify_opinion', target: 'sauromatian_women', value: 7 },
-          { type: 'modify_opinion', target: 'traditional_imanians', value: 4 },
+          { type: 'modify_opinion', target: 'sauromatian_women',    value: 5 },
+          { type: 'modify_opinion', target: 'traditional_imanians', value: 3 },
+        ],
+        skillCheck: {
+          skill: 'diplomacy',
+          difficulty: 35,
+          actorSelection: 'best_council',
+          attemptLabel: 'Facilitate the session',
+        },
+        successText: 'Your presence sets a tone of genuine inquiry. People say things they did not expect to, and hear things they did not expect to. The broker is quietly pleased.',
+        failureText: 'Your presence turns the session into a performance. People say the right things toward you rather than to each other. The broker adjusts.',
+        onSuccess: [
+          { type: 'modify_opinion', target: 'sauromatian_women',    value: 3 },
+          { type: 'modify_opinion', target: 'traditional_imanians', value: 2 },
+        ],
+        onFailure: [
+          { type: 'modify_opinion', target: 'traditional_imanians', value: -2 },
         ],
       },
       {

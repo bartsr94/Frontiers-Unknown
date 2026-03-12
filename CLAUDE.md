@@ -11,7 +11,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 |-------|--------|-------|
 | Phase 1 — Foundation | ✅ Complete | 13/13 steps done, 13/13 tests pass, zero compile errors |
 | Phase 2 — Genetics Engine | ✅ Complete | All 12 steps done, 139/139 tests pass, zero compile errors |
-| Phase 3 — Living Settlement | 🔄 In Progress | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ · Skills system ✅ |
+| Phase 3 — Living Settlement | 🔄 In Progress | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ · Skills system ✅ · Skilled event resolution ✅ |
 | Phase 4 — Polish | 🔲 Not started | — |
 
 ---
@@ -20,7 +20,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 
 ```bash
 npm run dev          # Vite dev server → http://localhost:5173
-npm test             # Run Vitest (284 passing across rng, inheritance, gender-ratio, fertility, event-filter, demographics, language-acquisition, culture, marriage, skills)
+npm test             # Run Vitest (290 passing across rng, inheritance, gender-ratio, fertility, event-filter, demographics, language-acquisition, culture, marriage, skills, resolver)
 npx tsc --noEmit     # Type-check without building
 ```
 
@@ -59,7 +59,7 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/turn/season.ts` | `SEASON_MODIFIERS` — food/goods production multipliers per season |
 | `src/simulation/events/engine.ts` | Event/choice/consequence **type definitions only** (no logic) |
 | `src/simulation/events/event-filter.ts` | `ALL_EVENTS`, `filterEligibleEvents()`, `drawEvents()` |
-| `src/simulation/events/resolver.ts` | `applyEventChoice()` — applies consequences to `GameState` |
+| `src/simulation/events/resolver.ts` | `applyEventChoice()` returning `ApplyChoiceResult`; `resolveSkillCheck()` helper; `ApplyChoiceResult` interface |
 | `src/simulation/events/definitions/` | 28 events: company, diplomacy, domestic, economic, environmental + 18 cultural |
 | `src/simulation/economy/resources.ts` | Production/consumption math with seasonal modifiers |
 | `src/simulation/genetics/traits.ts` | Trait type definitions + `IMANIAN_TRAITS` constant |
@@ -278,4 +278,5 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/population/culture.test.ts` — 21/21 passing (deriveCulture, processCulturalDrift, buildSettlementCultureDistribution, computeCulturalBlend)
 - `tests/culture/language-acquisition.test.ts` — 34/34 passing
 - `tests/population/skills.test.ts` — 36/36 passing (getSkillRating, getDerivedSkill, generatePersonSkills, createPerson integration)
-- **Total: 284/284 passing**
+- `tests/events/resolver.test.ts` — 20/20 passing (14 original + 6 new skill-check / deferred-event tests)
+- **Total: 290/290 passing**

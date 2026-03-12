@@ -30,9 +30,20 @@ export const DIPLOMACY_EVENTS: GameEvent[] = [
         id: 'send_greeting',
         label: 'Send a man to the bank with open hands and a greeting.',
         description:
-          "The Riverfolk have a reputation for trade over war. The man returns with a " +
-          "small bundle of smoked fish left at the water's edge — a quiet first answer.",
-        consequences: [{ type: 'modify_resource', target: 'food', value: 5 }],
+          'Reaching across the water is a gesture. Whether it is answered depends on how well it is read.',
+        consequences: [],
+        skillCheck: {
+          skill: 'diplomacy',
+          difficulty: 45,
+          actorSelection: 'best_council',
+          attemptLabel: 'Make contact',
+        },
+        successText:
+          'The man returns with a small bundle of smoked fish left at the water\'s edge — a quiet first answer. The observers exchange words among themselves before withdrawing.',
+        failureText:
+          'The man approaches with good intentions, but something in the manner or the greeting does not land. The observers watch without response, then withdraw across the water.',
+        onSuccess: [{ type: 'modify_resource', target: 'food', value: 5 }],
+        onFailure:  [],
       },
       {
         id: 'observe_mutually',
