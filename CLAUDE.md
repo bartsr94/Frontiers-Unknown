@@ -11,9 +11,62 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 |-------|--------|-------|
 | Phase 1 — Foundation | ✅ Complete | 13/13 steps done, 13/13 tests pass, zero compile errors |
 | Phase 2 — Genetics Engine | ✅ Complete | All 12 steps done, 139/139 tests pass, zero compile errors |
-| Phase 3 — Living Settlement | 🔄 In Progress | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ · Skills system ✅ · Skilled event resolution ✅ · Council voice system ✅ · Character portraits ✅ |
+| Phase 3 — Living Settlement | 🔄 In Progress | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ · Skills system ✅ · Skilled event resolution ✅ · Council voice system ✅ · Portrait system ✅ |
 | Phase 4 — Polish | 🔲 Not started | — |
+---
 
+## Portrait System
+
+### File Naming Convention
+
+```
+public/portraits/{sex}/{category}/{category}_{sex_abbr}_{stage}_{nnn}.png
+```
+
+Examples:
+```
+public/portraits/male/imanian/imanian_m_adult_001.png
+public/portraits/female/kiswani/kiswani_f_young_adult_002.png
+public/portraits/male/mixed_imanian_kiswani/mixed_imanian_kiswani_m_child_003.png
+```
+
+### Portrait Categories
+
+| `PortraitCategory` | Bloodline rule |
+|--------------------|---------------|
+| `imanian` | imanian fraction ≥ 75% |
+| `kiswani` | kiswani sub-groups combined ≥ 75% |
+| `hanjoda` | hanjoda sub-groups combined ≥ 75% |
+| `mixed_imanian_kiswani` | imanian + kiswani ≥ 80%, neither dominant |
+| `mixed_imanian_hanjoda` | imanian + hanjoda ≥ 80%, neither dominant |
+| `mixed_kiswani_hanjoda` | kiswani + hanjoda ≥ 80%, neither dominant |
+
+### Age Stages
+
+| Stage | Age range |
+|-------|-----------|
+| `child` | 0 – 13 |
+| `young_adult` | 14 – 29 |
+| `adult` | 30 – 54 |
+| `senior` | 55+ |
+
+### Stage Fallback Order
+
+If the exact age stage has no portraits yet, the resolver tries: `adult` → `young_adult` → `senior` → `child`. A single `adult` portrait therefore covers all ages until stage-specific art exists.
+
+### Expanding the Portrait Pool
+
+1. Drop the `.png` into `public/portraits/{sex}/{category}/`
+2. Increment the count for that slot in `PORTRAIT_REGISTRY` in `portrait-resolver.ts`
+3. No other code changes needed.
+
+### `portraitVariant` on Person
+
+- `portraitVariant: number` — 1-indexed, assigned once at `createPerson()` time, never changed
+- Assigned via `rng.nextInt(1, 3)` when RNG is available; defaults to `1` otherwise
+- Persists in the save file as a plain number — no special serialisation
+- Old saves default to `1` via the `?? 1` fallback in `deserializePerson()`
+- Clamped to the available count if the registry grows after a save was made
 ---
 
 ## Running the Project
@@ -77,7 +130,7 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/ui/layout/LeftNav.tsx` | Left nav with phase-aware End Turn / Confirm Turn button |
 | `src/ui/layout/BottomBar.tsx` | Full-width resource strip (food, cattle, goods, gold, lumber, stone, pop) |
 | `src/simulation/events/council-advice.ts` | Council voice engine: `VoiceArchetype`, `getVoiceArchetype`, `scoreChoiceForPerson`, `hashPersonEvent`, `generateAdvice` — pure logic, deterministic via djb2 hash |
-| `src/ui/components/portrait-resolver.ts` | `resolvePortraitSrc(person)` — maps dominant bloodline × sex to a `/portraits/…` static asset path |
+| `src/ui/components/portrait-resolver.ts` | `PortraitCategory`, `AgeStage`, `PORTRAIT_REGISTRY`, `getAgeStage()`, `getPortraitCategory()`, `resolvePortraitSrc(person)` — category × sex × age stage × variant → `/portraits/…` path; stage fallback: adult → young_adult → senior → child |
 | `src/ui/components/CouncilPortrait.tsx` | 40×50px portrait `<img>` with skin-tone swatch fallback |
 | `src/ui/components/AdviceBubble.tsx` | Italic speech bubble rendered above the selected adviser seat in CouncilFooter |
 | `src/ui/layout/CouncilFooter.tsx` | 7-seat Expedition Council row; portraits, click-to-select adviser, trait-driven `AdviceBubble` with per-(person × event) advice caching |
@@ -191,6 +244,7 @@ idle
 | ✅ 9 | Sauromatian founding women start with Tradetalk (fluency 0.3) | `src/stores/game-store.ts` | Complete |
 | ✅ 10 | Skills & experience tracking | `src/simulation/population/person.ts`, `src/ui/views/PersonDetail.tsx`, `src/ui/views/PeopleView.tsx` | Complete |
 | ✅ — | Council voice system & portraits | `src/simulation/events/council-advice.ts`, `src/ui/components/portrait-resolver.ts`, `src/ui/components/CouncilPortrait.tsx`, `src/ui/components/AdviceBubble.tsx`, `src/ui/layout/CouncilFooter.tsx` | Complete (bonus step) |
+| ✅ — | Portrait system (age stages, categories, registry) | `src/ui/components/portrait-resolver.ts`, `src/simulation/population/person.ts` | Complete (bonus step) |
 | 🔲 11 | Settlement buildings & upgrades | — | Planned |
 | 🔲 12 | Tribe relationship depth | — | Planned |
 

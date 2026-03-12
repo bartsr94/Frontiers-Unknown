@@ -137,6 +137,8 @@ function deserializePerson(s: SerialPerson): Person {
       culturalFluency: new Map(s.heritage.culturalFluency),
     },
     relationships: new Map(s.relationships),
+    // Old saves pre-dating the portrait system won't have this field; default to 1.
+    portraitVariant: s.portraitVariant ?? 1,
   };
 }
 

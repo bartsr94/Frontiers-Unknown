@@ -142,8 +142,21 @@ palusteria-game/
 │
 ├── public/
 │   └── portraits/                      # Static portrait photo assets served by Vite
-│       ├── male/{group}/*.png
-│       └── female/{group}/*.png
+│       │                               # Naming: {category}_{sex_abbr}_{stage}_{nnn}.png
+│       ├── male/
+│       │   ├── imanian/                # imanian_m_{stage}_{nnn}.png
+│       │   ├── kiswani/                # kiswani_m_{stage}_{nnn}.png
+│       │   ├── hanjoda/
+│       │   ├── mixed_imanian_kiswani/
+│       │   ├── mixed_imanian_hanjoda/
+│       │   └── mixed_kiswani_hanjoda/
+│       └── female/
+│           ├── imanian/
+│           ├── kiswani/                # kiswani_f_{stage}_{nnn}.png
+│           ├── hanjoda/
+│           ├── mixed_imanian_kiswani/
+│           ├── mixed_imanian_hanjoda/
+│           └── mixed_kiswani_hanjoda/
 │
 └── tests/
     ├── genetics/
@@ -218,10 +231,11 @@ interface Person {
   heritage: Heritage;
   languages: LanguageFluency[];
   religion: ReligionId;
-  culturalIdentity: CultureId;
+  // NOTE: culturalIdentity accessed via heritage.primaryCulture
 
   traits: TraitId[];                 // 2–4 from trait-definitions.ts
   skills: PersonSkills;              // Base skill scores — integers 1–100
+  portraitVariant: number;           // 1-indexed; stable across life stages; assigned at birth
   
   spouseIds: string[];               // Supports polygamy
   parentIds: [string | null, string | null]; // [motherId, fatherId]

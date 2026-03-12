@@ -281,6 +281,11 @@ export function processPregnancies(
       }
     }
 
+    // Assign a stable portrait variant (1–3) randomly at birth. We consume one
+    // RNG call here rather than passing rng into createPerson, so newborns keep
+    // default skills (they can't work yet) and the RNG stream stays predictable.
+    const portraitVariant = rng.nextInt(1, 3);
+
     const child = createPerson({
       sex,
       age: 0,
@@ -292,6 +297,7 @@ export function processPregnancies(
       parentIds: [mother.id, father === mother ? null : father.id],
       socialStatus: 'settler',
       isPlayerControlled: false,
+      portraitVariant,
     });
 
     results.push({ motherId: mother.id, child, motherDied, motherHealthDelta });

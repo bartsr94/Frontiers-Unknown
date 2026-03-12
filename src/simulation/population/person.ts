@@ -436,6 +436,14 @@ export interface Person {
 
   /** Base skill scores (1–100 integers). Use getDerivedSkill() for composite scores. */
   skills: PersonSkills;
+
+  /**
+   * Stable portrait variant index (1-indexed). Assigned once at creation and never
+   * changed — ensures the same face is shown across all age stages throughout a
+   * person's lifetime. Clamped to the available count in PORTRAIT_REGISTRY when
+   * the registry grows after a save was made.
+   */
+  portraitVariant: number;
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
@@ -495,11 +503,15 @@ const DEFAULT_FEMALE_FERTILITY: FertilityProfile = {
  * const woman = createPerson({ firstName: 'Mira', familyName: 'Ashton', sex: 'female', age: 20 });
  * ```
  */
+/** Default number of portrait variants per slot at initial art scope. */
+const DEFAULT_VARIANT_COUNT = 3;
+
 export function createPerson(options: CreatePersonOptions = {}, rng?: SeededRNG): Person {
   const sex = options.sex ?? 'male';
   const defaultFertility = sex === 'female' ? DEFAULT_FEMALE_FERTILITY : DEFAULT_MALE_FERTILITY;
   const resolvedTraits = options.traits ?? [];
   const resolvedSkills = options.skills ?? (rng ? generatePersonSkills(resolvedTraits, rng) : DEFAULT_SKILLS);
+  const resolvedPortraitVariant = options.portraitVariant ?? (rng ? rng.nextInt(1, DEFAULT_VARIANT_COUNT) : 1);
 
   return {
     id: options.id ?? generateId(),
@@ -533,5 +545,6 @@ export function createPerson(options: CreatePersonOptions = {}, rng?: SeededRNG)
     isPlayerControlled: options.isPlayerControlled ?? false,
 
     skills: resolvedSkills,
+    portraitVariant: resolvedPortraitVariant,
   };
 }

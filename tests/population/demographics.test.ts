@@ -380,7 +380,12 @@ describe('birth — pregnancy resolution', () => {
     const birth = result.births[0]!;
     if (birth.motherSurvived) {
       const updatedMother = result.updatedPeople.get(woman.id);
-      expect(updatedMother?.health.pregnancy).toBeUndefined();
+      // The original resolved pregnancy (conceptionTurn: 0, dueDate: 1) must be gone.
+      // The mother may have conceived again in the same turn — that is expected behaviour.
+      const remainingPreg = updatedMother?.health.pregnancy;
+      const isOriginalPregStillPresent =
+        remainingPreg?.conceptionTurn === 0 && remainingPreg?.dueDate === 1;
+      expect(isOriginalPregStillPresent).toBe(false);
     }
   });
 
