@@ -310,7 +310,7 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
               {/* Primary culture — always shown first at full bar */}
               <div className="flex flex-col gap-1 mb-1">
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="text-teal-200 w-40 truncate">
+                  <span className="text-teal-200 w-36 truncate">
                     {cultureLabels[person.heritage.primaryCulture] ?? person.heritage.primaryCulture}
                   </span>
                   <div className="flex-1 h-1.5 bg-stone-700 rounded overflow-hidden">
@@ -326,7 +326,7 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
                 {/* Secondary cultures */}
                 {secondaryCultures.map(([cid, val]) => (
                   <div key={cid} className="flex items-center gap-2 text-xs">
-                    <span className="text-stone-400 w-40 truncate">
+                    <span className="text-stone-400 w-36 truncate">
                       {cultureLabels[cid] ?? cid}
                     </span>
                     <div className="flex-1 h-1.5 bg-stone-700 rounded overflow-hidden">
@@ -398,7 +398,7 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
             <div className="flex flex-col gap-1 mb-1">
               {person.languages.map(lang => (
                 <div key={lang.language} className="flex items-center gap-2 text-xs">
-                  <span className="text-stone-300 w-28 capitalize">{lang.language.replace(/_/g, ' ')}</span>
+                  <span className="text-stone-300 w-36 capitalize">{lang.language.replace(/_/g, ' ')}</span>
                   <div className="flex-1 h-1.5 bg-stone-700 rounded overflow-hidden">
                     <div
                       className="h-full bg-amber-600 rounded"

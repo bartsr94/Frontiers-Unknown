@@ -36,9 +36,11 @@ npx tsc --noEmit   # Type-check
 | Phase | Name | Status |
 |-------|------|--------|
 | 1 | Foundation — Ten Men in the Wilderness | ✅ Complete |
-| 2 | Genetics Engine — Children of Two Worlds | 🔲 Up next |
-| 3 | Living Settlement — A Place Called Home | 🔲 Planned |
+| 2 | Genetics Engine — Children of Two Worlds | ✅ Complete |
+| 3 | Living Settlement — A Place Called Home | 🔄 In Progress |
 | 4 | Polish — The Ashmark Remembers | 🔲 Planned |
+
+**Phase 3 progress:** Language acquisition engine ✅ · Cultural identity & drift system ✅ · Founder character variety ✅
 
 ---
 

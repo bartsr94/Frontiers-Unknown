@@ -189,6 +189,35 @@ const FOUNDING_ROLES: WorkRole[] = [
 /** Ages spread across 20–35 to give variety in the roster. */
 const FOUNDING_AGES: number[] = [22, 28, 31, 25, 30, 27, 35, 24, 29, 33];
 
+/**
+ * Individual physical profiles for each founding settler.
+ * All stay within the Imanian genetic range (fair skin, cool/neutral undertone,
+ * blonde–dark-brown hair, straight–wavy, blue/grey/green eyes) while giving
+ * each man a distinct appearance.
+ */
+const FOUNDING_GENETICS: Array<Person['genetics']> = [
+  // 0 – Edmund Farrow, farmer 22 — pale, fresh-faced, slight build
+  { visibleTraits: { skinTone: 0.14, skinUndertone: 'cool_pink', hairColor: 'blonde',      hairTexture: 'straight', eyeColor: 'blue',  buildType: 'lean',     height: 'average',       facialStructure: 'oval'    }, genderRatioModifier: 0.5, extendedFertility: false },
+  // 1 – Aldric Vane, farmer 28 — weathered and broad-shouldered
+  { visibleTraits: { skinTone: 0.22, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'wavy',     eyeColor: 'grey',  buildType: 'athletic', height: 'tall',          facialStructure: 'broad'   }, genderRatioModifier: 0.5, extendedFertility: false },
+  // 2 – Corvin Ashby, farmer 31 — stocky, blunt-featured
+  { visibleTraits: { skinTone: 0.19, skinUndertone: 'cool_pink', hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'blue',  buildType: 'stocky',   height: 'below_average', facialStructure: 'angular' }, genderRatioModifier: 0.5, extendedFertility: false },
+  // 3 – Leofric Morrow, farmer 25 — lean, narrow-faced, green-eyed
+  { visibleTraits: { skinTone: 0.16, skinUndertone: 'neutral',   hairColor: 'light_brown', hairTexture: 'wavy',     eyeColor: 'green', buildType: 'lean',     height: 'average',       facialStructure: 'narrow'  }, genderRatioModifier: 0.5, extendedFertility: false },
+  // 4 – Hawthorn Crale, farmer 30 — tall, grey-eyed, round features
+  { visibleTraits: { skinTone: 0.25, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'grey',  buildType: 'athletic', height: 'tall',          facialStructure: 'round'   }, genderRatioModifier: 0.5, extendedFertility: false },
+  // 5 – Oswyn Dunmore, farmer 27 — fair and blue-eyed, wavy blonde
+  { visibleTraits: { skinTone: 0.13, skinUndertone: 'cool_pink', hairColor: 'blonde',      hairTexture: 'wavy',     eyeColor: 'blue',  buildType: 'lean',     height: 'tall',          facialStructure: 'oval'    }, genderRatioModifier: 0.5, extendedFertility: false },
+  // 6 – Bastian Thorn, farmer 35 — the old hand, heavyset and weathered
+  { visibleTraits: { skinTone: 0.26, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'grey',  buildType: 'heavyset', height: 'average',       facialStructure: 'broad'   }, genderRatioModifier: 0.5, extendedFertility: false },
+  // 7 – Idris Halven, trader 24 — presentable, sharp green eyes
+  { visibleTraits: { skinTone: 0.17, skinUndertone: 'cool_pink', hairColor: 'light_brown', hairTexture: 'wavy',     eyeColor: 'green', buildType: 'lean',     height: 'tall',          facialStructure: 'narrow'  }, genderRatioModifier: 0.5, extendedFertility: false },
+  // 8 – Ren Coalwick, trader 29 — unremarkable face, watchful grey eyes
+  { visibleTraits: { skinTone: 0.21, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'grey',  buildType: 'athletic', height: 'average',       facialStructure: 'angular' }, genderRatioModifier: 0.5, extendedFertility: false },
+  // 9 – Callum Marsh, guard 33 — broad, blue-eyed, built to intimidate
+  { visibleTraits: { skinTone: 0.23, skinUndertone: 'cool_pink', hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'blue',  buildType: 'stocky',   height: 'tall',          facialStructure: 'broad'   }, genderRatioModifier: 0.5, extendedFertility: false },
+];
+
 // ─── Council seeding ─────────────────────────────────────────────────────────
 
 /**
@@ -212,13 +241,22 @@ function createInitialState(config: GameConfig, settlementName: string): GameSta
   const people = new Map<string, Person>();
 
   FOUNDING_NAMES.forEach((name, i) => {
+    const role = FOUNDING_ROLES[i];
+    // Traders arrive with a working knowledge of Tradetalk — it would be
+    // absurd to seek trade contacts without any common tongue.
+    const languages: Person['languages'] = role === 'trader'
+      ? [{ language: 'imanian', fluency: 1.0 }, { language: 'tradetalk', fluency: 0.4 }]
+      : [{ language: 'imanian', fluency: 1.0 }];
+
     const person = createPerson({
       firstName: name.firstName,
       familyName: name.familyName,
       sex: 'male',
       age: FOUNDING_AGES[i],
-      role: FOUNDING_ROLES[i],
+      role,
       socialStatus: 'founding_member',
+      languages,
+      genetics: FOUNDING_GENETICS[i],
     });
     people.set(person.id, person);
   });
@@ -272,7 +310,12 @@ function createInitialState(config: GameConfig, settlementName: string): GameSta
           primaryCulture: ETHNIC_GROUP_CULTURE[sauroGroup],
           culturalFluency: new Map<CultureId, number>([[ETHNIC_GROUP_CULTURE[sauroGroup], 1.0]]),
         },
-        languages: [{ language: ETHNIC_GROUP_PRIMARY_LANGUAGE[sauroGroup], fluency: 1.0 }],
+        // Sauromatian women joining a trading company will have picked up some
+        // Tradetalk — it's the lingua franca of cross-tribal commerce.
+        languages: [
+          { language: ETHNIC_GROUP_PRIMARY_LANGUAGE[sauroGroup], fluency: 1.0 },
+          { language: 'tradetalk', fluency: 0.3 },
+        ],
         religion: 'sacred_wheel',
       });
       people.set(woman.id, woman);

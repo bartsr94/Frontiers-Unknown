@@ -11,7 +11,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 |-------|--------|-------|
 | Phase 1 — Foundation | ✅ Complete | 13/13 steps done, 13/13 tests pass, zero compile errors |
 | Phase 2 — Genetics Engine | ✅ Complete | All 12 steps done, 139/139 tests pass, zero compile errors |
-| Phase 3 — Living Settlement | � In Progress | Language acquisition engine complete (173/173 tests) |
+| Phase 3 — Living Settlement | 🔄 In Progress | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ |
 | Phase 4 — Polish | 🔲 Not started | — |
 
 ---
@@ -20,7 +20,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 
 ```bash
 npm run dev          # Vite dev server → http://localhost:5173
-npm test             # Run Vitest (173 passing across rng, inheritance, gender-ratio, fertility, event-filter, demographics, language-acquisition)
+npm test             # Run Vitest (248 passing across rng, inheritance, gender-ratio, fertility, event-filter, demographics, language-acquisition, culture, marriage)
 npx tsc --noEmit     # Type-check without building
 ```
 
@@ -65,6 +65,7 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/genetics/traits.ts` | Trait type definitions + `IMANIAN_TRAITS` constant |
 | `src/data/ethnic-distributions.ts` | All 8 ethnic group `TraitDistribution` constants + `ETHNIC_DISTRIBUTIONS` lookup map |
 | `src/simulation/culture/language-acquisition.ts` | `resolveChildLanguages`, `applyLanguageDrift`, `updateSettlementLanguages`, `updateLanguageTension`, `updateLanguageDiversityTurns` |
+| `src/simulation/population/culture.ts` | `CULTURE_LABELS`, `SAUROMATIAN_CULTURE_IDS`, `deriveCulture`, `processCulturalDrift`, `buildSettlementCultureDistribution`, `computeCulturalBlend` |
 | `src/simulation/genetics/gender-ratio.ts` | `getSauromatianFraction`, `getImanianFraction`, `resolveGenderRatio`, `determineSex` |
 | `src/simulation/genetics/inheritance.ts` | `resolveInheritance()` pipeline: `averageBloodlines`, `blendTraitDistributions`, `sampleContinuous`, `sampleDiscrete` |
 | `src/simulation/genetics/fertility.ts` | `BirthResult`, `createFertilityProfile`, `getFertilityChance`, `attemptConception`, `processPregnancies` |
@@ -171,6 +172,32 @@ idle
 
 ---
 
+## Phase 3 Deliverables — "A Place Called Home" 🔄 In Progress
+
+| Step | Deliverable | Files | Status |
+|------|-------------|-------|--------|
+| ✅ 1 | Language acquisition engine | `src/simulation/culture/language-acquisition.ts` | Complete |
+| ✅ 2 | Cultural identity & drift system | `src/simulation/population/culture.ts` | Complete |
+| ✅ 3 | `CultureId` expanded to 15 sub-group IDs | `src/simulation/population/person.ts` | Complete |
+| ✅ 4 | Per-turn cultural drift wired into `processDawn()` | `src/simulation/turn/turn-processor.ts` | Complete |
+| ✅ 5 | Child heritage blending via `deriveCulture()` | `src/simulation/genetics/fertility.ts` | Complete |
+| ✅ 6 | Cultural Fluency section in PersonDetail UI | `src/ui/views/PersonDetail.tsx` | Complete |
+| ✅ 7 | Founder character variety (unique physical profiles) | `src/stores/game-store.ts` | Complete |
+| ✅ 8 | Founding traders start with Tradetalk (fluency 0.4) | `src/stores/game-store.ts` | Complete |
+| ✅ 9 | Sauromatian founding women start with Tradetalk (fluency 0.3) | `src/stores/game-store.ts` | Complete |
+| 🔲 10 | Skills & experience tracking | — | Planned |
+| 🔲 11 | Settlement buildings & upgrades | — | Planned |
+| 🔲 12 | Tribe relationship depth | — | Planned |
+
+### Cultural Identity System Notes
+
+- **`ETHNIC_GROUP_CULTURE`** in `person.ts`: maps every `EthnicGroup` to its sub-group `CultureId`
+- **`processCulturalDrift()`**: community pull 0.025/season, spouse bonus 0.01/season, floor 0.01
+- **`deriveCulture()`**: blends both parents 50/50, seeds `settlement_native` at 0.05; `primaryCulture` = highest key or `settlement_native` if none ≥ 0.5
+- Founding Sauromatian women use `ETHNIC_GROUP_CULTURE[sauroGroup]` for correct sub-group culture (not hardcoded `kiswani_traditional`)
+
+---
+
 ## Ethnic Group Reference (Phase 2 genetics input)
 
 | Group | Skin (0–1) | Undertone | Hair | Eyes | Build / Height |
@@ -228,14 +255,15 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 
 ## Tests
 
-- `tests/utils/rng.test.ts` — 13/13 passing (deterministic output, Gaussian distribution, nextInt bounds)
-- `tests/genetics/inheritance.test.ts` — 10/10 passing (bloodline averaging, trait blending, 70/30 blend ratio, extendedFertility maternal chain)
-- `tests/genetics/gender-ratio.test.ts` — 26/26 passing (fraction helpers, resolveGenderRatio formula, determineSex probability, lore rules)
-- `tests/genetics/fertility.test.ts` — 31/31 passing (profile shapes, fertility window, seasonal/condition modifiers, pure function contract, childbirth risk)
-- `tests/events/event-filter.test.ts` — 47/47 passing (all prerequisite types, isUnique, cooldown, filterEligibleEvents, drawEvents, ALL_EVENTS deck integrity)
-- `tests/events/resolver.test.ts` — 14/14 passing (modify_resource, modify_standing, clamping, cooldown recording, event history, multi-consequence)
-- `tests/economy/resources.test.ts` — 24/24 passing (emptyResourceStock, addResourceStocks, clampResourceStock, calculateProduction with seasons, calculateConsumption)
-- `tests/population/demographics.test.ts` — 12/12 passing (marriage → conception → birth pipeline; child parentIds/childrenIds; pregnancy cleared after birth)
-- `tests/population/marriage.test.ts` — 12/12 passing (getLanguageCompatibility: shared/partial/none, Tradetalk, creole, asymmetric cases)
-- `tests/culture/language-acquisition.test.ts` — 34/34 passing (learning rates, child language resolution, language drift, settlement language fractions, tension formula, diversity turn counter)
-- **Total: 223/223 passing**
+- `tests/utils/rng.test.ts` — 13/13 passing
+- `tests/genetics/inheritance.test.ts` — 10/10 passing
+- `tests/genetics/gender-ratio.test.ts` — 26/26 passing
+- `tests/genetics/fertility.test.ts` — 31/31 passing
+- `tests/events/event-filter.test.ts` — 47/47 passing
+- `tests/events/resolver.test.ts` — 14/14 passing
+- `tests/economy/resources.test.ts` — 24/24 passing
+- `tests/population/demographics.test.ts` — 16/16 passing (includes 4 new child-culture blending tests)
+- `tests/population/marriage.test.ts` — 12/12 passing
+- `tests/population/culture.test.ts` — 21/21 passing (deriveCulture, processCulturalDrift, buildSettlementCultureDistribution, computeCulturalBlend)
+- `tests/culture/language-acquisition.test.ts` — 34/34 passing
+- **Total: 248/248 passing**
