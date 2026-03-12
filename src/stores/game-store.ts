@@ -308,8 +308,14 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
     // Ages spread across 18–26 to give variety; names generated from the correct
     // ethnic naming pool so they match the tribe the player selected.
     const SAURO_FOUNDING_AGES: number[] = [18, 22, 26];
+    // Each woman has a distinctive personality to make them memorable from the start.
+    const SAURO_FOUNDING_TRAITS: Person['traits'][] = [
+      ['brave', 'traditional'],
+      ['clever', 'welcoming'],
+      ['robust', 'proud'],
+    ];
 
-    for (const womanAge of SAURO_FOUNDING_AGES) {
+    for (const [womanIndex, womanAge] of SAURO_FOUNDING_AGES.entries()) {
       const { firstName, familyName } = generateName(
         'female',
         ETHNIC_GROUP_CULTURE[sauroGroup],
@@ -358,6 +364,7 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
           { language: 'tradetalk', fluency: 0.3 },
         ],
         religion: 'sacred_wheel',
+        traits: SAURO_FOUNDING_TRAITS[womanIndex] ?? [],
       }, rng);
       people.set(woman.id, woman);
     }

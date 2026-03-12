@@ -105,7 +105,7 @@ export default function PeopleView() {
     `px-2 py-0.5 rounded text-xs border transition-colors ${active ? 'bg-amber-800 text-amber-100 border-amber-600' : 'bg-stone-800 text-stone-400 border-stone-600 hover:text-stone-200'}`;
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full overflow-hidden relative">
 
       {/* ── Marriage dialog overlay ── */}
       {showMarriageDialog && (
@@ -121,59 +121,58 @@ export default function PeopleView() {
           </h2>
           <button
             onClick={() => setShowMarriageDialog(true)}
-            className="px-3 py-1 rounded text-xs font-semibold bg-amber-800 hover:bg-amber-700 text-amber-100 border border-amber-600 transition-colors"
+            className="px-3 py-1 rounded text-xs font-bold bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-stone-950 shadow transition-colors"
           >
             Arrange Marriage
           </button>
         </div>
 
         {/* Filter / Sort bar */}
-        <div className="flex flex-wrap items-center gap-3 mb-3 p-2 rounded bg-stone-800 border border-stone-700">
-          {/* Sort */}
-          <span className="text-stone-500 text-xs">Sort:</span>
-          {(['name', 'age', 'heritage', 'role'] as SortKey[]).map(k => (
-            <button key={k} onClick={() => setSortKey(k)} className={selectBtn(sortKey === k)}>
-              {k.charAt(0).toUpperCase() + k.slice(1)}
-            </button>
-          ))}
+        <div className="mb-3 rounded bg-stone-800 border border-stone-700 divide-y divide-stone-700">
+          {/* Row 1 — Sort */}
+          <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5">
+            <span className="text-stone-500 text-xs font-medium w-7 shrink-0">Sort</span>
+            <span className="w-px h-3 bg-stone-600 self-center mx-0.5" />
+            {(['name', 'age', 'heritage', 'role'] as SortKey[]).map(k => (
+              <button key={k} onClick={() => setSortKey(k)} className={selectBtn(sortKey === k)}>
+                {k.charAt(0).toUpperCase() + k.slice(1)}
+              </button>
+            ))}
+            <span className="w-px h-3 bg-stone-600 self-center mx-0.5" />
+            <span className="text-stone-600 text-[10px] font-medium self-center">Skills</span>
+            {SKILL_SORT_LABELS.map(({ id, label }) => (
+              <button key={id} onClick={() => setSortKey(id)} className={selectBtn(sortKey === id)}>
+                {label}
+              </button>
+            ))}
+          </div>
 
-          <span className="text-stone-700">|</span>
-
-          {SKILL_SORT_LABELS.map(({ id, label }) => (
-            <button key={id} onClick={() => setSortKey(id)} className={selectBtn(sortKey === id)}>
-              {label}
-            </button>
-          ))}
-
-          <span className="text-stone-700">|</span>
-
-          {/* Sex filter */}
-          <span className="text-stone-500 text-xs">Sex:</span>
-          {(['all', 'female', 'male'] as const).map(v => (
-            <button key={v} onClick={() => setFilter(f => ({ ...f, sex: v }))} className={selectBtn(filter.sex === v)}>
-              {v === 'female' ? '♀' : v === 'male' ? '♂' : 'All'}
-            </button>
-          ))}
-
-          <span className="text-stone-700">|</span>
-
-          {/* Married filter */}
-          <span className="text-stone-500 text-xs">Status:</span>
-          {(['all', 'unmarried', 'married'] as const).map(v => (
-            <button key={v} onClick={() => setFilter(f => ({ ...f, married: v }))} className={selectBtn(filter.married === v)}>
-              {v === 'all' ? 'All' : v === 'married' ? '◎ Married' : '○ Single'}
-            </button>
-          ))}
-
-          <span className="text-stone-700">|</span>
-
-          {/* Heritage group filter */}
-          <span className="text-stone-500 text-xs">Heritage:</span>
-          {(['all', 'IMA', 'KIS', 'HAN', 'MIX'] as const).map(v => (
-            <button key={v} onClick={() => setFilter(f => ({ ...f, heritage: v }))} className={selectBtn(filter.heritage === v)}>
-              {v === 'all' ? 'All' : v}
-            </button>
-          ))}
+          {/* Row 2 — Filters */}
+          <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5">
+            <span className="text-stone-500 text-xs font-medium w-7 shrink-0">Sex</span>
+            <span className="w-px h-3 bg-stone-600 self-center mx-0.5" />
+            {(['all', 'female', 'male'] as const).map(v => (
+              <button key={v} onClick={() => setFilter(f => ({ ...f, sex: v }))} className={selectBtn(filter.sex === v)}>
+                {v === 'female' ? '♀' : v === 'male' ? '♂' : 'All'}
+              </button>
+            ))}
+            <span className="w-px h-3 bg-stone-600 self-center mx-1.5" />
+            <span className="text-stone-500 text-xs font-medium">Status</span>
+            <span className="w-px h-3 bg-stone-600 self-center mx-0.5" />
+            {(['all', 'unmarried', 'married'] as const).map(v => (
+              <button key={v} onClick={() => setFilter(f => ({ ...f, married: v }))} className={selectBtn(filter.married === v)}>
+                {v === 'all' ? 'All' : v === 'married' ? '◎ Married' : '○ Single'}
+              </button>
+            ))}
+            <span className="w-px h-3 bg-stone-600 self-center mx-1.5" />
+            <span className="text-stone-500 text-xs font-medium">Heritage</span>
+            <span className="w-px h-3 bg-stone-600 self-center mx-0.5" />
+            {(['all', 'IMA', 'KIS', 'HAN', 'MIX'] as const).map(v => (
+              <button key={v} onClick={() => setFilter(f => ({ ...f, heritage: v }))} className={selectBtn(filter.heritage === v)}>
+                {v === 'all' ? 'All' : v}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Table */}
@@ -186,9 +185,11 @@ export default function PeopleView() {
                 <th className="px-2 py-2 font-semibold">Age</th>
                 <th className="px-2 py-2 font-semibold text-center">Sex</th>
                 <th className="px-2 py-2 font-semibold">Role</th>
-                {activeSkill && <th className="px-2 py-2 font-semibold text-center capitalize">{activeSkill}</th>}
-                <th className="px-2 py-2 font-semibold text-center">Wed</th>
-                <th className="px-2 py-2 font-semibold text-center" title="Expedition Council seat">⭐</th>
+                <th className="px-2 py-2 font-semibold text-center w-10" title={activeSkill ? `Sort: ${activeSkill} — FR=Fair · GD=Good · VG=Very Good · EX=Excellent · RN=Renowned · HR=Heroic` : undefined}>
+                  {activeSkill ? <span className="capitalize">{activeSkill}</span> : null}
+                </th>
+                <th className="px-2 py-2 font-semibold text-center" title="Marital status">Married</th>
+                <th className="px-2 py-2 font-semibold text-center" title="Expedition Council (max 7)">Council</th>
               </tr>
             </thead>
             <tbody>
@@ -206,13 +207,14 @@ export default function PeopleView() {
                     onClick={() => setSelectedId(id => id === person.id ? null : person.id)}
                     className={`border-t border-stone-700 transition-colors cursor-pointer
                                 hover:bg-stone-700 active:bg-stone-600
+                                ${onCouncil ? 'border-l-2 border-l-amber-500' : 'border-l-2 border-l-transparent'}
                                 ${selectedId === person.id ? 'bg-stone-700 ring-1 ring-inset ring-amber-600' : i % 2 === 0 ? 'bg-stone-800' : 'bg-stone-850'}`}
                   >
                     {/* Name + skin dot */}
                     <td className="px-3 py-2 text-amber-100 font-medium">
                       <span className="inline-flex items-center gap-2">
                         <span
-                          className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 border border-stone-600"
+                          className="inline-block w-3 h-3 rounded-full flex-shrink-0"
                           style={{ backgroundColor: dot }}
                           aria-hidden="true"
                         />
@@ -246,22 +248,24 @@ export default function PeopleView() {
                       </span>
                     </td>
 
-                    {/* Skill rating badge — only shown when sorted by a skill */}
-                    {activeSkill && (() => {
-                      const val = person.skills[activeSkill];
-                      const rating = getSkillRating(val);
-                      return (
-                        <td className="px-2 py-2 text-center">
+                    {/* Skill rating badge — always rendered to prevent layout shift */}
+                    <td className="px-2 py-2 text-center w-10">
+                      {activeSkill && (() => {
+                        const val = person.skills[activeSkill];
+                        const rating = getSkillRating(val);
+                        return (
                           <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${RATING_BADGE_CLASS[rating]}`}>
                             {RATING_SHORT[rating]}
                           </span>
-                        </td>
-                      );
-                    })()}
+                        );
+                      })()}
+                    </td>
 
                     {/* Married indicator */}
-                    <td className="px-2 py-2 text-center text-stone-400" title={isMarried ? 'Married' : 'Unmarried'}>
-                      {isMarried ? '◎' : '○'}
+                    <td className="px-2 py-2 text-center" title={isMarried ? 'Married' : 'Single'}>
+                      <span className={isMarried ? 'text-amber-400' : 'text-stone-600'}>
+                        {isMarried ? '◎' : '○'}
+                      </span>
                     </td>
 
                     {/* Council seat */}
@@ -284,7 +288,7 @@ export default function PeopleView() {
               })}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={activeSkill ? 8 : 7} className="px-4 py-6 text-center text-stone-500 italic">
+                  <td colSpan={8} className="px-4 py-6 text-center text-stone-500 italic">
                     No settlers match the current filter.
                   </td>
                 </tr>
@@ -296,11 +300,24 @@ export default function PeopleView() {
 
       {/* ── Right: person detail panel ── */}
       {selectedId && (
-        <PersonDetail
-          personId={selectedId}
-          onClose={() => setSelectedId(null)}
-          onNavigate={id => setSelectedId(id)}
-        />
+        <>
+          {/* Dim backdrop on narrow viewports */}
+          <div
+            className="xl:hidden absolute inset-0 bg-stone-950/60 z-10"
+            onClick={() => setSelectedId(null)}
+          />
+          <div className="
+            xl:relative xl:flex-none xl:w-80
+            max-xl:absolute max-xl:inset-y-0 max-xl:right-0 max-xl:w-80 max-xl:z-20
+            overflow-y-auto
+          ">
+            <PersonDetail
+              personId={selectedId}
+              onClose={() => setSelectedId(null)}
+              onNavigate={id => setSelectedId(id)}
+            />
+          </div>
+        </>
       )}
     </div>
   );

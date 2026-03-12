@@ -170,7 +170,7 @@ const RATING_TEXT_CLASS: Record<SkillRating, string> = {
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="text-amber-500 font-semibold text-xs uppercase tracking-wider mb-2">
+    <h3 className="text-stone-400 font-semibold text-[11px] uppercase tracking-wide mb-2">
       {children}
     </h3>
   );
@@ -406,7 +406,7 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
             ))}
           </div>
         ) : (
-          <p className="text-stone-600 italic text-xs mb-1">No traits.</p>
+          <p className="text-stone-500 italic text-xs mb-1">Character not yet known.</p>
         )}
         <Divider />
 

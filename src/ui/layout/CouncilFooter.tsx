@@ -16,7 +16,7 @@
  * Sits anchored to the bottom of the main content column, above the BottomBar.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useGameStore } from '../../stores/game-store';
 import type { WorkRole, Person } from '../../simulation/population/person';
 import { generateAdvice, hashPersonEvent } from '../../simulation/events/council-advice';
@@ -38,6 +38,8 @@ export default function CouncilFooter() {
   const [selectedAdviserId, setSelectedAdviserId] = useState<string | null>(null);
   // Cache: key = `${personId}:${eventId}` → generated advice string
   const [adviceCache, setAdviceCache] = useState<Record<string, string>>({});
+  // Collapsed by default outside event phase; auto-expands during events.
+  const [collapsed, setCollapsed] = useState(true);
 
   const councilIds = gameState?.councilMemberIds ?? [];
   const people     = gameState?.people;
@@ -52,6 +54,15 @@ export default function CouncilFooter() {
     if (!id || !people) return null;
     return people.get(id) ?? null;
   });
+
+  // Auto-expand during event phase; collapse when leaving it.
+  useEffect(() => {
+    if (currentPhase === 'event') {
+      setCollapsed(false);
+    } else {
+      setCollapsed(true);
+    }
+  }, [currentPhase]);
 
   function handleCardClick(person: Person) {
     setSelectedAdviserId(person.id);
@@ -75,58 +86,76 @@ export default function CouncilFooter() {
       ? (adviceCache[`${selectedPerson.id}:${currentEvent.id}`] ?? null)
       : null;
 
+  const filledCount = seats.filter(Boolean).length;
+
   return (
-    <div className="border-t border-amber-900 bg-amber-950 px-3 py-2">
-      <p className="text-amber-500 text-xs font-semibold uppercase tracking-wide mb-1.5">
-        Expedition Council
-      </p>
+    <div className="border-t-2 border-amber-700 bg-stone-950 px-3 py-2">
 
-      {/* Advice bubble — only shown in event phase when an adviser is selected */}
-      {activeAdvice && selectedPerson && (
-        <AdviceBubble
-          text={activeAdvice}
-          advisorName={`${selectedPerson.firstName} ${selectedPerson.familyName}`}
-          advisorRole={selectedPerson.role}
-        />
-      )}
+      {/* Header row — always visible, acts as collapse toggle */}
+      <button
+        onClick={() => setCollapsed(c => !c)}
+        className="w-full flex items-center justify-between mb-1 group"
+        aria-expanded={!collapsed}
+      >
+        <p className="text-amber-600 text-xs font-semibold uppercase tracking-wide flex items-center gap-1.5">
+          <span className="text-stone-500 text-[10px]">{collapsed ? '▶' : '▼'}</span>
+          Expedition Council
+        </p>
+        <span className="text-stone-600 text-xs group-hover:text-stone-400 transition-colors">
+          {filledCount}/{MAX_SEATS} seats
+        </span>
+      </button>
 
-      <div className="flex gap-2">
-        {seats.map((person, i) =>
-          person ? (
-            <button
-              key={person.id}
-              onClick={() => handleCardClick(person)}
-              className={`flex-1 min-w-0 bg-stone-800 border rounded px-2 py-1.5 text-left
-                          transition-colors cursor-pointer
-                          ${selectedAdviserId === person.id
-                            ? 'border-amber-400 ring-1 ring-amber-400'
-                            : 'border-amber-800 hover:border-amber-600'}`}
-            >
-              <div className="flex items-start gap-1.5">
-                <CouncilPortrait person={person} />
-                <div className="min-w-0">
-                  <p className="text-amber-100 text-xs font-semibold truncate leading-tight">
-                    {person.firstName} {person.familyName}
-                  </p>
-                  <span
-                    className={`mt-0.5 inline-block px-1.5 py-0.5 rounded text-[10px] font-bold leading-none
-                                ${ROLE_COLORS[person.role]}`}
-                  >
-                    {ROLE_LABELS[person.role]}
-                  </span>
+      {!collapsed && (
+        <>
+          {/* Advice bubble — only shown in event phase when an adviser is selected */}
+          {activeAdvice && selectedPerson && (
+            <AdviceBubble
+              text={activeAdvice}
+              advisorName={`${selectedPerson.firstName} ${selectedPerson.familyName}`}
+              advisorRole={selectedPerson.role}
+            />
+          )}
+
+          <div className="flex gap-2">
+            {seats.map((person, i) =>
+              person ? (
+                <button
+                  key={person.id}
+                  onClick={() => handleCardClick(person)}
+                  className={`flex-1 min-w-0 bg-stone-800 border rounded px-2 py-1.5 text-left
+                              transition-colors cursor-pointer
+                              ${selectedAdviserId === person.id
+                                ? 'border-amber-400 ring-1 ring-amber-400'
+                                : 'border-amber-800 hover:border-amber-600'}`}
+                >
+                  <div className="flex items-start gap-1.5">
+                    <CouncilPortrait person={person} />
+                    <div className="min-w-0">
+                      <p className="text-amber-100 text-xs font-semibold truncate leading-tight">
+                        {person.firstName} {person.familyName}
+                      </p>
+                      <span
+                        className={`mt-0.5 inline-block px-1.5 py-0.5 rounded text-[10px] font-bold leading-none
+                                    ${ROLE_COLORS[person.role]}`}
+                      >
+                        {ROLE_LABELS[person.role]}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              ) : (
+                <div
+                  key={`empty-${i}`}
+                  className="flex-1 min-w-0 border border-dashed border-stone-700 rounded px-2 py-1.5 flex items-center justify-center"
+                >
+                  <span className="text-stone-600 text-xs">Empty</span>
                 </div>
-              </div>
-            </button>
-          ) : (
-            <div
-              key={`empty-${i}`}
-              className="flex-1 min-w-0 border border-dashed border-stone-700 rounded px-2 py-1.5 flex items-center justify-center"
-            >
-              <span className="text-stone-600 text-xs">Empty</span>
-            </div>
-          ),
-        )}
-      </div>
+              ),
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

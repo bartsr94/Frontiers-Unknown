@@ -113,6 +113,7 @@ export default function LeftNav({ activeView, setActiveView }: Props) {
               key={item.id}
               onClick={() => setActiveView(item.id)}
               disabled={item.stub}
+              title={item.stub ? 'Coming soon' : undefined}
               className={`w-full text-left px-2 py-1.5 rounded text-sm font-medium flex items-center gap-2 transition-colors
                           ${isActive
                             ? 'bg-amber-800 text-amber-100'
@@ -123,6 +124,9 @@ export default function LeftNav({ activeView, setActiveView }: Props) {
             >
               <span className="text-base leading-none">{item.emoji}</span>
               <span>{item.label}</span>
+              {item.stub && (
+                <span className="ml-auto text-[10px] text-stone-700">⏳</span>
+              )}
               {item.id === 'events' && pendingCount > 0 && (
                 <span className="ml-auto bg-red-700 text-red-100 text-xs font-bold rounded-full px-1.5 py-0.5 leading-none">
                   {pendingCount}
