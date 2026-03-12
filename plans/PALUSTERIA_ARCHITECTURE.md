@@ -73,11 +73,12 @@ palusteria-game/
 │   │   │   └── region.ts               # Map data, location definitions, distances
 │   │   │
 │   │   ├── events/
-│   │   │   ├── engine.ts               # Type definitions only (GameEvent, EventChoice, etc.) ✅
-│   │   │   ├── event-filter.ts         # ALL_EVENTS, filterEligibleEvents(), drawEvents() ✅
-│   │   │   ├── resolver.ts             # applyEventChoice(event, choiceId, state, rng?), resolveSkillCheck(), add_person handler ✅
+│   │   │   ├── engine.ts               # Type definitions only (GameEvent, EventChoice, ActorCriteria, BoundEvent, etc.) ✅
+│   │   │   ├── event-filter.ts         # ALL_EVENTS, filterEligibleEvents(), drawEvents(); canResolveActors feasibility gate ✅
+│   │   │   ├── resolver.ts             # applyEventChoice(…, boundActors?), resolveSkillCheck(), resolveConsequenceTarget(), add_person handler ✅
+│   │   │   ├── actor-resolver.ts       # matchesCriteria, canFillSlot, canResolveActors, selectActor, resolveActors, interpolateText ✅
 │   │   │   ├── council-advice.ts       # VoiceArchetype, generateAdvice() — pure logic ✅
-│   │   │   └── definitions/            # 33 events across 7 files ✅
+│   │   │   └── definitions/            # 33 events across 7 files; all events with named actors have actorRequirements ✅
 │   │   │       ├── company.ts          # Company Supply Delivery, Letter from the Company ✅
 │   │   │       ├── diplomacy.ts        # Watchers at the River (Riverfolk first contact) ✅
 │   │   │       ├── domestic.ts         # Game Tracks, Weight of Distance, Men at Work ✅
@@ -179,7 +180,9 @@ palusteria-game/
     ├── events/
     │   ├── event-filter.test.ts        # Event filtering correctness ✅
     │   ├── resolver.test.ts            # applyEventChoice + skill checks + add_person ✅
-    │   └── council-advice.test.ts      # Archetype mapping, scoring, advice generation ✅
+    │   ├── council-advice.test.ts      # Archetype mapping, scoring, advice generation ✅
+    │   ├── actor-resolver.test.ts      # matchesCriteria, selectActor, resolveActors, mutual exclusion ✅
+    │   └── interpolation.test.ts       # interpolateText — all token variants, passthrough ✅
     ├── buildings/
     │   ├── construction.test.ts        # canBuild, startConstruction, processConstruction ✅
     │   └── building-effects.test.ts    # Shelter, overcrowding, production bonuses ✅
@@ -467,7 +470,7 @@ interface GameEvent {
    */
   description: string;
   choices: EventChoice[];
-  actorRequirements?: ActorRequirement[];
+  actorRequirements?: ActorRequirement[];  // Named actor slots; event ineligible if any required slot cannot be filled
   /**
    * If true, this event can only fire from the deferred queue (never drawn
    * from the normal deck). Used for chain-event resolutions.

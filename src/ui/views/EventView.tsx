@@ -14,6 +14,27 @@
 import { useState, useEffect } from 'react';
 import { useGameStore } from '../../stores/game-store';
 import type { SkillCheckResult } from '../../simulation/events/engine';
+import type { Person } from '../../simulation/population/person';
+import { interpolateText } from '../../simulation/events/actor-resolver';
+import { skinToneColor } from '../components/Portrait';
+
+// ─── Actor badge ──────────────────────────────────────────────────────────────
+
+function ActorBadge({ person }: { person: Person }) {
+  const bgColor = skinToneColor(person.genetics.visibleTraits.skinTone);
+  return (
+    <span className="inline-flex items-center gap-1.5 bg-stone-700/80 border border-stone-600 rounded px-2 py-1">
+      <span
+        className="w-3 h-3 rounded-full border border-stone-500 flex-shrink-0"
+        style={{ backgroundColor: bgColor }}
+        aria-hidden="true"
+      />
+      <span className="text-xs text-stone-200 font-medium">
+        {person.firstName} {person.familyName}
+      </span>
+    </span>
+  );
+}
 
 // ─── Skill check result panel ─────────────────────────────────────────────────
 
@@ -71,6 +92,7 @@ export default function EventView() {
   const currentIndex     = useGameStore(s => s.currentEventIndex);
   const resolveChoice    = useGameStore(s => s.resolveEventChoice);
   const nextEvent        = useGameStore(s => s.nextEvent);
+  const gameState        = useGameStore(s => s.gameState);
 
   const [viewPhase, setViewPhase]           = useState<ViewPhase>('choosing');
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
@@ -102,6 +124,25 @@ export default function EventView() {
   }
 
   if (!event) return null;
+
+  // ── Build slot → Person map and interpolation helper ─────────────────────
+  const resolvedSlots: Record<string, Person> = {};
+  if (gameState) {
+    for (const [slot, id] of Object.entries(event.boundActors ?? {})) {
+      const person = gameState.people.get(id);
+      if (person) resolvedSlots[slot] = person;
+    }
+  }
+  const interp = (text: string) => interpolateText(text, resolvedSlots);
+
+  // ── Actor strip (shown when at least one slot is bound) ───────────────────
+  const actorStrip = Object.keys(resolvedSlots).length > 0 && (
+    <div className="px-5 pt-3 pb-1 flex flex-wrap gap-2 border-b border-stone-700">
+      {Object.entries(resolvedSlots).map(([slot, person]) => (
+        <ActorBadge key={slot} person={person} />
+      ))}
+    </div>
+  );
 
   const choice = selectedChoiceId
     ? event.choices.find(c => c.id === selectedChoiceId) ?? null
@@ -145,7 +186,7 @@ export default function EventView() {
       <span className="text-amber-400 text-xs uppercase tracking-widest font-semibold">
         {event.category}
       </span>
-      <h3 className="text-amber-100 font-bold text-xl mt-0.5">{event.title}</h3>
+      <h3 className="text-amber-100 font-bold text-xl mt-0.5">{interp(event.title)}</h3>
     </div>
   );
 
@@ -154,8 +195,8 @@ export default function EventView() {
     const lastResult = useGameStore.getState().lastChoiceResult;
     const skillResult = lastResult?.skillCheckResult;
     const outcomeText = skillResult?.passed
-      ? (choice?.successText ?? 'The attempt succeeds.')
-      : (choice?.failureText ?? 'The attempt falls short.');
+      ? interp(choice?.successText ?? 'The attempt succeeds.')
+      : interp(choice?.failureText ?? 'The attempt falls short.');
 
     return (
       <div className="p-4 flex flex-col items-center">
@@ -182,8 +223,9 @@ export default function EventView() {
 
   // ── Pending phase ─────────────────────────────────────────────────────────
   if (viewPhase === 'pending') {
-    const pendingText = choice?.pendingText
-      ?? 'Your decision has been made. The outcome will reveal itself in time.';
+    const pendingText = interp(
+      choice?.pendingText ?? 'Your decision has been made. The outcome will reveal itself in time.'
+    );
     const turns = choice?.deferredTurns ?? 4;
 
     return (
@@ -217,10 +259,11 @@ export default function EventView() {
       {progressBar}
       <div className="max-w-lg w-full bg-stone-800 border border-amber-800 rounded-lg overflow-hidden shadow-xl">
         {cardHeader}
+        {actorStrip}
 
         {/* Description */}
         <div className="px-5 py-4">
-          <p className="text-stone-300 text-sm leading-relaxed">{event.description}</p>
+          <p className="text-stone-300 text-sm leading-relaxed">{interp(event.description)}</p>
         </div>
 
         {/* Choices */}
@@ -229,13 +272,13 @@ export default function EventView() {
             <button
               key={c.id}
               onClick={() => handleChoiceClick(c.id)}
-              title={c.description || undefined}
+              title={c.description ? interp(c.description) : undefined}
               className="w-full text-left bg-stone-700 hover:bg-stone-600 active:bg-stone-800
                          border border-stone-600 hover:border-amber-700
                          rounded px-4 py-3 transition-colors"
             >
               <span className="text-amber-200 font-semibold text-sm block">
-                {c.label}
+                {interp(c.label)}
               </span>
               {c.skillCheck && (
                 <span className="text-stone-500 text-xs mt-1 block italic">

@@ -252,6 +252,7 @@ export default function Portrait({ person, variant = 'sm', children }: PortraitP
   const v = person.genetics.visibleTraits;
   const bgColor = skinToneColor(v.skinTone);
   const [imgError, setImgError] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   // ── Compact variant ────────────────────────────────────────────────────────
   if (variant === 'sm') {
@@ -282,11 +283,30 @@ export default function Portrait({ person, variant = 'sm', children }: PortraitP
       style={{ background: `linear-gradient(135deg, ${bgColor}33 0%, #1c1208 100%)` }}
     >
       <div className="flex gap-3 items-start p-3">
+        {/* Lightbox overlay */}
+        {lightboxOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 cursor-zoom-out"
+            onClick={() => setLightboxOpen(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Portrait of ${person.firstName} ${person.familyName}`}
+          >
+            <img
+              src={portraitSrc!}
+              alt={`${person.firstName} ${person.familyName}`}
+              className="max-h-[90vh] max-w-[90vw] rounded-lg shadow-2xl border border-stone-600 object-contain"
+              onClick={e => e.stopPropagation()}
+            />
+          </div>
+        )}
+
         {/* Portrait frame: real image when available, SVG silhouette otherwise */}
         <div
-          className="relative flex-shrink-0 rounded border border-stone-600 overflow-hidden"
+          className={`relative flex-shrink-0 rounded border border-stone-600 overflow-hidden${showImage ? ' cursor-zoom-in' : ''}`}
           style={{ backgroundColor: bgColor, width: '8.47rem', height: '10.78rem' }}
           aria-hidden="true"
+          onClick={showImage ? () => setLightboxOpen(true) : undefined}
         >
           {showImage ? (
             <img

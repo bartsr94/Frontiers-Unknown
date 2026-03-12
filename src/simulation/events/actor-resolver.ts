@@ -1,0 +1,202 @@
+/**
+ * Actor resolver — selects settlers to fill event actor slots and interpolates
+ * {slot} template variables in event text.
+ *
+ * All functions here are pure: no React, no mutations, no Math.random().
+ * Randomness flows exclusively through the SeededRNG passed to selectActor /
+ * resolveActors.
+ *
+ * Template variable syntax:
+ *   {slot}        → full name (firstName + familyName)
+ *   {slot.first}  → given name only
+ *   {slot.he}     → subject pronoun (he / she)
+ *   {slot.his}    → possessive pronoun (his / her)
+ *   {slot.him}    → object pronoun (him / her)
+ *   {slot.He}     → capitalised subject pronoun
+ *   {slot.His}    → capitalised possessive pronoun
+ *   {slot.Him}    → capitalised object pronoun
+ *
+ * Unknown tokens (no matching slot) are left as-is.
+ */
+
+import type { ActorCriteria, ActorRequirement } from './engine';
+import type { GameState } from '../turn/game-state';
+import type { Person, DerivedSkillId, SkillId } from '../population/person';
+import { getDerivedSkill } from '../population/person';
+import type { SeededRNG } from '../../utils/rng';
+
+// ─── Derived skill IDs (mirrors resolver.ts constant) ─────────────────────────
+
+const DERIVED_SKILL_IDS: DerivedSkillId[] = [
+  'deception', 'diplomacy', 'exploring', 'farming', 'hunting', 'poetry', 'strategy',
+];
+
+function getSkillScore(person: Person, skill: SkillId | DerivedSkillId): number {
+  if (DERIVED_SKILL_IDS.includes(skill as DerivedSkillId)) {
+    return getDerivedSkill(person.skills, skill as DerivedSkillId);
+  }
+  return person.skills[skill as SkillId];
+}
+
+// ─── Criteria matching ────────────────────────────────────────────────────────
+
+/**
+ * Returns true if the person satisfies every populated field in `criteria`.
+ * Use this for both eligibility gates (no RNG) and search loops.
+ */
+export function matchesCriteria(person: Person, criteria: ActorCriteria): boolean {
+  if (criteria.sex !== undefined && person.sex !== criteria.sex) return false;
+  if (criteria.religion !== undefined && person.religion !== criteria.religion) return false;
+  if (criteria.culturalIdentity !== undefined && person.heritage.primaryCulture !== criteria.culturalIdentity) return false;
+  if (criteria.minAge !== undefined && person.age < criteria.minAge) return false;
+  if (criteria.maxAge !== undefined && person.age > criteria.maxAge) return false;
+  if (criteria.maritalStatus !== undefined) {
+    const isMarried = person.spouseIds.length > 0;
+    if (criteria.maritalStatus === 'married'   && !isMarried) return false;
+    if (criteria.maritalStatus === 'unmarried' && isMarried)  return false;
+  }
+  if (criteria.role !== undefined && person.role !== criteria.role) return false;
+  if (criteria.socialStatus !== undefined && person.socialStatus !== criteria.socialStatus) return false;
+  if (criteria.hasTrait !== undefined && !person.traits.includes(criteria.hasTrait)) return false;
+  if (criteria.minSkill !== undefined) {
+    const score = getSkillScore(person, criteria.minSkill.skill);
+    if (score < criteria.minSkill.value) return false;
+  }
+  return true;
+}
+
+// ─── Feasibility (no RNG) ─────────────────────────────────────────────────────
+
+/**
+ * Returns true if at least one person in the settlement satisfies `criteria`
+ * and is not in the `excludeIds` set.
+ */
+export function canFillSlot(
+  criteria: ActorCriteria,
+  state: GameState,
+  excludeIds: string[] = [],
+): boolean {
+  return Array.from(state.people.values()).some(
+    p => !excludeIds.includes(p.id) && matchesCriteria(p, criteria),
+  );
+}
+
+/**
+ * Checks whether ALL required actor slots in `requirements` can be filled
+ * simultaneously (respecting mutual exclusion — no person fills two slots).
+ *
+ * Runs without RNG, used as a fast pre-flight before drawing.
+ */
+export function canResolveActors(
+  requirements: ActorRequirement[],
+  state: GameState,
+): boolean {
+  const claimedIds: string[] = [];
+  for (const req of requirements) {
+    const required = req.required !== false; // default true
+    if (!required) continue;
+    if (!canFillSlot(req.criteria, state, claimedIds)) return false;
+    // Reserve the best candidate (first match) to simulate greedy allocation.
+    const candidate = Array.from(state.people.values()).find(
+      p => !claimedIds.includes(p.id) && matchesCriteria(p, req.criteria),
+    );
+    if (candidate) claimedIds.push(candidate.id);
+  }
+  return true;
+}
+
+// ─── Actor selection (requires RNG) ──────────────────────────────────────────
+
+/**
+ * Picks a random person from the settlement who satisfies `criteria` and
+ * is not in `excludeIds`. Returns null if the pool is empty.
+ */
+export function selectActor(
+  criteria: ActorCriteria,
+  state: GameState,
+  rng: SeededRNG,
+  excludeIds: string[] = [],
+): Person | null {
+  const pool = Array.from(state.people.values()).filter(
+    p => !excludeIds.includes(p.id) && matchesCriteria(p, criteria),
+  );
+  if (pool.length === 0) return null;
+  const idx = rng.nextInt(0, pool.length - 1);
+  return pool[idx] ?? null;
+}
+
+/**
+ * Resolves all actor slots in `requirements` against the current population,
+ * returning a mapping of slotName → person.id.
+ *
+ * Slots are resolved in declaration order; each claimed person is excluded from
+ * subsequent slots so no two slots share the same person.
+ *
+ * Returns null if any *required* slot cannot be filled (the event should not fire).
+ */
+export function resolveActors(
+  requirements: ActorRequirement[],
+  state: GameState,
+  rng: SeededRNG,
+): Record<string, string> | null {
+  const result: Record<string, string> = {};
+  const claimedIds: string[] = [];
+
+  for (const req of requirements) {
+    const required = req.required !== false; // default true
+    const person = selectActor(req.criteria, state, rng, claimedIds);
+    if (person === null) {
+      if (required) return null;
+      // Optional slot — leave empty, continue
+      continue;
+    }
+    result[req.slot] = person.id;
+    claimedIds.push(person.id);
+  }
+
+  return result;
+}
+
+// ─── Text interpolation ───────────────────────────────────────────────────────
+
+/**
+ * Substitutes all {slot.*} template tokens in `text` using the provided
+ * slot → Person map. Tokens whose slot name is not in the map are left intact.
+ *
+ * Supported tokens (replace "slot" with the actual slot name):
+ *   {slot}        full name
+ *   {slot.first}  given name
+ *   {slot.he}     he / she
+ *   {slot.his}    his / her
+ *   {slot.him}    him / her
+ *   {slot.He}     He / She
+ *   {slot.His}    His / Her
+ *   {slot.Him}    Him / Her
+ */
+export function interpolateText(
+  text: string,
+  slots: Record<string, Person>,
+): string {
+  // Match {identifier} or {identifier.suffix}
+  return text.replace(/\{([a-zA-Z_][a-zA-Z0-9_]*)(?:\.([a-zA-Z]+))?\}/g, (token, slot: string, suffix: string | undefined) => {
+    const person = slots[slot];
+    if (!person) return token; // unknown slot — leave as-is
+
+    const isMale = person.sex === 'male';
+
+    if (suffix === undefined) {
+      return `${person.firstName} ${person.familyName}`;
+    }
+
+    switch (suffix) {
+      case 'first': return person.firstName;
+      case 'he':    return isMale ? 'he'  : 'she';
+      case 'his':   return isMale ? 'his' : 'her';
+      case 'him':   return isMale ? 'him' : 'her';
+      case 'He':    return isMale ? 'He'  : 'She';
+      case 'His':   return isMale ? 'His' : 'Her';
+      case 'Him':   return isMale ? 'Him' : 'Her';
+      default:      return token; // unknown suffix — leave as-is
+    }
+  });
+}

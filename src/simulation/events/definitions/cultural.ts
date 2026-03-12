@@ -89,10 +89,13 @@ export const CULTURAL_EVENTS: GameEvent[] = [
     weight: 3,
     cooldown: 10,
     isUnique: false,
+    actorRequirements: [
+      { slot: 'speaker', criteria: { sex: 'female', religion: 'sacred_wheel', minAge: 35 } },
+    ],
     description:
       'The Sauromatian women in the settlement approach you together — which is ' +
-      'itself unusual; they rarely present requests as a group. Their speaker, ' +
-      'the eldest among them, explains that the new moon is three nights away and ' +
+      'itself unusual; they rarely present requests as a group. {speaker} — the ' +
+      'eldest among them — explains that the new moon is three nights away and ' +
       'they wish to observe the Wheel-Turning, a ceremony conducted at the river ' +
       'in the hours before dawn. They are not asking to leave. They are asking ' +
       'permission to step outside the stockade, unescorted, for four hours.',
@@ -142,9 +145,12 @@ export const CULTURAL_EVENTS: GameEvent[] = [
     weight: 2,
     cooldown: 0,
     isUnique: true,
+    actorRequirements: [
+      { slot: 'finder', criteria: { sex: 'male' } },
+    ],
     description:
-      'During a repair to the cookhouse wall, one of the men pulls out a small ' +
-      'clay Wheel icon mortared into the foundation stones. He brings it to you ' +
+      'During a repair to the cookhouse wall, {finder} pulls out a small ' +
+      'clay Wheel icon mortared into the foundation stones. {finder.He} brings it to you ' +
       'looking uncertain. You recognise it immediately: a Sauromatian votary ' +
       'token, meant to bless a dwelling. It seems one of the women placed it here ' +
       'when the cookhouse was first built. Ortho men have already started talking.',
@@ -193,11 +199,14 @@ export const CULTURAL_EVENTS: GameEvent[] = [
     weight: 2,
     cooldown: 12,
     isUnique: false,
+    actorRequirements: [
+      { slot: 'objector', criteria: { sex: 'male', religion: 'imanian_orthodox' } },
+    ],
     description:
       'The orthodox Imanian men observe a quarterly feast day — a ritual of ' +
       'communal prayer, shared bread, and consecrated salt from home stock. It ' +
       'is one of the few anchor points connecting them to the world they left. ' +
-      'This season one of them has pointedly noted that the Sauromatian women ' +
+      'This season {objector} has pointedly noted that the Sauromatian women ' +
       'were not invited. Another settler argues they should be — it would be a ' +
       'gesture of inclusion. The women themselves have not commented, but they ' +
       'are watching.',
@@ -249,14 +258,18 @@ export const CULTURAL_EVENTS: GameEvent[] = [
     weight: 2,
     cooldown: 15,
     isUnique: false,
+    actorRequirements: [
+      { slot: 'woman', criteria: { sex: 'female', religion: 'sacred_wheel' } },
+      { slot: 'objector', criteria: { sex: 'male', religion: 'imanian_orthodox' } },
+    ],
     description:
-      'You arrive at the central fire to find two of your men in heated argument ' +
-      'with one of the Sauromatian women, her arm extended, pointing up at the ' +
-      'sky in what appears to be a theological challenge. One man tells her the ' +
-      'Wheel is a superstition for people who have never learned to reason. She ' +
+      'You arrive at the central fire to find {objector} in heated argument ' +
+      'with {woman}, {woman.her} arm extended, pointing up at the ' +
+      'sky in what appears to be a theological challenge. {objector.He} tells {woman.her} ' +
+      'the Wheel is a superstition for people who have never learned to reason. {woman.She} ' +
       'replies — in serviceable Imanian — that the Radiant One seems to have ' +
       'arranged things so that Imanian men come here to beg for Sauromatian ' +
-      'daughters, which does not speak well for his foresight.',
+      'daughters, which does not speak well for {objector.his} foresight.',
     choices: [
       {
         id: 'laugh_it_off',
@@ -316,9 +329,12 @@ export const CULTURAL_EVENTS: GameEvent[] = [
     weight: 2,
     cooldown: 5,
     isUnique: false,
+    actorRequirements: [
+      { slot: 'craftswoman', criteria: { sex: 'female', religion: 'sacred_wheel', maxAge: 35 } },
+    ],
     description:
-      'One of the younger Sauromatian women in the settlement has been quietly ' +
-      'watching the rope-work and cordage team for weeks. This morning she stepped ' +
+      '{craftswoman} — one of the younger Sauromatian women — has been quietly ' +
+      'watching the rope-work and cordage team for weeks. This morning {craftswoman.she} stepped ' +
       'in and demonstrated a binding technique that halved the time per joint ' +
       'and — your foreman estimates — would add years to any load-bearing line. ' +
       'The men look uncertain whether to be grateful or embarrassed.',
@@ -377,12 +393,15 @@ export const CULTURAL_EVENTS: GameEvent[] = [
     weight: 2,
     cooldown: 6,
     isUnique: false,
+    actorRequirements: [
+      { slot: 'tutor', criteria: { sex: 'female', religion: 'sacred_wheel' } },
+    ],
     description:
-      'One of the Sauromatian women has begun holding informal language ' +
+      '{tutor} has begun holding informal language ' +
       'sessions by the evening fire — Kiswani phrases for common tasks, in ' +
-      'exchange for Imanian words for things she wants to be able to say. ' +
-      'Several of your men have started joining her, more in curiosity than ' +
-      'discipline. She has a gift for it: patient, precise, slightly wry ' +
+      'exchange for Imanian words for things {tutor.she} wants to be able to say. ' +
+      'Several of your men have started joining {tutor.her}, more in curiosity than ' +
+      'discipline. {tutor.She} has a gift for it: patient, precise, slightly wry ' +
       'about Imanian grammar. You could formalise the arrangement, leave it ' +
       'informal, or let it quietly disappear.',
     choices: [
@@ -487,8 +506,11 @@ export const CULTURAL_EVENTS: GameEvent[] = [
     weight: 2,
     cooldown: 8,
     isUnique: false,
+    actorRequirements: [
+      { slot: 'objector', criteria: { sex: 'male', religion: 'imanian_orthodox' } },
+    ],
     description:
-      'One of the more orthodox settlers requests a private word. He is ' +
+      '{objector} requests a private word. {objector.He} is ' +
       'respectful, orderly, and clearly has been rehearsing this: he believes ' +
       'the arrangement with the Sauromatian women is undermining the moral ' +
       'framework the expedition was built on. He does not say they should leave, ' +
@@ -553,12 +575,16 @@ export const CULTURAL_EVENTS: GameEvent[] = [
     weight: 2,
     cooldown: 15,
     isUnique: false,
+    actorRequirements: [
+      { slot: 'foreman', criteria: { sex: 'male' } },
+      { slot: 'leader', criteria: { sex: 'female', religion: 'sacred_wheel' } },
+    ],
     description:
-      'You notice the Sauromatian women in the settlement have begun taking a ' +
+      'You notice {leader} and the other Sauromatian women have begun taking a ' +
       'morning inventory — of food stores, tool wear, and medical supplies — ' +
-      'before your own foreman does his rounds. The first time you thought it ' +
+      'before {foreman} does {foreman.his} rounds. The first time you thought it ' +
       'was coincidence. Now it is clearly routine, and their count is, frankly, ' +
-      'more accurate than his. Your foreman has noticed too. He is not pleased.',
+      'more accurate than {foreman.his}. {foreman.He} has noticed too. {foreman.He} is not pleased.',
     choices: [
       {
         id: 'embrace',
@@ -608,10 +634,13 @@ export const CULTURAL_EVENTS: GameEvent[] = [
     weight: 2,
     cooldown: 20,
     isUnique: false,
+    actorRequirements: [
+      { slot: 'advocate', criteria: { sex: 'male', minAge: 30 } },
+    ],
     description:
-      'A senior settler raises a formal question that has been circulating ' +
+      '{advocate} raises a formal question that has been circulating ' +
       'informally for months: should the Sauromatian women be permitted to ' +
-      'attend Council gatherings? Not to vote — he is careful to say this ' +
+      'attend Council gatherings? Not to vote — {advocate.he} is careful to say this ' +
       'very precisely, twice — but to observe proceedings that affect the whole ' +
       'settlement. Two other men support the idea. One calls it dangerous. ' +
       'The Company charter is silent on the matter.',
@@ -672,17 +701,21 @@ export const CULTURAL_EVENTS: GameEvent[] = [
     weight: 3,
     cooldown: 0,
     isUnique: true,
+    actorRequirements: [
+      { slot: 'newborn', criteria: { maxAge: 2 } },
+      { slot: 'father', criteria: { sex: 'male' } },
+    ],
     description:
-      'The settlement\'s first child is born before sunrise — a healthy girl, ' +
-      'dark-eyed, already loud about it. The father stands outside the birth ' +
+      '{newborn.first} is born into the settlement before sunrise — ' +
+      'already loud about it. {father} stands outside the birth ' +
       'room looking like a man who has just been informed of something vast. ' +
       'The Sauromatian midwife emerges, wipes her hands, and announces a ' +
       'successful birth in two languages at once. By breakfast the whole ' +
-      'settlement knows. Everyone agrees she must be named. Agreement ends there.',
+      'settlement knows. Everyone agrees {newborn.he} must be named. Agreement ends there.',
     choices: [
       {
         id: 'imanian_name',
-        label: 'Give her an Imanian name — this is an expedition of the Imanian Compact.',
+        label: 'Give {newborn.him} an Imanian name — this is an expedition of the Imanian Compact.',
         description:
           'The father beams. The midwife inclines her head neutrally. The ' +
           'child does not yet have opinions.',
@@ -693,7 +726,7 @@ export const CULTURAL_EVENTS: GameEvent[] = [
       },
       {
         id: 'sauromatian_name',
-        label: 'Give her a Sauromatian name — her mother\'s culture, her mother\'s line.',
+        label: 'Give {newborn.him} a Sauromatian name — {newborn.his} mother\'s culture, {newborn.his} mother\'s line.',
         description:
           'The midwife smiles. It is the first time you have seen her smile. ' +
           'Several of the Sauromatian women come to see the child that afternoon.',
@@ -704,7 +737,7 @@ export const CULTURAL_EVENTS: GameEvent[] = [
       },
       {
         id: 'two_names',
-        label: 'Give her two names — one from each tradition.',
+        label: 'Give {newborn.him} two names — one from each tradition.',
         description:
           'She will carry both, and one day one will be the name she uses. ' +
           'That will be her decision.',
@@ -788,10 +821,14 @@ export const CULTURAL_EVENTS: GameEvent[] = [
     weight: 2,
     cooldown: 10,
     isUnique: false,
+    actorRequirements: [
+      { slot: 'husband', criteria: { sex: 'male', maritalStatus: 'married', religion: 'imanian_orthodox' } },
+      { slot: 'wife', criteria: { sex: 'female', maritalStatus: 'married', religion: 'sacred_wheel' } },
+    ],
     description:
-      'A couple argues — loudly enough that it reaches you — about the name ' +
-      'of their expected child. He wants a family name carried down the ' +
-      'paternal line, as is Imanian custom. She holds that the child\'s name ' +
+      '{husband} and {wife} argue — loudly enough that it reaches you — about the name ' +
+      'of their expected child. {husband.He} wants a family name carried down the ' +
+      'paternal line, as is Imanian custom. {wife.She} holds that the child\'s name ' +
       'comes through the mother\'s line and that this is not a custom but a fact. ' +
       'Both are convinced they are obviously right. Neither appears to be listening.',
     choices: [
@@ -897,13 +934,16 @@ export const CULTURAL_EVENTS: GameEvent[] = [
     weight: 2,
     cooldown: 14,
     isUnique: false,
+    actorRequirements: [
+      { slot: 'broker', criteria: { sex: 'male', minSkill: { skill: 'bargaining', value: 40 } } },
+    ],
     description:
-      'One of your settlers — a man who grew up near the Kiswani trading ports ' +
+      '{broker} — a man who grew up near the Kiswani trading ports ' +
       'and speaks three languages with equal fluency — approaches you with a ' +
-      'proposal. He believes the settlement\'s greatest friction is a translation ' +
+      'proposal. {broker.He} believes the settlement\'s greatest friction is a translation ' +
       'problem, not a cultural one: people are misreading intent because they ' +
-      'are filling in what they do not understand. He wants to start a regular ' +
-      'mediation session — informal, optional, an hour a week. He needs only ' +
+      'are filling in what they do not understand. {broker.He} wants to start a regular ' +
+      'mediation session — informal, optional, an hour a week. {broker.He} needs only ' +
       'your blessing and a fire to sit around.',
     choices: [
       {
@@ -962,12 +1002,15 @@ export const CULTURAL_EVENTS: GameEvent[] = [
     weight: 2,
     cooldown: 14,
     isUnique: false,
+    actorRequirements: [
+      { slot: 'elder', criteria: { sex: 'female', religion: 'sacred_wheel', minAge: 40 } },
+    ],
     description:
       'A long-running dispute between two settlers over shared tool storage ' +
       'has escalated to the point where both men have come to you separately ' +
       'asking you to rule against the other. Before you can schedule the ' +
-      'meeting, you discover it has already been resolved — by one of the elder ' +
-      'Sauromatian women in the settlement, who apparently heard both sides, ' +
+      'meeting, you discover it has already been resolved — by {elder}, ' +
+      'one of the elder Sauromatian women in the settlement, who apparently heard both sides, ' +
       'proposed a physical partition, and had a handshake agreement in place ' +
       'before dinner. Both men seem slightly embarrassed by this.',
     choices: [

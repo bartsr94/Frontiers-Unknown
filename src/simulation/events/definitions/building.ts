@@ -76,12 +76,16 @@ export const BUILDING_EVENTS: GameEvent[] = [
       { type: 'overcrowded', params: {} },
       { type: 'min_population', params: { value: 8 } },
     ],
+    actorRequirements: [
+      { slot: 'settler', criteria: { sex: 'male',   religion: 'imanian_orthodox' } },
+      { slot: 'rival',   criteria: { sex: 'female', religion: 'sacred_wheel' } },
+    ],
     weight: 3,
     cooldown: 6,
     isUnique: false,
     description:
-      'The settlement is too small for the people in it. Two settlers — one Imanian, ' +
-      'one Sauromatian woman — have been sharing a corner of the longhouse for three ' +
+      'The settlement is too small for the people in it. {settler} and {rival} ' +
+      'have been sharing a corner of the longhouse for three ' +
       'seasons and their patience has finally exhausted itself. What began as a dispute ' +
       'over who owns the sleeping roll on the left has become something uglier: old ' +
       'words, old gestures, old contempt. Others have started to take sides.',
@@ -133,21 +137,24 @@ export const BUILDING_EVENTS: GameEvent[] = [
       { type: 'min_population', params: { value: 12 } },
       { type: 'min_year', params: { value: 3 } },
     ],
+    actorRequirements: [
+      { slot: 'leaver', criteria: { minAge: 18 } },
+    ],
     weight: 2,
     cooldown: 10,
     isUnique: false,
     description:
-      'You find the sleeping spot empty at morning muster. Someone has gone — ' +
+      '{leaver.His} sleeping spot is empty at morning muster. {leaver} has gone — ' +
       'pack rolled tight, tools taken, no word left and no farewell given. ' +
-      'The others know the name but say little. The camp is too crowded ' +
+      'The others knew {leaver.his} name but say little. The camp is too crowded ' +
       'and not everyone wanted to stay.',
     choices: [
       {
         id: 'accept_it',
-        label: 'Let them go. You cannot cage a person.',
+        label: 'Let {leaver.him} go. You cannot cage a person.',
         description: 'Some losses you must carry without comfort.',
         consequences: [
-          { type: 'remove_person', target: 'random_discontented_adult', value: 1 },
+          { type: 'remove_person', target: '{leaver}', value: 1 },
         ],
       },
     ],

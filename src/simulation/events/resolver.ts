@@ -23,6 +23,7 @@
 
 import type {
   GameEvent,
+  BoundEvent,
   EventConsequence,
   SkillCheck,
   SkillCheckResult,
@@ -82,7 +83,7 @@ function getActorScore(person: Person, skill: SkillId | DerivedSkillId): number 
  * Actor selection:
  *  - 'best_council'    → highest scorer among current council members
  *  - 'best_settlement' → highest scorer among all living settlers
- *  - 'actor_slot'      → person ID from context[check.actorSlot]
+ *  - 'actor_slot'      → person ID from boundActors[check.actorSlot] (or legacy context)
  *
  * If no suitable actor is found, the check auto-fails with score 0.
  */
@@ -90,6 +91,7 @@ export function resolveSkillCheck(
   check: SkillCheck,
   state: GameState,
   context: Record<string, unknown> = {},
+  boundActors?: Record<string, string>,
 ): SkillCheckResult {
   let actor: Person | undefined;
 
@@ -102,7 +104,8 @@ export function resolveSkillCheck(
     actor = Array.from(state.people.values())
       .sort((a, b) => getActorScore(b, check.skill) - getActorScore(a, check.skill))[0];
   } else if (check.actorSelection === 'actor_slot' && check.actorSlot) {
-    const actorId = context[check.actorSlot] as string | undefined;
+    // bondActors takes precedence; fall back to legacy context map
+    const actorId = boundActors?.[check.actorSlot] ?? (context[check.actorSlot] as string | undefined);
     actor = actorId ? state.people.get(actorId) : undefined;
   }
 
@@ -128,11 +131,35 @@ export function resolveSkillCheck(
   };
 }
 
+// ─── Slot resolution helper ─────────────────────────────────────────────────
+
+/**
+ * Resolves a consequence target that may be a slot reference ({slotName})
+ * to an actual person ID. Non-slot strings are returned unchanged.
+ */
+function resolveConsequenceTarget(
+  target: string,
+  boundActors?: Record<string, string>,
+): string {
+  const match = target.match(/^\{([a-zA-Z_][a-zA-Z0-9_]*)\}$/);
+  if (match) {
+    const slotName = match[1]!;
+    return boundActors?.[slotName] ?? target;
+  }
+  return target;
+}
+
 // ─── Single consequence application ──────────────────────────────────────────
 
-function applyConsequence(consequence: EventConsequence, state: GameState, rng?: SeededRNG): GameState {
+function applyConsequence(
+  consequence: EventConsequence,
+  state: GameState,
+  rng?: SeededRNG,
+  boundActors?: Record<string, string>,
+): GameState {
   switch (consequence.type) {
 
+    // Resolve the target before branching (slot → ID if needed)
     case 'modify_resource': {
       const key = consequence.target as ResourceType;
       const delta = consequence.value as number;
@@ -172,7 +199,23 @@ function applyConsequence(consequence: EventConsequence, state: GameState, rng?:
       return { ...state, tribes: updatedTribes };
     }
 
-    // ── Phase 3+ stubs ──────────────────────────────────────────────────────
+    // ── Slot-targeted person consequences ───────────────────────────────────
+    // These resolve the target slot to a real person ID.
+    // Full side-effect implementations will be added as events use these types.
+
+    case 'wound_person':
+    case 'kill_person':
+    case 'start_pregnancy':
+    case 'add_trait':
+    case 'remove_trait':
+    case 'remove_person':
+    case 'modify_opinion': {
+      const _resolvedTarget = resolveConsequenceTarget(consequence.target, boundActors);
+      void _resolvedTarget;
+      return state;
+    }
+
+    // ── Phase 3+ ─────────────────────────────────────────────────────────────
 
     case 'add_person': {
       // Guard: person generation requires a seeded RNG.
@@ -276,29 +319,32 @@ function applyConsequence(consequence: EventConsequence, state: GameState, rng?:
  * @param rng      Optional seeded RNG — required for consequences that generate people.
  */
 export function applyEventChoice(
-  event: GameEvent,
+  event: GameEvent | BoundEvent,
   choiceId: string,
   state: GameState,
   rng?: SeededRNG,
+  boundActors?: Record<string, string>,
 ): ApplyChoiceResult {
+  // Prefer caller-supplied boundActors; fall back to any stored on the event.
+  const resolvedBoundActors = boundActors ?? (event as BoundEvent).boundActors;
   const choice = event.choices.find(c => c.id === choiceId);
   if (!choice) return { state, isDeferredOutcome: false };
 
   // 1. Always-fire consequences.
   let updatedState = state;
   for (const consequence of choice.consequences) {
-    updatedState = applyConsequence(consequence, updatedState, rng);
+    updatedState = applyConsequence(consequence, updatedState, rng, resolvedBoundActors);
   }
 
   // 2. Skill check (only when there is no deferral — deferred outcomes resolve later).
   let skillCheckResult: SkillCheckResult | undefined;
   if (choice.skillCheck && !choice.deferredEventId) {
-    skillCheckResult = resolveSkillCheck(choice.skillCheck, updatedState);
+    skillCheckResult = resolveSkillCheck(choice.skillCheck, updatedState, {}, resolvedBoundActors);
     const outcomeConsequences = skillCheckResult.passed
       ? (choice.onSuccess ?? [])
       : (choice.onFailure ?? []);
     for (const consequence of outcomeConsequences) {
-      updatedState = applyConsequence(consequence, updatedState, rng);
+      updatedState = applyConsequence(consequence, updatedState, rng, resolvedBoundActors);
     }
   }
 
@@ -313,6 +359,7 @@ export function applyEventChoice(
         originEventId: event.id,
         originChoiceId: choiceId,
       },
+      ...(resolvedBoundActors ? { boundActors: resolvedBoundActors } : {}),
     };
     const existingDeferred = updatedState.deferredEvents ?? [];
     updatedState = { ...updatedState, deferredEvents: [...existingDeferred, entry] };
@@ -320,11 +367,15 @@ export function applyEventChoice(
   }
 
   // 4. Record in history and cooldowns.
+  // Collect involved persons: bound actors + skill-check actor (deduplicated).
+  const involvedIds = new Set<string>(Object.values(resolvedBoundActors ?? {}));
+  if (skillCheckResult?.actorId) involvedIds.add(skillCheckResult.actorId);
+
   const record: EventRecord = {
     eventId: event.id,
     turnNumber: state.turnNumber,
     choiceId,
-    involvedPersonIds: skillCheckResult?.actorId ? [skillCheckResult.actorId] : [],
+    involvedPersonIds: [...involvedIds],
     skillCheckResult,
   };
 

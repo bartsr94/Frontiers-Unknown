@@ -11,7 +11,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 |-------|--------|-------|
 | Phase 1 — Foundation | ✅ Complete | 13/13 steps done, 13/13 tests pass, zero compile errors |
 | Phase 2 — Genetics Engine | ✅ Complete | All 12 steps done, 139/139 tests pass, zero compile errors |
-| Phase 3 — Living Settlement | 🔄 In Progress | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ · Skills system ✅ · Skilled event resolution ✅ · Council voice system ✅ · Portrait system ✅ · Settlement buildings ✅ |
+| Phase 3 — Living Settlement | 🔄 In Progress | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ · Skills system ✅ · Skilled event resolution ✅ · Council voice system ✅ · Portrait system ✅ · Settlement buildings ✅ · Event character binding ✅ |
 | Phase 4 — Polish | 🔲 Not started | — |
 ---
 
@@ -73,7 +73,7 @@ If the exact age stage has no portraits yet, the resolver tries: `adult` → `yo
 
 ```bash
 npm run dev          # Vite dev server → http://localhost:5173
-npm test             # Run Vitest (435 passing across rng, inheritance, gender-ratio, fertility, event-filter, resolver, council-advice, resources, demographics, marriage, culture, language-acquisition, skills, buildings)
+npm test             # Run Vitest (493 passing across rng, inheritance, gender-ratio, fertility, event-filter, resolver, council-advice, resources, demographics, marriage, culture, language-acquisition, skills, buildings, actor-resolver, interpolation)
 npx tsc --noEmit     # Type-check without building
 ```
 
@@ -111,8 +111,9 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/turn/turn-processor.ts` | `processDawn(state, rng)` + `processDusk(state, season)` |
 | `src/simulation/turn/season.ts` | `SEASON_MODIFIERS` — food/goods production multipliers per season |
 | `src/simulation/events/engine.ts` | Event/choice/consequence **type definitions only** (no logic) |
-| `src/simulation/events/event-filter.ts` | `ALL_EVENTS`, `filterEligibleEvents()`, `drawEvents()` |
-| `src/simulation/events/resolver.ts` | `applyEventChoice(event, choiceId, state, rng?)` returning `ApplyChoiceResult`; `resolveSkillCheck()` helper; `ApplyChoiceResult` interface; `add_person` consequence handler (generates full `Person` from ethnic distribution + RNG) |
+| `src/simulation/events/event-filter.ts` | `ALL_EVENTS`, `filterEligibleEvents()`, `drawEvents()`; `canResolveActors` gate makes `actorRequirements` act as implicit event prerequisites |
+| `src/simulation/events/resolver.ts` | `applyEventChoice(event, choiceId, state, rng?, boundActors?)` returning `ApplyChoiceResult`; `resolveSkillCheck()` helper; `resolveConsequenceTarget()` (maps `{slot}` targets to person IDs); `add_person` consequence handler |
+| `src/simulation/events/actor-resolver.ts` | Actor binding engine: `matchesCriteria`, `canFillSlot`, `canResolveActors`, `selectActor`, `resolveActors`, `interpolateText` — pure TS, zero React, seeded RNG only |
 | `src/simulation/events/definitions/` | 33 events: company, diplomacy, domestic, economic, environmental + 18 cultural + 5 building |
 | `src/simulation/buildings/building-definitions.ts` | `BuildingId` (12-member union), `BuildingDef`, `BUILDING_CATALOG`, `getBuildingDisplayName(defId, style)` — static catalog of all building types |
 | `src/simulation/buildings/building-effects.ts` | Pure effect getters: `getShelterCapacity`, `getOvercrowdingRatio`, `getBuildingFlatProductionBonus`, `getLanguageDriftMultiplier`, `getBuildingCulturePull`, `getSkillGrowthBonuses`, `hasBuilding`, `lacksBuilding`, etc. |
@@ -137,7 +138,7 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/ui/components/CouncilPortrait.tsx` | 40×50px portrait `<img>` with skin-tone swatch fallback |
 | `src/ui/components/AdviceBubble.tsx` | Italic speech bubble rendered above the selected adviser seat in CouncilFooter |
 | `src/ui/layout/CouncilFooter.tsx` | 7-seat Expedition Council row; portraits, click-to-select adviser, trait-driven `AdviceBubble` with per-(person × event) advice caching |
-| `src/ui/views/EventView.tsx` | Event card with choices; calls `resolveEventChoice` + `nextEvent`; choice descriptions shown as hover tooltips |
+| `src/ui/views/EventView.tsx` | Event card with choices; actor badge strip (portrait + name) above description when slots are bound; `interpolateText` applied to all displayed text; calls `resolveEventChoice` + `nextEvent` |
 | `src/ui/views/PeopleView.tsx` | Settler roster; sort/filter (sex, status, heritage group, **base skill**); click row → PersonDetail panel |
 | `src/ui/views/PersonDetail.tsx` | Full person detail: genetics, heritage, traits, skills (base + derived), languages, family |
 | `src/ui/views/FamilyTree.tsx` | 3-generation ancestor/descendant tree; spouses shown to the side of root node |
@@ -250,7 +251,8 @@ idle
 | ✅ — | Council voice system & portraits | `src/simulation/events/council-advice.ts`, `src/ui/components/portrait-resolver.ts`, `src/ui/components/CouncilPortrait.tsx`, `src/ui/components/AdviceBubble.tsx`, `src/ui/layout/CouncilFooter.tsx` | Complete (bonus step) |
 | ✅ — | Portrait system (age stages, categories, registry) | `src/ui/components/portrait-resolver.ts`, `src/simulation/population/person.ts` | Complete (bonus step) |
 | ✅ 11 | Settlement buildings & upgrades | `src/simulation/buildings/`, `src/stores/game-store.ts`, `src/ui/views/SettlementView.tsx` | Complete |
-| 🔲 12 | Tribe relationship depth | — | Planned |
+| ✅ 12 | Event character binding | `src/simulation/events/actor-resolver.ts`, `src/simulation/events/engine.ts`, `src/simulation/events/event-filter.ts`, `src/simulation/events/resolver.ts`, `src/ui/views/EventView.tsx`, all definition files | Complete |
+| 🔲 13 | Tribe relationship depth | — | Planned |
 
 ### Cultural Identity System Notes
 
@@ -297,6 +299,18 @@ idle
 - **5 building events** in `definitions/building.ts`: `bld_fever_spreads`, `bld_bitter_quarrel`, `bld_someone_leaves`, `bld_completion_toast` (deferred), `bld_traders_notice` (unique, requires trading_post)
 - **`DawnResult` additions**: `completedBuildings`, `removedBuildingIds`, `updatedConstructionQueue`, `overcrowdingRatio`
 - **`applyLanguageDrift` signature**: now accepts optional `driftMultiplier = 1.0` parameter (multiplied by Gathering Hall bonus)
+
+### Event Character Binding System Notes
+
+- **`BoundEvent`**: `GameEvent & { boundActors: Record<string, string> }` — runtime wrapper; all entries in `pendingEvents` are `BoundEvent`; static definitions stay unmodified
+- **`actorRequirements?: ActorRequirement[]`** on `GameEvent`: typed criteria for slot selection (`sex`, `religion`, `minAge`, `maxAge`, `maritalStatus`, `minSkill`, `hasTrait`, etc.)
+- **`canResolveActors`** act as an implicit event prerequisite — event is ineligible if any required slot cannot be filled (enforces mutual exclusion)
+- **Actor selection**: greedy in declaration order; each claimed person is excluded from subsequent slots so no two slots share the same person
+- **Slot-targeted consequences**: `target: '{leaver}'` → `resolveConsequenceTarget()` strips braces and resolves to the bound person's ID
+- **Text interpolation tokens**: `{slot}` → full name; `{slot.first}` → given name; `{slot.he/his/him}` → pronouns matching sex; `{slot.He/His/Him}` → capitalised variants; unknown tokens passed through unchanged
+- **Deferred actors**: `DeferredEventEntry.boundActors` persists the binding across the deferred gap
+- **EventView actor strip**: when `boundActors` is non-empty, renders `CouncilPortrait` + first name for each bound actor above the event description
+- **All 28+ events retrofitted**: `domestic.ts` (12 events), `cultural.ts` (13 events), `building.ts` (2 events), `diplomacy.ts` (1 event), `economic.ts` (2 events); `environmental.ts`/`company.ts` have no slots (elemental/external events)
 
 ---
 
@@ -372,4 +386,6 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/population/skills.test.ts` — 36/36 passing (getSkillRating, getDerivedSkill, generatePersonSkills, createPerson integration)
 - `tests/buildings/construction.test.ts` — 19/19 passing (canBuild, startConstruction, assignBuilder/removeBuilder, processConstruction, cancelConstruction)
 - `tests/buildings/building-effects.test.ts` — 23/23 passing (shelterCapacity, productionBonus, childMortalityModifier, overcrowding, hasBuilding, etc.)
-- **Total: 435/435 passing**
+- `tests/events/actor-resolver.test.ts` — 33/33 passing (matchesCriteria per-field, canFillSlot, canResolveActors mutual exclusion, selectActor RNG determinism, resolveActors multi-slot exclusion + optional slots)
+- `tests/events/interpolation.test.ts` — 25/25 passing (all `{slot.*}` token variants, both sexes, capitalised pronouns, unknown slot/suffix passthrough, multi-slot strings)
+- **Total: 493/493 passing**

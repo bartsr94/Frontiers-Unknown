@@ -13,11 +13,14 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
     title: 'Game Tracks Spotted',
     category: 'domestic',
     prerequisites: [],
+    actorRequirements: [
+      { slot: 'scout', criteria: { sex: 'male' } },
+    ],
     weight: 3,
     cooldown: 5,
     isUnique: false,
     description:
-      'One of the men returns to camp excited: he has found fresh game tracks nearby ' +
+      '{scout} returns to camp excited: he has found fresh game tracks nearby ' +
       '— deer, by the depth and pattern of them, and in good number. An organized ' +
       'hunt could put real meat in the stores and lift spirits among the men. The ' +
       'question is how much to commit.',
@@ -60,14 +63,17 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
     title: 'The Weight of Distance',
     category: 'domestic',
     prerequisites: [],
+    actorRequirements: [
+      { slot: 'settler', criteria: { sex: 'male', religion: 'imanian_orthodox' } },
+    ],
     weight: 2,
     cooldown: 0,
     isUnique: true,
     description:
-      'One of the men comes to you after the evening meal. He misses his family. ' +
-      'He misses the city — the noise of it, the familiar smells. The wilderness is ' +
-      'getting to him, and you can see it in the way he stares at the tree line at ' +
-      'night, at the dark where the firelight ends. He has not asked to leave. ' +
+      '{settler} comes to you after the evening meal. {settler.He} misses {settler.his} family. ' +
+      '{settler.He} misses the city — the noise of it, the familiar smells. The wilderness is ' +
+      'getting to {settler.him}, and you can see it in the way {settler.he} stares at the tree line at ' +
+      'night, at the dark where the firelight ends. {settler.He} has not asked to leave. ' +
       'Not yet.',
     choices: [
       {
@@ -107,11 +113,15 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
     title: 'Men at Work',
     category: 'domestic',
     prerequisites: [],
+    actorRequirements: [
+      { slot: 'lead',    criteria: { sex: 'male' } },
+      { slot: 'partner', criteria: { sex: 'male' } },
+    ],
     weight: 2,
     cooldown: 0,
     isUnique: true,
     description:
-      'Two of the men have been spending their evenings improving the settlement ' +
+      '{lead} and {partner} have been spending their evenings improving the settlement ' +
       'entirely on their own initiative — better drainage channels, a covered ' +
       'chimney on the cook-fire, the dry stores reorganized out of reach of ' +
       'the damp. They ask your permission to make it a formal project, and for ' +
@@ -296,14 +306,17 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       { type: 'has_person_matching', params: { sex: 'female', minAge: 16, religion: 'sacred_wheel' } },
       { type: 'tribe_exists',        params: { tribeId: 'thunder_veil_band' } },
     ],
+    actorRequirements: [
+      { slot: 'bride', criteria: { sex: 'female', religion: 'sacred_wheel', maritalStatus: 'unmarried', minAge: 16 } },
+    ],
     weight: 2,
     cooldown: 15,
     isUnique: false,
     description:
       'A delegation from one of the Hanjoda tribes arrives — three women and an interpreter. ' +
       'They have a young man with them, perhaps twenty years old, lean and watchful. The ' +
-      'interpreter explains: he is a good hunter, unmarried, healthy. The tribe is offering ' +
-      'him as a husband to one of your Sauromatian women in exchange for steel. An unusual ' +
+      "interpreter explains: he is a good hunter, unmarried, healthy. The tribe is offering " +
+      'him as a husband to {bride} in exchange for steel. An unusual ' +
       'arrangement, but not an unre asonable one.',
     choices: [
       {
@@ -362,15 +375,19 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       // minAge: 16 ensures she is of marriageable age, not a child.
       { type: 'has_person_matching', params: { sex: 'female', minAge: 16, religion: 'sacred_wheel' } },
     ],
+    actorRequirements: [
+      { slot: 'suitor',  criteria: { sex: 'male',   minAge: 25 } },
+      { slot: 'beloved', criteria: { sex: 'female', religion: 'sacred_wheel', maritalStatus: 'unmarried' } },
+    ],
     weight: 2,
     cooldown: 12,
     isUnique: false,
     description:
-      'One of your older men comes to you privately. He is awkward about it but direct: he ' +
-      'has developed strong feelings for one of the Sauromatian women in the settlement. ' +
-      'He has not spoken to her about it. He is asking your permission — or at least your ' +
-      'blessing — before he makes his intentions known. He is a good man and has served ' +
-      'faithfully. She, for her part, has shown no sign of objection.',
+      '{suitor} comes to you privately. {suitor.He} is awkward about it but direct: {suitor.he} ' +
+      'has developed strong feelings for {beloved}. ' +
+      '{suitor.He} has not spoken to {beloved.her} about it. {suitor.He} is asking your permission — or at least your ' +
+      'blessing — before {suitor.he} makes {suitor.his} intentions known. {suitor.He} is a good man and has served ' +
+      'faithfully. {beloved.She}, for {beloved.her} part, has shown no sign of objection.',
     choices: [
       {
         id: 'bless_union',
@@ -405,13 +422,16 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       // All three choices reference Sauromatian women's traditions — event needs them present.
       { type: 'has_person_matching', params: { sex: 'female', religion: 'sacred_wheel' } },
     ],
+    actorRequirements: [
+      { slot: 'ceremony_leader', criteria: { sex: 'female', religion: 'sacred_wheel' } },
+    ],
     weight: 3,
     cooldown: 4,
     isUnique: false,
     description:
-      'The harvest is in — not abundant, but real. Your men want to mark it. The Sauromatian ' +
-      'women in the settlement have their own traditions for this time of year: offerings at ' +
-      'the water\'s edge, songs that go on past dark, a particular way of braiding grain that ' +
+      'The harvest is in — not abundant, but real. Your men want to mark it. {ceremony_leader} ' +
+      'and the other Sauromatian women in the settlement have their own traditions for this time of year: offerings at ' +
+      "the water's edge, songs that go on past dark, a particular way of braiding grain that " +
       'carries meaning you have not yet learned. You must decide how to honour the season.',
     choices: [
       {
@@ -505,15 +525,18 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
     prerequisites: [
       { type: 'cultural_blend_above', params: { value: 0.3 } },
     ],
+    actorRequirements: [
+      { slot: 'elder', criteria: { sex: 'male', minAge: 40 } },
+    ],
     weight: 2,
     cooldown: 8,
     isUnique: false,
     description:
-      'One of your oldest settlers — a founding member, deeply Imanian in his customs — ' +
-      'has requested a private audience. He is not angry, exactly. But he is worried. He ' +
+      '{elder} — a founding member, deeply Imanian in {elder.his} customs — ' +
+      'has requested a private audience. {elder.He} is not angry, exactly. But {elder.he} is worried. {elder.He} ' +
       'remembers why the Company sent men here: to establish an Imanian presence, to trade ' +
-      'on Imanian terms. He has been watching the settlement drift. The language at the ' +
-      'fire has been changing. The saints\' days go unmarked. He asks you: are we still ' +
+      'on Imanian terms. {elder.He} has been watching the settlement drift. The language at the ' +
+      "fire has been changing. The saints' days go unmarked. {elder.He} asks you: are we still " +
       'Imanian here?',
     choices: [
       {
@@ -698,15 +721,18 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       { type: 'has_person_matching', params: { sex: 'female', religion: 'sacred_wheel', minAge: 20 } },
       { type: 'min_year',            params: { value: 1      } },
     ],
+    actorRequirements: [
+      { slot: 'midwife', criteria: { sex: 'female', religion: 'sacred_wheel', minAge: 30 } },
+    ],
     weight: 2,
     cooldown: 10,
     isUnique: false,
     description:
-      'One of the older Sauromatian women approaches your settlement healer — or whoever ' +
-      'serves that function — and through gestures and trade-talk, makes an offer. She has ' +
-      'attended more births than she can count. Her knowledge of preparation, position, ' +
-      'herbs, and timing has saved lives that Imanian medicine would have lost. She asks ' +
-      'for nothing in return but to be allowed to practice her art.',
+      '{midwife} approaches your settlement healer — or whoever ' +
+      'serves that function — and through gestures and trade-talk, makes an offer. {midwife.She} has ' +
+      'attended more births than {midwife.she} can count. {midwife.Her} knowledge of preparation, position, ' +
+      'herbs, and timing has saved lives that Imanian medicine would have lost. {midwife.She} asks ' +
+      'for nothing in return but to be allowed to practice {midwife.her} art.',
     choices: [
       {
         id: 'accept_fully',
@@ -751,15 +777,18 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       // The ceremony the settler witnesses is performed by Sauromatian women.
       { type: 'has_person_matching', params: { sex: 'female', religion: 'sacred_wheel' } },
     ],
+    actorRequirements: [
+      { slot: 'witness', criteria: { sex: 'male', religion: 'imanian_orthodox' } },
+    ],
     weight: 2,
     cooldown: 12,
     isUnique: false,
     description:
-      'One of your settlers — one of the more curious, younger ones — tells you what he ' +
+      '{witness} — one of the more curious, younger ones — tells you what {witness.he} ' +
       'saw last night. The Sauromatian women were gathered at the water. There was a fire, ' +
       'low and ringed in stones, and they were speaking to it — or to something in it. ' +
-      'Calling and answering in a language he could not follow. He does not think it was ' +
-      'evil. He found it, he says carefully, moving. He asks what you think he should do.',
+      'Calling and answering in a language {witness.he} could not follow. {witness.He} does not think it was ' +
+      'evil. {witness.He} found it, {witness.he} says carefully, moving. {witness.He} asks what you think {witness.he} should do.',
     choices: [
       {
         id: 'report_heresy',
@@ -796,11 +825,14 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       // The storyteller is one of the Sauromatian women.
       { type: 'has_person_matching', params: { sex: 'female', religion: 'sacred_wheel' } },
     ],
+    actorRequirements: [
+      { slot: 'storyteller', criteria: { sex: 'female', religion: 'sacred_wheel' } },
+    ],
     weight: 2,
     cooldown: 8,
     isUnique: false,
     description:
-      'The evenings are drawing in. One of the Sauromatian women — the most talkative, ' +
+      'The evenings are drawing in. {storyteller} — the most talkative, ' +
       'the one who has picked up the most trade-talk — has begun telling stories at the ' +
       'evening fire. Your men gather without being asked. The stories are long and involve ' +
       'rivers, women who become cranes, arguments settled at the edge of the world. Nobody ' +
@@ -837,14 +869,17 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       // Require a young child — the narrative describes a four-year-old.
       { type: 'has_person_matching',  params: { maxAge: 8  } },
     ],
+    actorRequirements: [
+      { slot: 'child', criteria: { maxAge: 8 } },
+    ],
     weight: 1,
     cooldown: 0,
     isUnique: true,
     description:
-      'The child is perhaps four years old — old enough to run and to be stared at. Her ' +
+      '{child.first} is perhaps four years old — old enough to run and to be stared at. {child.His} ' +
       'eyes are unmistakably amber. Not hazel, not brown: the deep warm gold that the ' +
       'Hanjoda Talon consider their most sacred marker. Your men have noticed. Some find ' +
-      'them beautiful. A few of the more superstitious have been making signs against ill ' +
+      '{child.his} eyes beautiful. A few of the more superstitious have been making signs against ill ' +
       'luck. A delegation from the Talon tribe is expected next season, and they will ' +
       'certainly notice too.',
     choices: [
@@ -880,15 +915,18 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       { type: 'has_person_matching', params: { sex: 'female', religion: 'sacred_wheel', minAge: 16 } },
       { type: 'min_year',            params: { value: 1      } },
     ],
+    actorRequirements: [
+      { slot: 'teacher', criteria: { sex: 'female', religion: 'sacred_wheel', minAge: 16 } },
+    ],
     weight: 2,
     cooldown: 10,
     isUnique: false,
     description:
-      'One of the Sauromatian women — the most patient one — has begun holding informal ' +
-      'language lessons for anyone willing to sit with her after the evening meal. She ' +
-      'points. She names. She corrects gently. Three of your men have been attending ' +
-      'consistently. Progress is slow but visible. She has not asked your permission. ' +
-      'She has simply started. Now she asks you what you think.',
+      '{teacher} — the most patient one — has begun holding informal ' +
+      'language lessons for anyone willing to sit with {teacher.her} after the evening meal. {teacher.She} ' +
+      'points. {teacher.She} names. {teacher.She} corrects gently. Three of your men have been attending ' +
+      "consistently. Progress is slow but visible. {teacher.She} has not asked your permission. " +
+      '{teacher.She} has simply started. Now {teacher.she} asks you what you think.',
     choices: [
       {
         id: 'formalize',

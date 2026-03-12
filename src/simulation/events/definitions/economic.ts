@@ -13,11 +13,14 @@ export const ECONOMIC_EVENTS: GameEvent[] = [
     weight: 3,
     cooldown: 6,
     isUnique: false,
+    actorRequirements: [
+      { slot: 'negotiator', criteria: { sex: 'male' } },
+    ],
     description:
       'A traveling merchant has set up a temporary stall at the edge of camp — a ' +
       'lean man with a mule, a carefully maintained ledger, and the nervous eyes of ' +
       'someone who has crossed Sauromatian territory alone. He has goods that could ' +
-      'prove useful. He is very interested in your food surplus.',
+      'prove useful, and {negotiator} is already curious about his prices.',
     choices: [
       {
         id: 'trade_food',
@@ -31,7 +34,7 @@ export const ECONOMIC_EVENTS: GameEvent[] = [
       {
         id: 'trade_gold',
         label: 'Pay him 5 gold. Keep the food stores intact.',
-        description: 'Gold is easier to replenish than a winter food reserve. Whether you get his best prices is another matter.',
+        description: 'Gold is easier to replenish than a winter food reserve. You send {negotiator} to see what terms he will accept.',
         consequences: [
           { type: 'modify_resource', target: 'gold', value: -5 },
         ],
@@ -41,7 +44,7 @@ export const ECONOMIC_EVENTS: GameEvent[] = [
           actorSelection: 'best_council',
           attemptLabel: 'Negotiate',
         },
-        successText: 'A sharp eye and a harder expression get you the better end of the deal. He throws in an extra crate.',
+        successText: '{negotiator}\'s sharp eye and harder manner get you the better end of the deal. He throws in an extra crate.',
         failureText: 'The merchant is pleasant but unmovable. You take what is on offer.',
         onSuccess: [{ type: 'modify_resource', target: 'goods', value: 5 }],
         onFailure:  [{ type: 'modify_resource', target: 'goods', value: 3 }],
@@ -63,8 +66,11 @@ export const ECONOMIC_EVENTS: GameEvent[] = [
     weight: 2,
     cooldown: 0,
     isUnique: true,
+    actorRequirements: [
+      { slot: 'scout', criteria: { sex: 'male' } },
+    ],
     description:
-      'A scouting party returns with good news: a stand of excellent timber lies ' +
+      '{scout} returns from a scouting run with good news: a stand of excellent timber lies ' +
       'within easy reach of the settlement — close enough to harvest without a major ' +
       'expedition. Tall, straight, dry-standing — seasoned by the wind. It will not ' +
       'last. Other parties will find it before long.',

@@ -1,5 +1,16 @@
 # Event Character Binding System
 
+> **Status: ✅ Complete — Phase 3, Step 12**
+> All 7 implementation steps done. 58 new tests added (`actor-resolver.test.ts`: 33, `interpolation.test.ts`: 25). Total test suite: 493/493 passing, zero compile errors.
+>
+> **Implementation notes vs. this plan:**
+> - `cul_cosmopolitan_advocate` uses `minSkill: { skill:'bargaining', value:40 }` fallback (no `hasTrait:'cosmopolitan'` — trait not yet defined on any character)
+> - `bld_completion_toast` and `bld_fever_spreads` were left without slots (deferred/elemental events where no known person initiates)
+> - `dip_riverfolk_observers` `envoy` slot uses `{ sex: 'male' }` criteria (RNG selection, not "best diplomacy")
+> - `eco_passing_merchant` `negotiator` uses `{ sex: 'male' }` (not "best bargaining" via skill check)
+
+---
+
 ## Overview
 
 Events currently reference characters with generic language: "one of the men", "a Sauromatian woman", "your foreman". This document describes a system that replaces those placeholders with actual named settlers drawn from the living population, so that events feel like they are happening to the people you know rather than to anonymous archetypes.
@@ -326,10 +337,10 @@ All 28+ events across the 7 definition files are updated. Below are the slot ass
 
 ## Implementation Order
 
-1. `engine.ts` + `game-state.ts` type changes
-2. New `actor-resolver.ts` module
-3. `resolver.ts` changes (boundActors plumbing)
-4. `event-filter.ts` + `game-store.ts` wiring
-5. `EventView.tsx` actor strip + interpolation
-6. Retrofit all event definition files (can be done in parallel across files)
-7. New tests
+1. ✅ `engine.ts` + `game-state.ts` type changes
+2. ✅ New `actor-resolver.ts` module
+3. ✅ `resolver.ts` changes (boundActors plumbing)
+4. ✅ `event-filter.ts` + `game-store.ts` wiring
+5. ✅ `EventView.tsx` actor strip + interpolation
+6. ✅ Retrofit all event definition files (domestic, cultural, building, diplomacy, economic)
+7. ✅ New tests (`actor-resolver.test.ts`, `interpolation.test.ts`)

@@ -44,6 +44,8 @@ import type {
 import type { Person, WorkRole, CultureId } from '../simulation/population/person';
 import { ETHNIC_GROUP_PRIMARY_LANGUAGE, ETHNIC_GROUP_CULTURE } from '../simulation/population/person';
 import type { GameEvent, SkillCheckResult } from '../simulation/events/engine';
+import type { BoundEvent } from '../simulation/events/engine';
+import { resolveActors } from '../simulation/events/actor-resolver';
 import { generateId } from '../utils/id';
 
 // ─── Stub types (Phase 3) ────────────────────────────────────────────────────
@@ -60,7 +62,7 @@ export interface GameStore {
   // ── State ────────────────────────────────────────────────────────────────
   gameState: GameState | null;
   currentPhase: TurnPhase;
-  pendingEvents: GameEvent[];
+  pendingEvents: BoundEvent[];
   currentEventIndex: number;
   /** The skill check result from the last resolved event choice. Cleared on next choice. */
   lastSkillCheckResult: SkillCheckResult | null;
@@ -569,9 +571,14 @@ export const useGameStore = create<GameStore>((set, get) => {
       // Drain any deferred events whose turn has arrived, and prepend them
       // to the normal draw so they are resolved first.
       const { due: dueDeferred, remaining: remainingDeferred } = drainDeferredEvents(postDawnState);
-      const deferredGameEvents = dueDeferred
-        .map(entry => getEventById(entry.eventId))
-        .filter((e): e is GameEvent => e !== undefined);
+      // Reconstruct deferred events as BoundEvents using stored actor bindings.
+      const deferredBoundEvents: BoundEvent[] = dueDeferred
+        .map(entry => {
+          const ev = getEventById(entry.eventId);
+          if (!ev) return null;
+          return { ...ev, boundActors: entry.boundActors ?? {} } as BoundEvent;
+        })
+        .filter((e): e is BoundEvent => e !== null);
 
       const stateAfterDrain: GameState = {
         ...postDawnState,
@@ -583,8 +590,17 @@ export const useGameStore = create<GameStore>((set, get) => {
       const drawCount = 1 + rng.nextInt(0, 2);
       const drawn     = drawEvents(eligible, drawCount, rng);
 
+      // Bind actors to each drawn event using the seeded RNG.
+      const boundDrawn: BoundEvent[] = drawn.map(event => {
+        if (!event.actorRequirements || event.actorRequirements.length === 0) {
+          return { ...event, boundActors: {} } as BoundEvent;
+        }
+        const actors = resolveActors(event.actorRequirements, stateAfterDrain, rng);
+        return { ...event, boundActors: actors ?? {} } as BoundEvent;
+      });
+
       // Deferred events are prepended so they resolve before new draws.
-      const allPending = [...deferredGameEvents, ...drawn];
+      const allPending: BoundEvent[] = [...deferredBoundEvents, ...boundDrawn];
 
       set({
         gameState: stateAfterDrain,
@@ -607,17 +623,17 @@ export const useGameStore = create<GameStore>((set, get) => {
       // Uses a different offset from processDawn (seed + turnNumber) to avoid
       // consuming the same sequence as the dawn phase.
       const rng = createRNG(gameState.seed ^ (gameState.turnNumber * 2654435761));
-      const result = applyEventChoice(event, choiceId, gameState, rng);
+      const result = applyEventChoice(event, choiceId, gameState, rng, event.boundActors);
 
       // If the choice produced a follow-up event, insert it next in the queue.
-      const updatedPending = result.followUpEventId
+      const updatedPending: BoundEvent[] = result.followUpEventId
         ? (() => {
             const followUp = getEventById(result.followUpEventId);
-            const front = followUp ? [followUp] : [];
+            const front: BoundEvent[] = followUp ? [{ ...followUp, boundActors: {} }] : [];
             const remaining = pendingEvents.filter(e => e.id !== eventId);
             return [...front, ...remaining];
           })()
-        : pendingEvents;
+        : pendingEvents.filter(e => e.id !== eventId);
 
       set({
         gameState: result.state,

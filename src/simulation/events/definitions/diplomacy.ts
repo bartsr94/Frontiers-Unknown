@@ -18,6 +18,9 @@ export const DIPLOMACY_EVENTS: GameEvent[] = [
     weight: 1,
     cooldown: 0,
     isUnique: true,
+    actorRequirements: [
+      { slot: 'envoy', criteria: { sex: 'male' } },
+    ],
     description:
       'A small group of women has been spotted watching the camp from across the ' +
       'water. Kiswani Riverfolk, by the look of them — pearl ornaments catching ' +
@@ -28,7 +31,7 @@ export const DIPLOMACY_EVENTS: GameEvent[] = [
     choices: [
       {
         id: 'send_greeting',
-        label: 'Send a man to the bank with open hands and a greeting.',
+        label: 'Send {envoy} to the bank with open hands and a greeting.',
         description:
           'Reaching across the water is a gesture. Whether it is answered depends on how well it is read.',
         consequences: [],

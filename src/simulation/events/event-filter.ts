@@ -13,6 +13,7 @@ import type { GameEvent, EventPrerequisite, DeferredEventEntry } from './engine'
 import type { GameState, ResourceType, BuildingId } from '../turn/game-state';
 import type { SeededRNG } from '../../utils/rng';
 import { hasBuilding, lacksBuilding, getOvercrowdingRatio } from '../buildings/building-effects';
+import { canResolveActors } from './actor-resolver';
 
 import { ENVIRONMENTAL_EVENTS } from './definitions/environmental';
 import { ECONOMIC_EVENTS }      from './definitions/economic';
@@ -119,7 +120,14 @@ export function isEventEligible(event: GameEvent, state: GameState): boolean {
   }
 
   // 3. All prerequisites must pass.
-  return event.prerequisites.every(prereq => checkPrerequisite(prereq, state));
+  if (!event.prerequisites.every(prereq => checkPrerequisite(prereq, state))) return false;
+
+  // 4. All required actor slots must be fillable.
+  if (event.actorRequirements && event.actorRequirements.length > 0) {
+    if (!canResolveActors(event.actorRequirements, state)) return false;
+  }
+
+  return true;
 }
 
 // ─── Filtering ────────────────────────────────────────────────────────────────

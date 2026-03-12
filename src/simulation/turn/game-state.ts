@@ -10,11 +10,11 @@
  */
 
 import type { Person, Heritage, EthnicGroup, ReligionId, LanguageId } from '../population/person';
-import type { GameEvent, SkillCheckResult, DeferredEventEntry } from '../events/engine';
+import type { GameEvent, SkillCheckResult, DeferredEventEntry, BoundEvent } from '../events/engine';
 
 // Re-export shared identity types so consumers only need one import path.
 export type { EthnicGroup, ReligionId, LanguageId, CultureId } from '../population/person';
-export type { SkillCheckResult, DeferredEventEntry } from '../events/engine';
+export type { SkillCheckResult, DeferredEventEntry, BoundEvent } from '../events/engine';
 
 // ─── Economy ───────────────────────────────────────────────────────────────────
 
@@ -422,8 +422,9 @@ export interface GameState {
   /**
    * Events queued for player resolution in the current Event Phase.
    * Populated by the turn processor; cleared when all choices are resolved.
+   * Each entry is a BoundEvent — the static GameEvent plus resolved actor bindings.
    */
-  pendingEvents: GameEvent[];
+  pendingEvents: BoundEvent[];
 
   /**
    * IDs of people currently seated on the Expedition Council, in seat order.

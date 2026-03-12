@@ -7,7 +7,7 @@
  * `src/simulation/events/definitions/`.
  */
 
-import type { SkillId, DerivedSkillId } from '../population/person';
+import type { SkillId, DerivedSkillId, TraitId, CultureId, ReligionId, SocialStatus, WorkRole } from '../population/person';
 
 // ─── Consequence Types ───────────────────────────────────────────────────────
 
@@ -106,6 +106,26 @@ export interface ChoiceRequirement {
 }
 
 /**
+ * Typed matching criteria used to select a person for an actor slot.
+ * All fields are optional — only populated fields are checked.
+ */
+export interface ActorCriteria {
+  sex?: 'male' | 'female';
+  religion?: ReligionId;
+  /** Matches person.heritage.primaryCulture. */
+  culturalIdentity?: CultureId;
+  minAge?: number;
+  maxAge?: number;
+  maritalStatus?: 'married' | 'unmarried';
+  role?: WorkRole;
+  socialStatus?: SocialStatus;
+  /** Person must have this trait in their traits array. */
+  hasTrait?: TraitId;
+  /** Person must have at least this score in the given skill. */
+  minSkill?: { skill: SkillId | DerivedSkillId; value: number };
+}
+
+/**
  * Specifies constraints on which person(s) can fill an actor slot in an event.
  * The engine selects a matching person and substitutes them into the event
  * description template before displaying it to the player.
@@ -116,12 +136,13 @@ export interface ActorRequirement {
    * Matches template variables in the event description string, e.g., `{subject}`.
    */
   slot: string;
+  /** Typed criteria the selected person must satisfy. */
+  criteria: ActorCriteria;
   /**
-   * Criteria the selected person must match.
-   * Key/value pairs interpreted by the person-matching prerequisite checker.
-   * Example: `{ sex: 'female', unmarried: true, minAge: 14 }`
+   * When true (default), the event is ineligible if this slot cannot be filled.
+   * Set to false for optional actors (event still fires, slot interpolation is skipped).
    */
-  criteria: Record<string, unknown>;
+  required?: boolean;
 }
 
 // ─── Skill Check Interfaces ──────────────────────────────────────────────────
@@ -179,7 +200,22 @@ export interface DeferredEventEntry {
    * Common keys: actorId, originEventId, originChoiceId.
    */
   context: Record<string, unknown>;
+  /**
+   * Actor bindings from the original event, persisted so deferred outcome text
+   * can still reference the same named people.
+   */
+  boundActors?: Record<string, string>;
 }
+
+/**
+ * The runtime form of a GameEvent.
+ * Static event definitions are pure data; binding is added at draw time only.
+ * All entries in pendingEvents are BoundEvents; the store never exposes plain GameEvents.
+ */
+export type BoundEvent = GameEvent & {
+  /** Maps slot name → person.id for every actor resolved at draw time. */
+  boundActors: Record<string, string>;
+};
 
 // ─── Event Choice ─────────────────────────────────────────────────────────────
 
