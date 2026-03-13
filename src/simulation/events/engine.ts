@@ -261,6 +261,13 @@ export interface EventChoice {
   deferredEventId?: string;
   /** Number of turns to wait before the deferred event fires. Default: 4. */
   deferredTurns?: number;
+  /**
+   * Names the actor slot (from actorRequirements) of the person dispatched on
+   * this deferred mission. That person's WorkRole is set to 'away' immediately
+   * when the choice is made, and restored to their prior role when the deferred
+   * event resolves. Ignored when deferredEventId is not set.
+   */
+  missionActorSlot?: string;
 
   // ── Outcome Narrative Text ────────────────────────────────────────────────
   /** Narrative shown on the outcome screen after a successful skill check. */

@@ -983,6 +983,7 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
         consequences: [],
         deferredEventId: 'dom_settler_recovery',
         deferredTurns: 2,
+        missionActorSlot: 'patient',
         pendingText:
           '{patient.first} is made comfortable and left to rest. ' +
           'The camp continues without {patient.him}. You will know more in a day or two.',

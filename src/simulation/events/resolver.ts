@@ -30,7 +30,7 @@ import type {
   DeferredEventEntry,
 } from './engine';
 import type { GameState, ResourceType, EventRecord } from '../turn/game-state';
-import type { Person, EthnicGroup, ReligionId, SocialStatus, CultureId } from '../population/person';
+import type { Person, EthnicGroup, ReligionId, SocialStatus, CultureId, WorkRole } from '../population/person';
 import {
   getDerivedSkill,
   createPerson,
@@ -98,10 +98,11 @@ export function resolveSkillCheck(
   if (check.actorSelection === 'best_council') {
     actor = state.councilMemberIds
       .map(id => state.people.get(id))
-      .filter((p): p is Person => p !== undefined)
+      .filter((p): p is Person => p !== undefined && p.role !== 'away')
       .sort((a, b) => getActorScore(b, check.skill) - getActorScore(a, check.skill))[0];
   } else if (check.actorSelection === 'best_settlement') {
     actor = Array.from(state.people.values())
+      .filter(p => p.role !== 'away')
       .sort((a, b) => getActorScore(b, check.skill) - getActorScore(a, check.skill))[0];
   } else if (check.actorSelection === 'actor_slot' && check.actorSlot) {
     // bondActors takes precedence; fall back to legacy context map
@@ -362,12 +363,33 @@ export function applyEventChoice(
   let isDeferredOutcome = false;
   if (choice.deferredEventId) {
     const deferredTurns = choice.deferredTurns ?? 4;
+
+    // If a missionActorSlot is declared, mark that person as 'away' immediately
+    // and record their original role so processDawn can restore it on return.
+    let missionContext: Record<string, unknown> = {};
+    if (choice.missionActorSlot && resolvedBoundActors) {
+      const missionActorId = resolvedBoundActors[choice.missionActorSlot];
+      if (missionActorId) {
+        const missionActor = updatedState.people.get(missionActorId);
+        if (missionActor && missionActor.role !== 'away') {
+          missionContext = {
+            missionActorId,
+            prevRole: missionActor.role as WorkRole,
+          };
+          const updatedPeople = new Map(updatedState.people);
+          updatedPeople.set(missionActorId, { ...missionActor, role: 'away' });
+          updatedState = { ...updatedState, people: updatedPeople };
+        }
+      }
+    }
+
     const entry: DeferredEventEntry = {
       eventId: choice.deferredEventId,
       scheduledTurn: state.turnNumber + deferredTurns,
       context: {
         originEventId: event.id,
         originChoiceId: choiceId,
+        ...missionContext,
       },
       ...(resolvedBoundActors ? { boundActors: resolvedBoundActors } : {}),
     };

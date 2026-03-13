@@ -14,7 +14,7 @@
  *   DUSK   → seasonal effects, quota check (autumn), tribe updates
  */
 
-import type { GameState, Season, ResourceStock, GraveyardEntry, BuiltBuilding, ConstructionProject } from './game-state';
+import type { GameState, Season, ResourceStock, GraveyardEntry, BuiltBuilding, ConstructionProject, QuotaStatus } from './game-state';
 import type { Person } from '../population/person';
 import type { SeededRNG } from '../../utils/rng';
 import { clamp } from '../../utils/math';
@@ -45,6 +45,13 @@ import {
   getBuildingCulturePull,
   getSkillGrowthBonuses,
 } from '../buildings/building-effects';
+import { calculateSpoilage } from '../economy/spoilage';
+import {
+  computeYearlyQuota,
+  checkQuotaStatus,
+  getQuotaEventId,
+  applyQuotaResult,
+} from '../economy/company';
 
 // ─── Result Types ─────────────────────────────────────────────────────────────
 
@@ -112,6 +119,11 @@ export interface DawnResult {
   updatedConstructionQueue: ConstructionProject[];
   /** Overcrowding ratio this dawn (populationCount / shelterCapacity). */
   overcrowdingRatio: number;
+  /**
+   * Resources lost to spoilage this dawn.
+   * Each value is the amount lost (positive number). Zero-valued resources are omitted.
+   */
+  spoilageThisTurn: Partial<ResourceStock>;
 }
 
 /** Data returned by processDusk(). The store applies these to GameState. */
@@ -123,6 +135,21 @@ export interface DuskResult {
    * Increments by 1 when winter transitions to spring.
    */
   nextYear: number;
+  /**
+   * Quota check result for the current year (only set when season is 'autumn').
+   * null for all other seasons.
+   */
+  quotaStatus: QuotaStatus | null;
+  /**
+   * ID of the Company event that should fire as a result of the quota check.
+   * null when no quota event is triggered (grace period, non-autumn, or already abandoned).
+   */
+  quotaEventId: string | null;
+  /**
+   * Whether quota contribution fields should be reset (true when transitioning
+   * out of Winter — i.e., the window was already closed).
+   */
+  resetQuotaContributions: boolean;
 }
 
 // ─── Mortality Helpers ─────────────────────────────────────────────────────────
@@ -474,6 +501,11 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     removedBuildingIds: constructionResult.removedBuildingIds,
     updatedConstructionQueue: constructionResult.updatedQueue,
     overcrowdingRatio,
+    spoilageThisTurn: calculateSpoilage(
+      state.settlement.resources,
+      state.currentSeason,
+      currentBuildings,
+    ),
   };
 }
 
@@ -502,5 +534,42 @@ export function processDusk(state: GameState, _season: Season): DuskResult {
   // Year advances when rolling over from winter to spring.
   const nextYear = nextSeason === 'spring' ? state.currentYear + 1 : state.currentYear;
 
-  return { nextSeason, nextYear };
+  // Autumn: run the annual Company quota check.
+  if (state.currentSeason === 'autumn') {
+    const quota = computeYearlyQuota(state.currentYear);
+    const contribution = {
+      gold: state.company.quotaContributedGold,
+      goods: state.company.quotaContributedGoods,
+    };
+    const qStatus = checkQuotaStatus(contribution, quota);
+    const updatedCompany = applyQuotaResult(state.company, qStatus);
+    const alreadyAbandoned = state.company.supportLevel === 'abandoned';
+    const qEventId = getQuotaEventId(updatedCompany.consecutiveFailures, alreadyAbandoned);
+    return {
+      nextSeason,
+      nextYear,
+      quotaStatus: qStatus,
+      quotaEventId: qEventId,
+      resetQuotaContributions: false,
+    };
+  }
+
+  // Winter→Spring transition: reset annual quota contribution window.
+  if (nextSeason === 'spring') {
+    return {
+      nextSeason,
+      nextYear,
+      quotaStatus: null,
+      quotaEventId: null,
+      resetQuotaContributions: true,
+    };
+  }
+
+  return {
+    nextSeason,
+    nextYear,
+    quotaStatus: null,
+    quotaEventId: null,
+    resetQuotaContributions: false,
+  };
 }

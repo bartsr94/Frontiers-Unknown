@@ -15,6 +15,12 @@ import { createPerson } from '../simulation/population/person';
 import { generateName } from '../simulation/population/naming';
 import { processDawn, processDusk } from '../simulation/turn/turn-processor';
 import { addResourceStocks, clampResourceStock, emptyResourceStock } from '../simulation/economy/resources';
+import { validateTrade, executeTribeTradeLogic } from '../simulation/economy/trade';
+import type { TradeOffer } from '../simulation/economy/trade';
+import { validateCraft, applyCraft } from '../simulation/economy/crafting';
+import type { CraftRecipeId } from '../simulation/economy/crafting';
+import { applyQuotaResult } from '../simulation/economy/company';
+import { applySpoilage } from '../simulation/economy/spoilage';
 import { filterEligibleEvents, drawEvents, ALL_EVENTS, drainDeferredEvents, getEventById } from '../simulation/events/event-filter';
 import { applyEventChoice } from '../simulation/events/resolver';
 import type { ApplyChoiceResult } from '../simulation/events/resolver';
@@ -30,6 +36,7 @@ import {
   removeBuilder as buildingRemoveBuilder,
   cancelConstruction,
 } from '../simulation/buildings/construction';
+import { hasBuilding } from '../simulation/buildings/building-effects';
 import type {
   GameState,
   TurnPhase,
@@ -49,10 +56,8 @@ import type { BoundEvent } from '../simulation/events/engine';
 import { resolveActors } from '../simulation/events/actor-resolver';
 import { generateId } from '../utils/id';
 
-// ─── Stub types (Phase 3) ────────────────────────────────────────────────────
-
-/** Stub: trade offer interface. Fully implemented in Phase 3. */
-export interface TradeOffer {}
+// Re-export economy types consumed by UI components.
+export type { TradeOffer };
 
 /** Stub: diplomatic action interface. Fully implemented in Phase 3. */
 export interface DiplomaticAction {}
@@ -73,6 +78,14 @@ export interface GameStore {
   _pendingProduction: ResourceStock | undefined;
   /** Resource consumption delta from the last Dawn phase; applied in endTurn(). */
   _pendingConsumption: ResourceStock | undefined;
+  /** Spoilage losses from the last Dawn phase; applied in endTurn(). */
+  _pendingSpoilage: Partial<ResourceStock> | undefined;
+  /**
+   * The spoilage from the current turn's dawn, if significant (> 3 units total).
+   * Shown as a notification to the player during the management phase.
+   * null if spoilage was below the display threshold.
+   */
+  lastSpoilage: Partial<ResourceStock> | null;
   /**
    * A one-time notification message to display to the player (e.g. creole emergence).
    * UI components should show this and then call `dismissNotification()`.
@@ -85,6 +98,8 @@ export interface GameStore {
   saveGame: () => string;
   /** Clear the current pending notification. */
   dismissNotification: () => void;
+  /** Dismiss the spoilage notification for this turn. */
+  dismissSpoilage: () => void;
 
   // ── Turn flow ─────────────────────────────────────────────────────────────
   startTurn: () => void;
@@ -96,8 +111,13 @@ export interface GameStore {
   // ── Management phase ──────────────────────────────────────────────────────
   assignRole: (personId: string, role: WorkRole) => void;
   arrangeMarriage: (personAId: string, personBId: string) => void;
-  executeTrade: (partnerId: string, offer: TradeOffer) => void;
+  /** Execute a barter trade with an external tribe (management phase only). */
+  executeTrade: (tribeId: string, offer: TradeOffer, requested: TradeOffer) => void;
   sendDiplomaticAction: (tribeId: string, action: DiplomaticAction) => void;
+  /** Contribute gold and/or goods toward the Company's annual quota. */
+  contributeToQuota: (gold: number, goods: number) => void;
+  /** Execute a crafting recipe (management phase only). */
+  performCraft: (recipeId: CraftRecipeId) => void;
   // ── Buildings ─────────────────────────────────────────────────────────────
   /** Queue a new construction project. Deducts resources immediately. No-op if canBuild fails. */
   startConstruction: (defId: BuildingId, style: BuildingStyle | null) => void;
@@ -191,10 +211,31 @@ function serializeGameState(state: GameState): string {
 
 function deserializeGameState(json: string): GameState {
   const s: SerialGameState = JSON.parse(json) as SerialGameState;
+  const rawCompany = s.company as Partial<CompanyRelation> & typeof s.company;
+  const restoredCompany: CompanyRelation = {
+    ...s.company,
+    quotaContributedGold:  rawCompany.quotaContributedGold  ?? 0,
+    quotaContributedGoods: rawCompany.quotaContributedGoods ?? 0,
+  };
+  // Restore ExternalTribe fields added for the trade system.
+  const restoredTribes = new Map(
+    (s.tribes as Array<[string, ReturnType<typeof createTribe>]>).map(([id, t]) => {
+      const tribeWithFallbacks = {
+        ...t,
+        contactEstablished: t.contactEstablished ?? false,
+        lastTradeTurn:      t.lastTradeTurn      ?? null,
+        tradeHistoryCount:  t.tradeHistoryCount  ?? 0,
+        tradeDesires:       t.tradeDesires       ?? [],
+        tradeOfferings:     t.tradeOfferings     ?? [],
+      };
+      return [id, tribeWithFallbacks] as [string, typeof tribeWithFallbacks];
+    }),
+  );
   return {
     ...s,
+    company: restoredCompany,
     people: new Map(s.people.map(([id, p]) => [id, deserializePerson(p)])),
-    tribes: new Map(s.tribes),
+    tribes: restoredTribes,
     culture: {
       ...s.culture,
       languages: new Map(s.culture.languages as [import('../simulation/population/person').LanguageId, number][]),
@@ -441,6 +482,8 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
     consecutiveFailures: 0,
     supportLevel: 'standard',
     yearsActive: 0,
+    quotaContributedGold: 0,
+    quotaContributedGoods: 0,
   };
 
   // Instantiate tribes from selected presets.
@@ -449,6 +492,8 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
     const preset = TRIBE_PRESETS[presetId];
     if (preset) {
       const tribe = createTribe(preset);
+      // Starting tribes are known contacts — trade is available immediately.
+      tribe.contactEstablished = true;
       tribes.set(tribe.id, tribe);
     }
   }
@@ -500,6 +545,8 @@ export const useGameStore = create<GameStore>((set, get) => {
     lastChoiceResult: null,
     _pendingProduction: undefined,
     _pendingConsumption: undefined,
+    _pendingSpoilage: undefined,
+    lastSpoilage: null,
     pendingNotification: null,
 
     // ── Game lifecycle ────────────────────────────────────────────────────
@@ -529,6 +576,10 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     dismissNotification() {
       set({ pendingNotification: null });
+    },
+
+    dismissSpoilage() {
+      set({ lastSpoilage: null });
     },
 
     // ── Turn flow ─────────────────────────────────────────────────────────
@@ -593,15 +644,31 @@ export const useGameStore = create<GameStore>((set, get) => {
         })
         .filter((e): e is BoundEvent => e !== null);
 
+      // Restore 'away' roles for mission actors whose deferred events are now due.
+      const restoredPeople = new Map(postDawnState.people);
+      for (const entry of dueDeferred) {
+        const missionActorId = entry.context['missionActorId'] as string | undefined;
+        const prevRole = entry.context['prevRole'] as WorkRole | undefined;
+        if (missionActorId && prevRole) {
+          const p = restoredPeople.get(missionActorId);
+          if (p && p.role === 'away') {
+            restoredPeople.set(missionActorId, { ...p, role: prevRole });
+          }
+        }
+      }
+
       const stateAfterDrain: GameState = {
         ...postDawnState,
+        people: restoredPeople,
         deferredEvents: remainingDeferred,
       };
 
       // Draw 1–3 events from the eligible pool.
       const eligible  = filterEligibleEvents(ALL_EVENTS, stateAfterDrain);
       const drawCount = 1 + rng.nextInt(0, 2);
-      const drawn     = drawEvents(eligible, drawCount, rng);
+      const hasTradingPost = hasBuilding(stateAfterDrain.settlement.buildings, 'trading_post');
+      const weightBoosts: Record<string, number> = hasTradingPost ? { 'eco_passing_merchant': 2 } : {};
+      const drawn     = drawEvents(eligible, drawCount, rng, weightBoosts);
 
       // Bind actors to each drawn event using the seeded RNG.
       const boundDrawn: BoundEvent[] = drawn.map(event => {
@@ -629,6 +696,12 @@ export const useGameStore = create<GameStore>((set, get) => {
         currentEventIndex: 0,
         _pendingProduction: dawnResult.production,
         _pendingConsumption: dawnResult.consumption,
+        _pendingSpoilage: dawnResult.spoilageThisTurn,
+        lastSpoilage: (() => {
+          const s = dawnResult.spoilageThisTurn;
+          const total = Object.values(s).reduce((acc, v) => acc + (v ?? 0), 0);
+          return total >= 1 ? s : null;
+        })(),
         ...(showCreoleNotification && {
           pendingNotification:
             'A new tongue is being born. Children raised in this settlement blend ' +
@@ -693,6 +766,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       const store = get() as GameStore & {
         _pendingProduction?: ResourceStock;
         _pendingConsumption?: ResourceStock;
+        _pendingSpoilage?: Partial<ResourceStock>;
       };
       const { gameState } = store;
       if (!gameState) return;
@@ -701,19 +775,50 @@ export const useGameStore = create<GameStore>((set, get) => {
       const consumption = store._pendingConsumption ?? emptyResourceStock();
 
       // Apply resource deltas: production + consumption (consumption is already negative).
-      const rawResources = addResourceStocks(
+      let rawResources = addResourceStocks(
         addResourceStocks(gameState.settlement.resources, production),
         consumption,
       );
+
+      // Apply spoilage losses.
+      if (store._pendingSpoilage) {
+        rawResources = applySpoilage(rawResources, store._pendingSpoilage);
+      }
+
       const updatedResources = clampResourceStock(rawResources);
 
       const duskResult = processDusk(gameState, gameState.currentSeason);
+
+      // Update company relation based on quota outcome (autumn only).
+      let updatedCompany = gameState.company;
+      if (duskResult.quotaStatus !== null) {
+        updatedCompany = applyQuotaResult(gameState.company, duskResult.quotaStatus);
+      }
+      if (duskResult.resetQuotaContributions) {
+        updatedCompany = { ...updatedCompany, quotaContributedGold: 0, quotaContributedGoods: 0 };
+      }
+
+      // Queue triggered Company event for next turn's event phase.
+      let updatedDeferredEvents = gameState.deferredEvents;
+      if (duskResult.quotaEventId) {
+        updatedDeferredEvents = [
+          ...updatedDeferredEvents,
+          {
+            eventId: duskResult.quotaEventId,
+            scheduledTurn: gameState.turnNumber + 1,
+            context: {},
+            boundActors: {},
+          },
+        ];
+      }
 
       const updatedState: GameState = {
         ...gameState,
         currentSeason: duskResult.nextSeason,
         currentYear: duskResult.nextYear,
         turnNumber: gameState.turnNumber + 1,
+        company: updatedCompany,
+        deferredEvents: updatedDeferredEvents,
         settlement: {
           ...gameState.settlement,
           resources: updatedResources,
@@ -728,6 +833,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         currentPhase: 'idle',
         _pendingProduction: undefined,
         _pendingConsumption: undefined,
+        _pendingSpoilage: undefined,
+        lastSpoilage: null,
       });
     },
 
@@ -785,12 +892,73 @@ export const useGameStore = create<GameStore>((set, get) => {
       set({ gameState: updatedState });
     },
 
-    executeTrade(_partnerId, _offer) {
-      // Phase 3: trade execution logic.
+    executeTrade(tribeId, offer, requested) {
+      const { gameState, currentPhase } = get();
+      if (!gameState || currentPhase !== 'management') return;
+      const tribe = gameState.tribes.get(tribeId);
+      if (!tribe) return;
+      const validation = validateTrade(offer, requested, gameState.settlement.resources, tribe, gameState.turnNumber);
+      if (!validation.ok) return;
+      const result = executeTribeTradeLogic(gameState.settlement.resources, offer, requested, tribe, gameState.turnNumber);
+      const updatedTribe = {
+        ...tribe,
+        disposition: Math.max(0, Math.min(100, tribe.disposition + result.dispositionDelta)),
+        tradeHistoryCount: result.newTradeHistoryCount,
+        lastTradeTurn: result.tradeTurn,
+      };
+      const updatedTribes = new Map(gameState.tribes);
+      updatedTribes.set(tribeId, updatedTribe);
+      set({
+        gameState: {
+          ...gameState,
+          tribes: updatedTribes,
+          settlement: { ...gameState.settlement, resources: result.newResources },
+        },
+      });
     },
 
     sendDiplomaticAction(_tribeId, _action) {
       // Phase 3: diplomacy logic.
+    },
+
+    contributeToQuota(gold, goods) {
+      const { gameState, currentPhase } = get();
+      if (!gameState || currentPhase !== 'management') return;
+      const { company, settlement } = gameState;
+      const actualGold  = Math.min(Math.max(0, gold),  settlement.resources.gold);
+      const actualGoods = Math.min(Math.max(0, goods), settlement.resources.goods);
+      if (actualGold === 0 && actualGoods === 0) return;
+      const updatedResources: ResourceStock = {
+        ...settlement.resources,
+        gold:  settlement.resources.gold  - actualGold,
+        goods: settlement.resources.goods - actualGoods,
+      };
+      const updatedCompany: CompanyRelation = {
+        ...company,
+        quotaContributedGold:  company.quotaContributedGold  + actualGold,
+        quotaContributedGoods: company.quotaContributedGoods + actualGoods,
+      };
+      set({
+        gameState: {
+          ...gameState,
+          company: updatedCompany,
+          settlement: { ...settlement, resources: updatedResources },
+        },
+      });
+    },
+
+    performCraft(recipeId) {
+      const { gameState, currentPhase } = get();
+      if (!gameState || currentPhase !== 'management') return;
+      const validation = validateCraft(recipeId, gameState.settlement.buildings, gameState.settlement.resources);
+      if (!validation.ok) return;
+      const newResources = applyCraft(recipeId, gameState.settlement.resources);
+      set({
+        gameState: {
+          ...gameState,
+          settlement: { ...gameState.settlement, resources: newResources },
+        },
+      });
     },
 
     // ── Buildings ────────────────────────────────────────────────────────────
@@ -824,6 +992,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       const project = gameState.settlement.constructionQueue.find(p => p.id === projectId);
       const person = gameState.people.get(personId);
       if (!project || !person) return;
+      if (person.role === 'away') return; // Cannot assign a person who is away on a mission
       const updatedProject = buildingAssignBuilder(project, personId);
       const updatedPeople = new Map(gameState.people);
       updatedPeople.set(personId, { ...person, role: 'builder' });

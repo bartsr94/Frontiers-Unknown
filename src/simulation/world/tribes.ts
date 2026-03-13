@@ -10,7 +10,7 @@
  * No React / DOM / store imports — pure simulation logic.
  */
 
-import type { ExternalTribe, TribeDesire, TribeOffering, TribeTrait } from '../turn/game-state';
+import type { ExternalTribe, TribeDesire, TribeOffering, TribeTrait, ResourceType } from '../turn/game-state';
 import type { EthnicGroup } from '../population/person';
 import type { SeededRNG } from '../../utils/rng';
 
@@ -45,6 +45,16 @@ export interface TribeConfig {
    * Low stability makes the tribe more prone to raiding or desperate bargains.
    */
   stability: number;
+  /**
+   * Resources this tribe actively wants to buy in trades.
+   * Drives +10% pricing bonus for these resources in the TradeView.
+   */
+  tradeDesires: ResourceType[];
+  /**
+   * Resources this tribe has available to sell in trades.
+   * Only these can be placed as "requested" items in the TradeView.
+   */
+  tradeOfferings: ResourceType[];
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
@@ -69,6 +79,11 @@ export function createTribe(config: TribeConfig): ExternalTribe {
     desires: [...config.desires],
     offerings: [...config.offerings],
     stability: config.stability,
+    contactEstablished: false,
+    lastTradeTurn: null,
+    tradeHistoryCount: 0,
+    tradeDesires: [...config.tradeDesires],
+    tradeOfferings: [...config.tradeOfferings],
   };
 }
 
@@ -117,6 +132,8 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     desires: ['steel', 'medicine'],
     offerings: ['food', 'pearls', 'knowledge'],
     stability: 0.8,
+    tradeDesires: ['steel', 'medicine'],
+    tradeOfferings: ['food', 'gold'],
   },
 
   black_water_clan: {
@@ -129,6 +146,8 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     desires: ['steel', 'alliance'],
     offerings: ['furs', 'warriors'],
     stability: 0.6,
+    tradeDesires: ['steel'],
+    tradeOfferings: ['goods'],
   },
 
   // ── Kiswani Bayuk ────────────────────────────────────────────────────────
@@ -143,6 +162,8 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     desires: ['medicine'],
     offerings: ['herbs', 'knowledge'],
     stability: 0.9,
+    tradeDesires: ['medicine'],
+    tradeOfferings: ['medicine'],
   },
 
   jade_viper_band: {
@@ -155,6 +176,8 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     desires: ['steel', 'men'],
     offerings: ['warriors', 'furs'],
     stability: 0.4,
+    tradeDesires: ['steel'],
+    tradeOfferings: ['goods'],
   },
 
   // ── Kiswani Haisla ───────────────────────────────────────────────────────
@@ -169,6 +192,8 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     desires: ['steel', 'lumber'],
     offerings: ['food', 'trade_goods', 'knowledge'],
     stability: 0.75,
+    tradeDesires: ['steel', 'lumber'],
+    tradeOfferings: ['food', 'goods'],
   },
 
   black_tide_crew: {
@@ -181,6 +206,8 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     desires: ['steel', 'gold'],
     offerings: ['trade_goods', 'horses'],
     stability: 0.5,
+    tradeDesires: ['steel', 'gold'],
+    tradeOfferings: ['goods', 'horses'],
   },
 
   // ── Hanjoda Stormcaller ──────────────────────────────────────────────────
@@ -195,6 +222,8 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     desires: ['steel', 'medicine', 'men'],
     offerings: ['horses', 'knowledge', 'wives'],
     stability: 0.85,
+    tradeDesires: ['steel', 'medicine'],
+    tradeOfferings: ['horses'],
   },
 
   thunder_veil_band: {
@@ -207,6 +236,8 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     desires: ['medicine'],
     offerings: ['herbs'],
     stability: 0.7,
+    tradeDesires: ['medicine'],
+    tradeOfferings: ['medicine'],
   },
 
   // ── Hanjoda Bloodmoon ────────────────────────────────────────────────────
@@ -221,6 +252,8 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     desires: ['steel', 'territory'],
     offerings: ['warriors', 'horses'],
     stability: 0.55,
+    tradeDesires: ['steel'],
+    tradeOfferings: ['horses'],
   },
 
   crescent_hunters: {
@@ -233,6 +266,8 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     desires: ['steel', 'alliance'],
     offerings: ['furs', 'food'],
     stability: 0.65,
+    tradeDesires: ['steel'],
+    tradeOfferings: ['goods', 'food'],
   },
 
   // ── Hanjoda Talon ────────────────────────────────────────────────────────
@@ -247,6 +282,8 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     desires: ['food', 'medicine'],
     offerings: ['steel', 'stone', 'trade_goods'],
     stability: 0.8,
+    tradeDesires: ['food', 'medicine'],
+    tradeOfferings: ['steel', 'stone', 'goods'],
   },
 
   grey_stone_watchers: {
@@ -259,6 +296,8 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     desires: ['food'],
     offerings: ['stone', 'knowledge'],
     stability: 0.8,
+    tradeDesires: ['food'],
+    tradeOfferings: ['stone'],
   },
 
   // ── Hanjoda Emrasi ───────────────────────────────────────────────────────
@@ -273,6 +312,8 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     desires: ['steel', 'medicine', 'lumber'],
     offerings: ['food', 'pearls', 'wives'],
     stability: 0.85,
+    tradeDesires: ['steel', 'medicine', 'lumber'],
+    tradeOfferings: ['food', 'gold'],
   },
 
   inland_fisher_clans: {
@@ -285,6 +326,8 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     desires: ['steel'],
     offerings: ['food', 'horses'],
     stability: 0.75,
+    tradeDesires: ['steel'],
+    tradeOfferings: ['food', 'horses'],
   },
 
   // ── Hanjoda Bloodmoon (additional) ──────────────────────────────────────
@@ -299,6 +342,8 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     desires: ['medicine', 'trade'],
     offerings: ['horses', 'furs', 'knowledge'],
     stability: 0.7,
+    tradeDesires: ['medicine'],
+    tradeOfferings: ['horses', 'goods'],
   },
 
   ironblood_warband: {
@@ -311,6 +356,8 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     desires: ['steel', 'food'],
     offerings: ['warriors'],
     stability: 0.35,
+    tradeDesires: ['steel', 'food'],
+    tradeOfferings: ['goods'],
   },
 
 } as const satisfies Record<string, TribeConfig>;

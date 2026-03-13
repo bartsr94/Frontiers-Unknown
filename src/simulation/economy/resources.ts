@@ -87,6 +87,16 @@ export function clampResourceStock(stock: ResourceStock): ResourceStock {
  * @param overcrowdingRatio - Current population/shelter ratio for penalty calc.
  * @returns A ResourceStock containing positive deltas to apply to the stockpile.
  */
+/**
+ * Maps a raw skill value (1–100) to a gather yield of 1–3 units per season.
+ * Base yield is 1; +1 at Good (26+); +1 more at Excellent (63+).
+ */
+function gatherYield(skill: number): number {
+  if (skill >= 63) return 3;
+  if (skill >= 26) return 2;
+  return 1;
+}
+
 export function calculateProduction(
   people: Map<string, Person>,
   settlement: Settlement,
@@ -104,12 +114,20 @@ export function calculateProduction(
     let personFood = 0;
     let personGoods = 0;
     switch (person.role) {
-      case 'farmer':    personFood  = 3; break;
-      case 'trader':    personGoods = 1; break;
+      // Without Tilled Fields, farmers are only as productive as unskilled
+      // foragers. Fields add +2 food/farmer via roleProductionBonus below.
+      case 'farmer':        personFood   = 1; break;
+      case 'trader':        personGoods  = 1; break;
+      // gather_food is seasonally scaled like farming
+      case 'gather_food':   personFood   = gatherYield(person.skills.plants); break;
+      // gather_stone / gather_lumber are NOT seasonally scaled — accumulated directly
+      case 'gather_stone':  delta.stone  += gatherYield(person.skills.custom); break;
+      case 'gather_lumber': delta.lumber += gatherYield(person.skills.custom); break;
       case 'craftsman':
       case 'healer':
       case 'guard':
       case 'builder':
+      case 'away':
       case 'unassigned': break;
     }
 

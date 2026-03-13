@@ -369,3 +369,37 @@ describe('resolveActors', () => {
     expect(r1!['scout']).toBe(r2!['scout']);
   });
 });
+
+// ─── Away status ──────────────────────────────────────────────────────────────
+
+describe('matchesCriteria — away role', () => {
+  it('returns false for a person whose role is away, regardless of other criteria', () => {
+    const p = makePerson({ role: 'away' });
+    // Empty criteria should normally match anything — but 'away' is always excluded.
+    expect(matchesCriteria(p, {})).toBe(false);
+  });
+
+  it('returns false for an away person even when explicit role matches', () => {
+    // Requesting role: 'away' directly should still return false (they are off-site).
+    const p = makePerson({ role: 'away' });
+    expect(matchesCriteria(p, { role: 'away' })).toBe(false);
+  });
+
+  it('returns true for an unassigned person (role: unassigned)', () => {
+    const p = makePerson({ role: 'unassigned' });
+    expect(matchesCriteria(p, {})).toBe(true);
+  });
+
+  it('canFillSlot returns false when the only matching person is away', () => {
+    const p = makePerson({ sex: 'male', role: 'away' });
+    const state = makeState(new Map([[p.id, p]]));
+    expect(canFillSlot({ sex: 'male' }, state)).toBe(false);
+  });
+
+  it('canResolveActors returns false when the only qualifying actor is away', () => {
+    const p = makePerson({ sex: 'male', role: 'away' });
+    const state = makeState(new Map([[p.id, p]]));
+    const reqs: ActorRequirement[] = [{ slot: 'scout', criteria: { sex: 'male' } }];
+    expect(canResolveActors(reqs, state)).toBe(false);
+  });
+});

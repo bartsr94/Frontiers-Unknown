@@ -65,6 +65,12 @@ export default function CouncilFooter() {
   }, [currentPhase]);
 
   function handleCardClick(person: Person) {
+    // Away persons are off-site; suppress advice generation for them.
+    if (person.role === 'away') {
+      setSelectedAdviserId(person.id);
+      return;
+    }
+
     setSelectedAdviserId(person.id);
 
     if (!currentEvent) return;
@@ -125,6 +131,7 @@ export default function CouncilFooter() {
                   onClick={() => handleCardClick(person)}
                   className={`flex-1 min-w-0 bg-stone-800 border rounded px-3 py-2.5 text-left
                               transition-colors cursor-pointer
+                              ${person.role === 'away' ? 'opacity-50' : ''}
                               ${selectedAdviserId === person.id
                                 ? 'border-amber-400 ring-1 ring-amber-400'
                                 : 'border-amber-800 hover:border-amber-600'}`}

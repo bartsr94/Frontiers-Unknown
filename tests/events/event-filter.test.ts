@@ -539,6 +539,42 @@ describe('drawEvents', () => {
     // Expect heavy to win ≥ 180/200 times (theoretical: ~99%)
     expect(heavyCount).toBeGreaterThanOrEqual(180);
   });
+
+  it('weightBoosts multiplies a specific event weight', () => {
+    // 'target' starts at weight 1, 'other' at weight 1.
+    // With a 100× boost on 'target' it should dominate just like weight 100.
+    const target = makeEvent({ id: 'target', weight: 1 });
+    const other  = makeEvent({ id: 'other',  weight: 1 });
+
+    let targetCount = 0;
+    for (let seed = 0; seed < 200; seed++) {
+      const drawn = drawEvents([target, other], 1, createRNG(seed), { target: 100 });
+      if (drawn[0]?.id === 'target') targetCount++;
+    }
+    expect(targetCount).toBeGreaterThanOrEqual(180);
+  });
+
+  it('weightBoosts defaults to no-op when omitted', () => {
+    // Without boosts the two equal-weight events should split roughly 50/50.
+    const a = makeEvent({ id: 'a', weight: 1 });
+    const b = makeEvent({ id: 'b', weight: 1 });
+
+    let aCount = 0;
+    for (let seed = 0; seed < 200; seed++) {
+      const drawn = drawEvents([a, b], 1, createRNG(seed));
+      if (drawn[0]?.id === 'a') aCount++;
+    }
+    // Should be between 70 and 130 out of 200 for a fair split
+    expect(aCount).toBeGreaterThanOrEqual(70);
+    expect(aCount).toBeLessThanOrEqual(130);
+  });
+
+  it('weightBoosts for unknown event id has no effect', () => {
+    // Boost for a non-existent id should not crash or alter draw
+    const events = [makeEvent({ id: 'e1', weight: 1 }), makeEvent({ id: 'e2', weight: 1 })];
+    const rng = createRNG(42);
+    expect(() => drawEvents(events, 2, rng, { nonexistent: 50 })).not.toThrow();
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

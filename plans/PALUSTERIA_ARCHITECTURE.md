@@ -60,8 +60,10 @@ palusteria-game/
 │   │   │
 │   │   ├── economy/
 │   │   │   ├── resources.ts            # Resource types, production, consumption math ✅
-│   │   │   ├── trade.ts                # Trade pricing and exchange calculations
-│   │   │   └── company.ts              # Company relations, quota math, support tiers
+│   │   │   ├── company.ts              # Company relations, quota math, failure escalation ✅
+│   │   │   ├── trade.ts                # Trade pricing, validateTrade, dispositions ✅
+│   │   │   ├── spoilage.ts             # Per-resource decay, seasonal modifiers, building mitigation ✅
+│   │   │   └── crafting.ts             # CraftRecipe, CRAFT_RECIPES, applyCraft ✅
 │   │   │
 │   │   ├── culture/
 │   │   │   ├── language-acquisition.ts # Language learning rates, drift, child acquisition ✅
@@ -88,7 +90,7 @@ palusteria-game/
 │   │   │       └── building.ts         # 5 settlement events (overcrowding, construction) ✅
 │   │   │
 │   │   ├── buildings/
-│   │   │   ├── building-definitions.ts # BuildingId (12 types), BuildingDef, BUILDING_CATALOG ✅
+│   │   │   ├── building-definitions.ts # BuildingId (13 types), BuildingDef, BUILDING_CATALOG ✅
 │   │   │   ├── building-effects.ts     # Pure effect getters: shelter, overcrowding, culture pull, etc. ✅
 │   │   │   └── construction.ts         # canBuild, startConstruction, processConstruction ✅
 │   │   │
@@ -110,8 +112,8 @@ palusteria-game/
 │   │   │   ├── PeopleView.tsx          # Population roster with sort/filter ✅
 │   │   │   ├── PersonDetail.tsx        # Individual deep-dive panel ✅
 │   │   │   ├── FamilyTree.tsx          # 3-generation genealogy browser ✅
-│   │   │   ├── SettlementView.tsx      # 3-panel: standing buildings, construction queue, build menu ✅
-│   │   │   ├── TradeView.tsx           # Trade interface (Phase 3)
+│   │   │   ├── SettlementView.tsx      # 4-panel: standing buildings, construction queue, build menu, crafting ✅
+│   │   │   ├── TradeView.tsx           # Trade & Commerce: Company quota, tribe barter, fairness meter ✅
 │   │   │   ├── DiplomacyView.tsx       # Relations with tribes and Company (Phase 3)
 │   │   │   └── MapView.tsx             # Canvas-rendered regional map (Phase 3)
 │   │   │
@@ -176,7 +178,11 @@ palusteria-game/
     │   ├── culture.test.ts             # Cultural drift and blending ✅
     │   └── skills.test.ts              # Skill rating, derived formulas, generation ✅
     ├── economy/
-    │   └── resources.test.ts           # Production/consumption math ✅
+    │   ├── resources.test.ts           # Production/consumption math, gather roles, Tilled Fields ✅
+    │   ├── company.test.ts             # Quota formula, escalation, request availability ✅
+    │   ├── trade.test.ts               # Price calculation, fairness, disposition deltas ✅
+    │   ├── spoilage.test.ts            # Per-resource rates, season modifiers, building mitigation ✅
+    │   └── crafting.test.ts            # Recipe availability gating, apply/validate logic ✅
     ├── events/
     │   ├── event-filter.test.ts        # Event filtering correctness ✅
     │   ├── resolver.test.ts            # applyEventChoice + skill checks + add_person ✅

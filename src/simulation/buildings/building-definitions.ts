@@ -233,6 +233,23 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     winterFoodProtection: true,
   },
 
+  fields: {
+    id: 'fields',
+    name: 'Tilled Fields',
+    description: 'Cleared ground, broken soil, and planted rows — the foundation of reliable food production. Farmers here yield far more than any forager scraping the wild.',
+    category: 'food',
+    hasStyleVariants: false,
+    cost: { lumber: 5 },
+    buildSeasons: 1,
+    shelterCapacity: 0,
+    // +2 food per farmer per season (seasonally scaled), making farming
+    // clearly superior to foraging once land is prepared.
+    roleProductionBonus: { role: 'farmer', bonus: { food: 2 } },
+    skillGrowth: [
+      { role: 'farmer', skill: 'plants', bonus: 1 },
+    ],
+  },
+
   // ── Industry ────────────────────────────────────────────────────────────────
 
   workshop: {

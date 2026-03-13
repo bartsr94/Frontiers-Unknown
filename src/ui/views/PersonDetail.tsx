@@ -26,6 +26,7 @@ import type { EthnicGroup } from '../../simulation/population/person';
 import { getSkillRating, getDerivedSkill } from '../../simulation/population/person';
 import type { SkillId, DerivedSkillId, SkillRating } from '../../simulation/population/person';
 import type { TraitId } from '../../simulation/personality/traits';
+import { ROLE_LABELS, ROLE_COLORS } from '../shared/role-display';
 
 // ─── Bloodline colours ────────────────────────────────────────────────────────
 
@@ -290,7 +291,11 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
             </span>
 
             <span className="text-stone-500">Role</span>
-            <span className="text-stone-200 capitalize">{person.role}</span>
+            <span>
+              <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${ROLE_COLORS[person.role]}`}>
+                {ROLE_LABELS[person.role]}
+              </span>
+            </span>
 
             <span className="text-stone-500">Status</span>
             <span className="text-stone-300 capitalize">{person.socialStatus.replace(/_/g, ' ')}</span>

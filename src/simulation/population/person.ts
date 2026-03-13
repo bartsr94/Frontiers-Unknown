@@ -242,7 +242,11 @@ export type WorkRole =
   | 'guard'
   | 'craftsman'
   | 'healer'
-  | 'builder'     // Temporarily assigned to a construction project
+  | 'builder'        // Temporarily assigned to a construction project
+  | 'away'           // Dispatched on an external mission; unavailable until return
+  | 'gather_food'    // Foraging, fishing, small game — no building required
+  | 'gather_stone'   // Quarrying and collecting stone from the surrounding terrain
+  | 'gather_lumber'  // Felling and preparing timber
   | 'unassigned';
 
 /** A person's social standing within the settlement community. */

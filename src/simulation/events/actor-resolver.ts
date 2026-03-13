@@ -45,6 +45,8 @@ function getSkillScore(person: Person, skill: SkillId | DerivedSkillId): number 
  * Use this for both eligibility gates (no RNG) and search loops.
  */
 export function matchesCriteria(person: Person, criteria: ActorCriteria): boolean {
+  // Away persons are off-site and cannot be selected for any event slot.
+  if (person.role === 'away') return false;
   if (criteria.sex !== undefined && person.sex !== criteria.sex) return false;
   if (criteria.religion !== undefined && person.religion !== criteria.religion) return false;
   if (criteria.culturalIdentity !== undefined && person.heritage.primaryCulture !== criteria.culturalIdentity) return false;

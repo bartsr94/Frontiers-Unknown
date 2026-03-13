@@ -39,8 +39,8 @@ vi.hoisted(() => {
 });
 
 import { useGameStore } from '../../src/stores/game-store';
-import type { BoundEvent }  from '../../src/simulation/events/engine';
-import type { TurnPhase }   from '../../src/simulation/turn/game-state';
+import type { BoundEvent, DeferredEventEntry } from '../../src/simulation/events/engine';
+import type { TurnPhase, GameConfig }          from '../../src/simulation/turn/game-state';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -165,5 +165,109 @@ describe('event queue — resolveEventChoice() does not touch pendingEvents', ()
     expect(pendingEvents).toHaveLength(2);
     expect(pendingEvents[0]!.id).toBe('evt_1');
     expect(pendingEvents[1]!.id).toBe('evt_2');
+  });
+});
+
+// ─── startTurn() — away role restoration ─────────────────────────────────────
+
+const MINIMAL_CONFIG: GameConfig = {
+  difficulty:               'normal',
+  startingTribes:           [],
+  startingLocation:         'riverside_clearing',
+  includeSauromatianWomen:  false,
+};
+
+describe('startTurn() — restores away role when deferred event comes due', () => {
+  beforeEach(() => {
+    useGameStore.setState({
+      currentPhase:      'idle',
+      pendingEvents:     [],
+      currentEventIndex: 0,
+      lastChoiceResult:  null,
+      gameState:         null,
+    });
+  });
+
+  it('restores the mission actor\'s previous role when their deferred event fires', () => {
+    useGameStore.getState().newGame(MINIMAL_CONFIG, 'TestSettlement');
+    const gs = useGameStore.getState().gameState!;
+
+    // Pick the first person, remember their role, then set them away.
+    const targetId    = Array.from(gs.people.keys())[0]!;
+    const originalRole = gs.people.get(targetId)!.role;
+    const modifiedPeople = new Map(gs.people);
+    modifiedPeople.set(targetId, { ...gs.people.get(targetId)!, role: 'away' });
+
+    const entry: DeferredEventEntry = {
+      eventId:       'dom_camp_fire_stories', // real event ID so BoundEvent is built correctly
+      scheduledTurn: gs.turnNumber,           // due this turn
+      context:       { missionActorId: targetId, prevRole: originalRole },
+      boundActors:   {},
+    };
+
+    useGameStore.setState({
+      gameState: { ...gs, people: modifiedPeople, deferredEvents: [entry] },
+    });
+
+    useGameStore.getState().startTurn();
+
+    const restored = useGameStore.getState().gameState!.people.get(targetId);
+    expect(restored?.role).toBe(originalRole);
+  });
+
+  it('does not change role if the person is no longer away when the event fires', () => {
+    useGameStore.getState().newGame(MINIMAL_CONFIG, 'TestSettlement');
+    const gs = useGameStore.getState().gameState!;
+
+    const targetId = Array.from(gs.people.keys())[0]!;
+    // Person's role was saved as 'farmer' but reassigned to 'guard' in the meantime —
+    // the guard (`p.role === 'away'`) should prevent a stale restoration.
+    const modifiedPeople = new Map(gs.people);
+    modifiedPeople.set(targetId, { ...gs.people.get(targetId)!, role: 'guard' });
+
+    const entry: DeferredEventEntry = {
+      eventId:       'dom_camp_fire_stories',
+      scheduledTurn: gs.turnNumber,
+      context:       { missionActorId: targetId, prevRole: 'farmer' },
+      boundActors:   {},
+    };
+
+    useGameStore.setState({
+      gameState: { ...gs, people: modifiedPeople, deferredEvents: [entry] },
+    });
+
+    useGameStore.getState().startTurn();
+
+    const person = useGameStore.getState().gameState!.people.get(targetId);
+    // Role should NOT have been forced back to 'farmer' — the guard saved it.
+    expect(person?.role).not.toBe('away');
+    expect(person?.role).not.toBe('farmer'); // stale prevRole not applied
+  });
+
+  it('does not restore role while the deferred event is not yet due', () => {
+    useGameStore.getState().newGame(MINIMAL_CONFIG, 'TestSettlement');
+    const gs = useGameStore.getState().gameState!;
+
+    const targetId = Array.from(gs.people.keys())[0]!;
+    const modifiedPeople = new Map(gs.people);
+    modifiedPeople.set(targetId, { ...gs.people.get(targetId)!, role: 'away' });
+
+    const entry: DeferredEventEntry = {
+      eventId:       'dom_camp_fire_stories',
+      scheduledTurn: gs.turnNumber + 5, // NOT due yet
+      context:       { missionActorId: targetId, prevRole: 'farmer' },
+      boundActors:   {},
+    };
+
+    useGameStore.setState({
+      gameState: { ...gs, people: modifiedPeople, deferredEvents: [entry] },
+    });
+
+    useGameStore.getState().startTurn();
+
+    // drainDeferredEvents only drains entries where scheduledTurn <= current turn.
+    // The entry is future, so no restoration should happen — person stays away.
+    const person = useGameStore.getState().gameState!.people.get(targetId);
+    expect(person?.role).toBe('away');
   });
 });

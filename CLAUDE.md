@@ -11,7 +11,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 |-------|--------|-------|
 | Phase 1 — Foundation | ✅ Complete | 13/13 steps done, 13/13 tests pass, zero compile errors |
 | Phase 2 — Genetics Engine | ✅ Complete | All 12 steps done, 139/139 tests pass, zero compile errors |
-| Phase 3 — Living Settlement | 🔄 In Progress | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ · Skills system ✅ · Skilled event resolution ✅ · Council voice system ✅ · Portrait system ✅ · Settlement buildings ✅ · Event character binding ✅ |
+| Phase 3 — Living Settlement | 🔄 In Progress | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ · Skills system ✅ · Skilled event resolution ✅ · Council voice system ✅ · Portrait system ✅ · Settlement buildings ✅ · Event character binding ✅ · Economy system ✅ · Generic task roles ✅ · Tilled Fields building ✅ |
 | Phase 4 — Polish | 🔲 Not started | — |
 ---
 
@@ -73,7 +73,7 @@ If the exact age stage has no portraits yet, the resolver tries: `adult` → `yo
 
 ```bash
 npm run dev          # Vite dev server → http://localhost:5173
-npm test             # Run Vitest (513 passing across rng, inheritance, gender-ratio, fertility, event-filter, event-queue, resolver, council-advice, resources, demographics, marriage, culture, language-acquisition, skills, buildings, actor-resolver, interpolation)
+npm test             # Run Vitest (665 passing across 22 test files)
 npx tsc --noEmit     # Type-check without building
 ```
 
@@ -115,7 +115,7 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/events/resolver.ts` | `applyEventChoice(event, choiceId, state, rng?, boundActors?)` returning `ApplyChoiceResult`; `resolveSkillCheck()` helper; `resolveConsequenceTarget()` (maps `{slot}` targets to person IDs); `add_person` consequence handler |
 | `src/simulation/events/actor-resolver.ts` | Actor binding engine: `matchesCriteria`, `canFillSlot`, `canResolveActors`, `selectActor`, `resolveActors`, `interpolateText` — pure TS, zero React, seeded RNG only |
 | `src/simulation/events/definitions/` | 33 events: company, diplomacy, domestic, economic, environmental + 18 cultural + 5 building |
-| `src/simulation/buildings/building-definitions.ts` | `BuildingId` (12-member union), `BuildingDef`, `BUILDING_CATALOG`, `getBuildingDisplayName(defId, style)` — static catalog of all building types |
+| `src/simulation/buildings/building-definitions.ts` | `BuildingId` (13-member union), `BuildingDef`, `BUILDING_CATALOG`, `getBuildingDisplayName(defId, style)` — static catalog of all building types |
 | `src/simulation/buildings/building-effects.ts` | Pure effect getters: `getShelterCapacity`, `getOvercrowdingRatio`, `getBuildingFlatProductionBonus`, `getLanguageDriftMultiplier`, `getBuildingCulturePull`, `getSkillGrowthBonuses`, `hasBuilding`, `lacksBuilding`, etc. |
 | `src/simulation/buildings/construction.ts` | `canBuild` → `CanBuildResult` (`{ ok: true }` / `{ ok: false; reason }`); `startConstruction`, `assignBuilder`, `removeBuilder`, `processConstruction`, `cancelConstruction` |
 | `src/simulation/economy/resources.ts` | Production/consumption math with seasonal modifiers |
@@ -142,7 +142,13 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/ui/views/PeopleView.tsx` | Settler roster; sort/filter (sex, status, heritage group, **base skill**); click row → PersonDetail panel |
 | `src/ui/views/PersonDetail.tsx` | Full person detail: genetics, heritage, traits, skills (base + derived), languages, family |
 | `src/ui/views/FamilyTree.tsx` | 3-generation ancestor/descendant tree; spouses shown to the side of root node |
-| `src/ui/views/SettlementView.tsx` | 3-panel settlement view: standing buildings + shelter bar (left), construction queue with worker assignment (centre), build menu with costs and lock reasons (right) |
+| `src/ui/views/SettlementView.tsx` | 4-panel settlement view: standing buildings + shelter bar (left), construction queue with worker assignment (centre), build menu (right), crafting panel (far right) |
+| `src/ui/views/TradeView.tsx` | Trade & Commerce view: Company quota panel, tribe list with dispositions, barter interface with fairness meter; locked without Trading Post |
+| `src/ui/shared/role-display.ts` | `ROLE_LABELS` and `ROLE_COLORS` — exhaustive `Record<WorkRole, string>` for all 11 roles |
+| `src/simulation/economy/company.ts` | `computeYearlyQuota`, `checkQuotaStatus`, `applyQuotaConsequences`, `getCompanySupplyDelivery` — Company quota math and failure escalation |
+| `src/simulation/economy/trade.ts` | `getTradeValue`, `validateTrade`, `executeTribeTradeLogic`, `TradeOffer`, `TradeResult` — barter pricing and tribe disposition effects |
+| `src/simulation/economy/spoilage.ts` | `calculateSpoilage` — per-resource decay rates with seasonal modifiers and building mitigation |
+| `src/simulation/economy/crafting.ts` | `CraftRecipe`, `CRAFT_RECIPES`, `getAvailableCrafts`, `validateCraft`, `applyCraft` — short conversion chains |
 | `src/ui/components/Portrait.tsx` | Portrait renderer; skin-tone HSL colouring; `sm`/`lg` variants; `lg` shows photo portrait via `resolvePortraitSrc` when asset exists, falls back to SVG silhouette |
 | `src/ui/components/heritage-helpers.ts` | `heritageAbbr(bloodline)` → `'IMA'\|'KIS-R'\|…\|'MIX'`; `GROUP_ABBR` lookup |
 | `src/ui/overlays/GameSetup.tsx` | New game config: name, difficulty, Sauromatian women toggle, tribe selection |
@@ -252,6 +258,8 @@ idle
 | ✅ — | Portrait system (age stages, categories, registry) | `src/ui/components/portrait-resolver.ts`, `src/simulation/population/person.ts` | Complete (bonus step) |
 | ✅ 11 | Settlement buildings & upgrades | `src/simulation/buildings/`, `src/stores/game-store.ts`, `src/ui/views/SettlementView.tsx` | Complete |
 | ✅ 12 | Event character binding | `src/simulation/events/actor-resolver.ts`, `src/simulation/events/engine.ts`, `src/simulation/events/event-filter.ts`, `src/simulation/events/resolver.ts`, `src/ui/views/EventView.tsx`, all definition files | Complete |
+| ✅ — | Economy system (Company quota, tribe trade, spoilage, crafting) | `src/simulation/economy/company.ts`, `trade.ts`, `spoilage.ts`, `crafting.ts`, `src/ui/views/TradeView.tsx`, `src/ui/views/SettlementView.tsx` | Complete (bonus) |
+| ✅ — | Generic task roles + Tilled Fields building | `src/simulation/population/person.ts`, `src/simulation/economy/resources.ts`, `src/simulation/buildings/building-definitions.ts`, `src/ui/shared/role-display.ts`, `src/ui/views/PeopleView.tsx` | Complete (bonus) |
 | 🔲 13 | Tribe relationship depth | — | Planned |
 
 ### Cultural Identity System Notes
@@ -287,7 +295,8 @@ idle
 
 ### Settlement Buildings System Notes
 
-- **12 building types** (`BuildingId`): `camp` · `longhouse` · `roundhouse` · `great_hall` · `clan_lodge` · `granary` · `workshop` · `trading_post` · `healers_hut` · `gathering_hall` · `palisade` · `stable`
+- **13 building types** (`BuildingId`): `camp` · `longhouse` · `roundhouse` · `great_hall` · `clan_lodge` · `granary` · `fields` · `workshop` · `trading_post` · `healers_hut` · `gathering_hall` · `palisade` · `stable`
+- **Tilled Fields** (`fields`): Food category · 5 lumber cost · 1 season · `roleProductionBonus: { role: 'farmer', bonus: { food: 2 } }` — without it, farmers produce only 1 food/season (same as a low-skill forager)
 - **`BuiltBuilding`**: `{ defId, instanceId, builtTurn, style: BuildingStyle | null }` — `style` is `null` for single-variant buildings
 - **`ConstructionProject`**: `{ id, defId, style, progressPoints, totalPoints, assignedWorkerIds, startedTurn, resourcesSpent }`
 - **`canBuild` returns `CanBuildResult`**: `{ ok: true }` or `{ ok: false; reason: string }` — discriminated by `ok`, **not** `allowed`
@@ -312,7 +321,42 @@ idle
 - **`queue_deferred_event` consequence**: implemented in `applyConsequence()` — schedules a deferred entry from a consequence (alternative to `choice.deferredEventId`)
 - **EventView actor strip**: when `boundActors` is non-empty, renders `CouncilPortrait` + first name for each bound actor above the event description
 - **All 28+ events retrofitted**: `domestic.ts` (12 events), `cultural.ts` (13 events), `building.ts` (2 events), `diplomacy.ts` (1 event), `economic.ts` (2 events); `environmental.ts`/`company.ts` have no slots (elemental/external events)
-- **Deferred chain pairs**: `dip_upriver_camp_spotted` → `dip_upriver_emissary_return` (diplomacy-50, 4 turns); `dom_settler_falls_ill` → `dom_settler_recovery` (plants-38, 2 turns)
+- **`away`** — dispatched on an external mission; unavailable until the deferred event resolves
+- **`builder`** — temporarily assigned to a construction project
+- **`missionActorSlot`** on `EventChoice`: names the actor slot of the person sent on a deferred mission; their `WorkRole` is set to `'away'` immediately and restored by `game-store.startTurn` when the deferred event fires
+- **Away blocking**: `matchesCriteria` returns `false` for `away` persons → they are excluded from all actor slot selection, event eligibility, and `best_council`/`best_settlement` skill check picks
+- **Role restoration**: `game-store.startTurn` iterates due `DeferredEventEntry` objects, reads `context.missionActorId` + `context.prevRole`, and restores the person's role before building `stateAfterDrain`
+- **Construction guard**: `assignBuilder` in `game-store.ts` skips persons with `role === 'away'`
+- **UI**: `ROLE_LABELS`/`ROLE_COLORS` now cover all 11 roles including `builder`, `away`, `gather_food`, `gather_stone`, and `gather_lumber`; `PersonDetail` shows a styled badge; `CouncilFooter` dims away members (opacity-50) and suppresses advice generation for them
+- **Live deferred chains**: `dip_upriver_camp_spotted` (`missionActorSlot: 'envoy'`, 4 turns) and `dom_settler_falls_ill` (`missionActorSlot: 'patient'`, 2 turns)
+
+---
+
+### Economy System Notes
+
+- **Three subsystems**: Company quota (annual obligation), Tribe trade (barter via Trading Post), Internal crafting (surplus conversion chains)
+- **`CompanyRelation`** fields: `standing` (0–100, starts 60), `annualQuotaGold`, `annualQuotaGoods`, `quotaContributedGold`, `quotaContributedGoods`, `consecutiveFailures`, `supportLevel`, `yearsActive`
+- **Quota formula**: `quotaGold = 5 + (year − 3) × 2` / `quotaGoods = 8 + (year − 3) × 3`; years 1–3 have no quota; 1 gold = 2 goods exchange
+- **`checkQuotaStatus()`** returns `'exceeded' | 'met' | 'partial' | 'failed'`; called by `processDusk()` in Autumn
+- **Annual ship** event fires each Spring; base delivery scales with `supportLevel`; optional settler/goods requests cost standing
+- **Trade prerequisites**: `tribe.contactEstablished: true` + a built `trading_post`; without Trading Post, TradeView shows a locked panel
+- **`validateTrade(offer, request, resources, tribe, currentTurn)`**: 5-arg signature; `currentTurn` enforces once-per-turn tribe cooldown via `tribe.lastTradeTurn`
+- **Fairness meter**: fair band ±30% value ratio; strongly favoring player (>+30%) reduces disposition; favoring tribe (>+15%) increases it
+- **Spoilage** fires at dawn: food 5% (summer ×1.5; Granary halves), cattle 3% (winter ×2; Stable halves), medicine/goods 1–2%; ignored if < 1 unit loss
+- **`lastSpoilage`** in `GameStore`: set when total spoilage ≥ 1 unit; drives `SpoilageNotification` banner in `GameScreen.tsx`; cleared by `dismissSpoilage()`
+- **Craft recipes** (`CRAFT_RECIPES`): `craft_lumber_to_goods` (Workshop + 3 lumber → 4 goods), `craft_cattle_slaughter` (2 cattle → 3 food + 1 goods), `craft_medicine_prep` (Healer's Hut + 3 food + 2 goods → 4 medicine), `craft_goods_to_gold` (5 goods → 2 gold)
+- **Trading Post event boost**: `eco_passing_merchant` weight doubled in `drawEvents()` via `weightBoosts` parameter when Trading Post is present
+
+### Generic Task Roles Notes
+
+- **3 new `WorkRole` values**: `gather_food` · `gather_stone` · `gather_lumber` (total WorkRole union: 11 values)
+- **`gatherYield(skill)`** helper in `resources.ts`: base 1; +1 if skill ≥ 26 (Good); +1 if skill ≥ 63 (Excellent) → 1–3 range
+- **Skill mappings**: `gather_food` uses `plants`; `gather_stone` and `gather_lumber` use `custom`
+- **Seasonal scaling**: `gather_food` accumulates into `personFood` → gets the food seasonal multiplier like farmers; stone and lumber are written directly to `delta.stone` / `delta.lumber` — **no seasonal scaling**
+- **Farmer rebalance**: base farmer yield `3 → 1`; Tilled Fields (`fields` building) restores it to 3 via `roleProductionBonus: { role: 'farmer', bonus: { food: 2 } }`
+- **Tilled Fields** building: food category · 5 lumber · 1 season · also grants `plants` skill growth (+1/season) to assigned farmers
+- **Role assignment UI**: clicking a non-locked role badge in PeopleView opens a grouped dropdown (Farming & Gathering / Specialist / Unassigned); `away` and `builder` show a locked tooltip instead
+- **`ROLE_LABELS`/`ROLE_COLORS`** in `src/ui/shared/role-display.ts`: `gather_food` = Forager (lime), `gather_stone` = Quarrier (slate), `gather_lumber` = Lumberjack (yellow)
 
 ---
 
@@ -377,11 +421,17 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/genetics/inheritance.test.ts` — 10/10 passing
 - `tests/genetics/gender-ratio.test.ts` — 26/26 passing
 - `tests/genetics/fertility.test.ts` — 31/31 passing
-- `tests/events/event-filter.test.ts` — 53/53 passing
-- `tests/events/resolver.test.ts` — 36/36 passing (14 original + 6 skill-check / deferred-event + 8 add_person + 5 new: actor_slot, best_settlement, boundActors persistence, queue_deferred_event)
-- `tests/events/event-queue.test.ts` — 6/6 passing (nextEvent transitions, follow-up insertion, resolveEventChoice/pendingEvents isolation)
+- `tests/events/event-filter.test.ts` — 56/56 passing (includes 3 new: `weightBoosts` multiplier, no-boost no-op, unknown boost key)
+- `tests/events/resolver.test.ts` — 42/42 passing
+- `tests/events/event-queue.test.ts` — 9/9 passing (nextEvent transitions, follow-up insertion, resolveEventChoice/pendingEvents isolation, **3 new: away role restoration via startTurn**)
 - `tests/events/council-advice.test.ts` — 95/95 passing (archetype mapping, choice scoring, hash determinism, advice generation, template coverage)
-- `tests/economy/resources.test.ts` — 24/24 passing
+- `tests/events/actor-resolver.test.ts` — 38/38 passing (matchesCriteria per-field, canFillSlot, canResolveActors mutual exclusion, selectActor RNG determinism, resolveActors multi-slot exclusion + optional slots, **away role exclusion**)
+- `tests/events/interpolation.test.ts` — 25/25 passing (all `{slot.*}` token variants, both sexes, capitalised pronouns, unknown slot/suffix passthrough, multi-slot strings)
+- `tests/economy/resources.test.ts` — 42/42 passing (farmers without/with Fields, traders, cattle, seasonal mods, gather_food/stone/lumber skill tiers, guard=0)
+- `tests/economy/company.test.ts` — 35/35 passing (quota formula, escalation, request availability, support delivery)
+- `tests/economy/trade.test.ts` — 28/28 passing (price calculation, fairness, disposition deltas, Trading Post bonuses)
+- `tests/economy/spoilage.test.ts` — 18/18 passing (per-resource rates, season modifiers, building mitigation)
+- `tests/economy/crafting.test.ts` — 36/36 passing (recipe availability gating, apply/validate logic)
 - `tests/population/demographics.test.ts` — 16/16 passing (includes 4 child-culture blending tests)
 - `tests/population/marriage.test.ts` — 12/12 passing
 - `tests/population/culture.test.ts` — 21/21 passing (deriveCulture, processCulturalDrift, buildSettlementCultureDistribution, computeCulturalBlend)
@@ -389,6 +439,4 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/population/skills.test.ts` — 36/36 passing (getSkillRating, getDerivedSkill, generatePersonSkills, createPerson integration)
 - `tests/buildings/construction.test.ts` — 19/19 passing (canBuild, startConstruction, assignBuilder/removeBuilder, processConstruction, cancelConstruction)
 - `tests/buildings/building-effects.test.ts` — 23/23 passing (shelterCapacity, productionBonus, childMortalityModifier, overcrowding, hasBuilding, etc.)
-- `tests/events/actor-resolver.test.ts` — 33/33 passing (matchesCriteria per-field, canFillSlot, canResolveActors mutual exclusion, selectActor RNG determinism, resolveActors multi-slot exclusion + optional slots)
-- `tests/events/interpolation.test.ts` — 25/25 passing (all `{slot.*}` token variants, both sexes, capitalised pronouns, unknown slot/suffix passthrough, multi-slot strings)
-- **Total: 513/513 passing**
+- **Total: 665/665 passing**

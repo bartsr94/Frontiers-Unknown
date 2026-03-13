@@ -146,19 +146,26 @@ export function filterEligibleEvents(events: GameEvent[], state: GameState): Gam
 // ─── Drawing ─────────────────────────────────────────────────────────────────
 
 /**
+/**
  * Draws up to `count` events from the eligible pool using weighted random
  * selection without replacement.
  *
  * Each event's `weight` property determines its relative draw probability.
  * High-weight events are more likely but not guaranteed to be chosen first.
  *
- * @param eligible - Pre-filtered list of eligible events.
- * @param count    - Maximum number of events to draw (1–3 in a normal turn).
- * @param rng      - Seeded RNG for deterministic results.
+ * @param eligible      - Pre-filtered list of eligible events.
+ * @param count         - Maximum number of events to draw (1–3 in a normal turn).
+ * @param rng           - Seeded RNG for deterministic results.
+ * @param weightBoosts  - Optional map of eventId → multiplier; applied on top of base weight.
  * @returns The drawn events in draw order. May be fewer than `count` if the
  *          eligible pool is smaller.
  */
-export function drawEvents(eligible: GameEvent[], count: number, rng: SeededRNG): GameEvent[] {
+export function drawEvents(
+  eligible: GameEvent[],
+  count: number,
+  rng: SeededRNG,
+  weightBoosts: Record<string, number> = {},
+): GameEvent[] {
   if (eligible.length === 0) return [];
 
   const drawn: GameEvent[] = [];
@@ -169,7 +176,7 @@ export function drawEvents(eligible: GameEvent[], count: number, rng: SeededRNG)
     // Build a weight map: { eventId → weight }
     const weights: Record<string, number> = {};
     for (const e of pool) {
-      weights[e.id] = e.weight;
+      weights[e.id] = e.weight * (weightBoosts[e.id] ?? 1);
     }
 
     const pickedId = rng.weightedPick(weights);

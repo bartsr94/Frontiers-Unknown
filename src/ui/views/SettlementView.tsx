@@ -1,10 +1,11 @@
 /**
  * SettlementView — the Settlement tab.
  *
- * Three panels:
- *   Left:   Standing buildings + shelter capacity bar
- *   Centre: Active construction queue with worker assignment
- *   Right:  Build menu (available + locked buildings)
+ * Four panels:
+ *   Left:    Standing buildings + shelter capacity bar
+ *   Centre:  Active construction queue with worker assignment
+ *   Right:   Build menu (available + locked buildings)
+ *   Far-right: Crafting panel (workshop recipes)
  */
 
 import { useState } from 'react';
@@ -15,7 +16,9 @@ import {
   getShelterCapacity,
   getOvercrowdingRatio,
 } from '../../simulation/buildings/building-effects';
-import type { BuildingId, BuildingStyle, BuiltBuilding, ConstructionProject } from '../../simulation/turn/game-state';
+import { getAvailableCrafts, CRAFT_RECIPES, validateCraft } from '../../simulation/economy/crafting';
+import type { CraftRecipeId } from '../../simulation/economy/crafting';
+import type { BuildingId, BuildingStyle, BuiltBuilding, ConstructionProject, ResourceType } from '../../simulation/turn/game-state';
 
 // ─── Helper constants ─────────────────────────────────────────────────────────
 
@@ -246,6 +249,91 @@ function BuildMenuItem({
   );
 }
 
+// ─── Crafting Panel ───────────────────────────────────────────────────────────
+
+const RESOURCE_EMOJI: Partial<Record<ResourceType, string>> = {
+  food: '🌾', cattle: '🐄', goods: '📦', gold: '💰',
+  lumber: '🪵', stone: '🪨', medicine: '💊', steel: '⚙️', horses: '🐎',
+};
+
+function CraftingPanel({ disabled }: { disabled: boolean }) {
+  const gameState   = useGameStore(s => s.gameState);
+  const performCraft = useGameStore(s => s.performCraft);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  if (!gameState) return null;
+
+  const { settlement } = gameState;
+  const resources  = settlement.resources;
+  const available  = getAvailableCrafts(settlement.buildings, resources);
+  const availableIds = new Set(available.map(r => r.id));
+
+  function handleCraft(id: CraftRecipeId) {
+    const check = validateCraft(id, settlement.buildings, resources);
+    if (!check.ok) { setFeedback(`Cannot craft: ${check.reason}`); return; }
+    performCraft(id);
+    const recipe = Object.values(CRAFT_RECIPES).find(r => r.id === id);
+    setFeedback(`Crafted: ${recipe?.label ?? id}`);
+  }
+
+  function fmtResources(res: Partial<Record<ResourceType, number>>) {
+    return Object.entries(res)
+      .filter(([, v]) => (v as number) > 0)
+      .map(([k, v]) => `${RESOURCE_EMOJI[k as ResourceType] ?? ''}${v} ${k}`)
+      .join(', ');
+  }
+
+  return (
+    <div className="space-y-2">
+      {feedback && (
+        <p className="text-xs text-emerald-400 px-1">{feedback}</p>
+      )}
+      {Object.values(CRAFT_RECIPES).length === 0 && (
+        <p className="text-xs text-slate-600 italic">No recipes available.</p>
+      )}
+      {Object.values(CRAFT_RECIPES).map(recipe => {
+        const unlocked    = availableIds.has(recipe.id);
+        const validation  = disabled ? { ok: false as const, reason: 'Management phase only' }
+                          : validateCraft(recipe.id, settlement.buildings, resources);
+        const canCraft    = validation.ok;
+
+        return (
+          <div
+            key={recipe.id}
+            className={`rounded border p-2.5 ${unlocked ? 'border-stone-600 bg-stone-800' : 'border-stone-700 bg-stone-800/40 opacity-60'}`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <span className="text-xs font-medium text-slate-200">{recipe.label}</span>
+                <p className="text-xs text-slate-500 mt-0.5">{recipe.description}</p>
+                <p className="text-xs text-stone-400 mt-1">
+                  <span className="text-stone-500">Needs: </span>{fmtResources(recipe.requires.resources)}
+                  {recipe.requires.buildings && recipe.requires.buildings.length > 0 && (
+                    <span className="text-stone-500"> + {recipe.requires.buildings.join(', ')}</span>
+                  )}
+                </p>
+                <p className="text-xs text-emerald-400 mt-0.5">
+                  <span className="text-stone-500">Makes: </span>{fmtResources(recipe.produces)}
+                </p>
+              </div>
+              <button
+                onClick={() => handleCraft(recipe.id)}
+                disabled={!canCraft}
+                className="shrink-0 px-2 py-1 text-xs rounded bg-amber-700 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-amber-100 font-medium"
+              >
+                Craft
+              </button>
+            </div>
+            {!canCraft && !disabled && !validation.ok && (
+              <p className="text-xs text-red-400 mt-1">{validation.reason}</p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Main view ────────────────────────────────────────────────────────────────
 
 export default function SettlementView() {
@@ -403,6 +491,16 @@ export default function SettlementView() {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* ── Far-right: Crafting ────────────────────────────────────────── */}
+      <div className="w-56 flex-shrink-0 flex flex-col overflow-hidden border-l border-stone-700 pl-4">
+        <h3 className="text-base font-semibold text-slate-300 mb-3">
+          Crafting
+        </h3>
+        <div className="flex-1 overflow-y-auto">
+          <CraftingPanel disabled={!canManage} />
         </div>
       </div>
 

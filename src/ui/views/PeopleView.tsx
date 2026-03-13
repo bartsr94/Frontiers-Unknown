@@ -5,7 +5,7 @@
  * age, sex icon, role badge, and marital status. Supports sort and filter.
  */
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useGameStore } from '../../stores/game-store';
 import type { WorkRole } from '../../simulation/population/person';
 import { getSkillRating } from '../../simulation/population/person';
@@ -55,16 +55,33 @@ interface FilterState {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+// Roles that can be assigned manually. 'builder' and 'away' are managed by
+// their respective systems and are locked from direct assignment.
+const ASSIGNABLE_ROLES: WorkRole[] = [
+  'farmer',
+  'gather_food',
+  'gather_stone',
+  'gather_lumber',
+  'trader',
+  'craftsman',
+  'healer',
+  'guard',
+  'unassigned',
+];
+
 export default function PeopleView() {
   const [selectedId,        setSelectedId]        = useState<string | null>(null);
   const [sortKey,           setSortKey]            = useState<SortKey>('name');
   const [filter,            setFilter]             = useState<FilterState>({ sex: 'all', married: 'all', heritage: 'all' });
   const [showMarriageDialog, setShowMarriageDialog] = useState(false);
+  const [rolePickerId,      setRolePickerId]       = useState<string | null>(null);
+  const [pickerPos,         setPickerPos]          = useState<{ top: number; left: number; openUp: boolean } | null>(null);
 
   const peopleMap           = useGameStore(s => s.gameState?.people);
   const councilIds          = useGameStore(s => s.gameState?.councilMemberIds ?? []);
   const assignCouncilMember = useGameStore(s => s.assignCouncilMember);
   const removeCouncilMember = useGameStore(s => s.removeCouncilMember);
+  const assignRole          = useGameStore(s => s.assignRole);
   const people = peopleMap ? Array.from(peopleMap.values()) : [];
 
   // ── Filter ────────────────────────────────────────────────────────────────
@@ -110,6 +127,14 @@ export default function PeopleView() {
       {/* ── Marriage dialog overlay ── */}
       {showMarriageDialog && (
         <MarriageDialog onClose={() => setShowMarriageDialog(false)} />
+      )}
+
+      {/* ── Role picker backdrop — dismisses open dropdown on outside click ── */}
+      {rolePickerId && (
+        <div
+          className="fixed inset-0 z-[49]"
+          onClick={() => { setRolePickerId(null); setPickerPos(null); }}
+        />
       )}
 
       {/* ── Left: roster table ── */}
@@ -241,11 +266,43 @@ export default function PeopleView() {
                       </span>
                     </td>
 
-                    {/* Role */}
+                    {/* Role — clickable dropdown for assignable roles */}
                     <td className="px-2 py-2">
-                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${ROLE_COLORS[person.role]}`}>
-                        {ROLE_LABELS[person.role]}
-                      </span>
+                      {person.role === 'away' || person.role === 'builder' ? (
+                        // Locked roles: managed by mission/construction systems
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${ROLE_COLORS[person.role]}`}
+                          title={person.role === 'away' ? 'Away on mission — cannot reassign' : 'Assigned to construction — use Settlement to unassign'}
+                        >
+                          {ROLE_LABELS[person.role]}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (rolePickerId === person.id) {
+                              setRolePickerId(null);
+                              setPickerPos(null);
+                            } else {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const openUp = rect.bottom + 240 > window.innerHeight;
+                              setPickerPos(openUp
+                                ? { top: rect.top, left: rect.left, openUp: true }
+                                : { top: rect.bottom + 2, left: rect.left, openUp: false }
+                              );
+                              setRolePickerId(person.id);
+                            }
+                          }}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold
+                                      ${ROLE_COLORS[person.role]}
+                                      hover:ring-1 hover:ring-white/40 transition-all cursor-pointer`}
+                          title="Click to change role"
+                        >
+                          {ROLE_LABELS[person.role]}
+                          <span className="opacity-50 text-[9px] leading-none">▾</span>
+                        </button>
+                      )}
+
                     </td>
 
                     {/* Skill rating badge — always rendered to prevent layout shift */}
@@ -297,6 +354,62 @@ export default function PeopleView() {
           </table>
         </div>
       </div>
+
+      {/* ── Fixed role picker dropdown (escapes all overflow clipping ancestors) ── */}
+      {rolePickerId && pickerPos && (() => {
+        const person = sorted.find(p => p.id === rolePickerId);
+        if (!person) return null;
+        const style: React.CSSProperties = pickerPos.openUp
+          ? { position: 'fixed', bottom: window.innerHeight - pickerPos.top, left: pickerPos.left }
+          : { position: 'fixed', top: pickerPos.top, left: pickerPos.left };
+        return (
+          <div
+            className="z-50 bg-stone-900 border border-stone-600 rounded shadow-xl py-0.5 min-w-[10rem]"
+            style={style}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Farming & Gathering group */}
+            <div className="px-2 py-0.5 text-[9px] text-stone-500 uppercase tracking-wider font-semibold mt-0.5">Farming &amp; Gathering</div>
+            {(['farmer', 'gather_food', 'gather_stone', 'gather_lumber'] satisfies WorkRole[]).map(r => (
+              <button
+                key={r}
+                onClick={() => { assignRole(person.id, r); setRolePickerId(null); setPickerPos(null); }}
+                className={`w-full text-left px-2.5 py-1 text-xs flex items-center gap-2 transition-colors
+                            ${ person.role === r ? 'opacity-40 cursor-default' : 'hover:bg-stone-700'}`}
+              >
+                <span className={`inline-block px-1.5 py-0.5 rounded font-semibold ${ROLE_COLORS[r]}`}>
+                  {ROLE_LABELS[r]}
+                </span>
+              </button>
+            ))}
+            {/* Specialist group */}
+            <div className="px-2 py-0.5 text-[9px] text-stone-500 uppercase tracking-wider font-semibold mt-1 border-t border-stone-700 pt-1">Specialist</div>
+            {(['trader', 'craftsman', 'healer', 'guard'] satisfies WorkRole[]).map(r => (
+              <button
+                key={r}
+                onClick={() => { assignRole(person.id, r); setRolePickerId(null); setPickerPos(null); }}
+                className={`w-full text-left px-2.5 py-1 text-xs flex items-center gap-2 transition-colors
+                            ${ person.role === r ? 'opacity-40 cursor-default' : 'hover:bg-stone-700'}`}
+              >
+                <span className={`inline-block px-1.5 py-0.5 rounded font-semibold ${ROLE_COLORS[r]}`}>
+                  {ROLE_LABELS[r]}
+                </span>
+              </button>
+            ))}
+            {/* Unassigned */}
+            <div className="border-t border-stone-700 mx-1 mt-0.5" />
+            <button
+              onClick={() => { assignRole(person.id, 'unassigned'); setRolePickerId(null); setPickerPos(null); }}
+              className={`w-full text-left px-2.5 py-1 text-xs flex items-center gap-2 transition-colors
+                          ${ person.role === 'unassigned' ? 'opacity-40 cursor-default' : 'hover:bg-stone-700'}`}
+            >
+              <span className={`inline-block px-1.5 py-0.5 rounded font-semibold ${ROLE_COLORS.unassigned}`}>
+                Unassigned
+              </span>
+            </button>
+          </div>
+        );
+      })()}
 
       {/* ── Right: person detail panel ── */}
       {selectedId && (

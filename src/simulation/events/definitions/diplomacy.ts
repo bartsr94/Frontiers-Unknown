@@ -96,6 +96,7 @@ export const DIPLOMACY_EVENTS: GameEvent[] = [
         consequences: [],
         deferredEventId: 'dip_upriver_emissary_return',
         deferredTurns: 4,
+        missionActorSlot: 'envoy',
         pendingText:
           '{envoy.first} sets out at dawn with trade gifts and a careful manner. ' +
           'You will hear from him in time.',

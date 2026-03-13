@@ -52,6 +52,12 @@ export type CompanySupportLevel =
   | 'abandoned';    // Settlement written off — no further Company resources
 
 /**
+ * The result of the annual autumn quota check.
+ * Drives the Company's support-level escalation mechanics.
+ */
+export type QuotaStatus = 'exceeded' | 'met' | 'partial' | 'failed';
+
+/**
  * All state related to the settlement's relationship with the Ansberry Company.
  * The Company is the player's primary external patron and demand source.
  */
@@ -75,6 +81,10 @@ export interface CompanyRelation {
   supportLevel: CompanySupportLevel;
   /** How many in-game years the Company expedition has been active in the region. */
   yearsActive: number;
+  /** Gold contributed toward the current year's quota so far. Resets each Winter-end. */
+  quotaContributedGold: number;
+  /** Trade goods contributed toward the current year's quota so far. Resets each Winter-end. */
+  quotaContributedGoods: number;
 }
 
 // ─── External Tribes ──────────────────────────────────────────────────────────
@@ -134,6 +144,16 @@ export interface ExternalTribe {
    * raiding, fragmentation, or accepting desperate bargains.
    */
   stability: number;
+  /** Whether the player has made first contact with this tribe. Required for direct trade. */
+  contactEstablished: boolean;
+  /** Turn number of the most recent completed trade. null if no trades yet. */
+  lastTradeTurn: number | null;
+  /** Cumulative completed trade count. Used for disposition bonuses. */
+  tradeHistoryCount: number;
+  /** Resources this tribe actively wants to buy (drives premium pricing). */
+  tradeDesires: ResourceType[];
+  /** Resources this tribe has available to sell. */
+  tradeOfferings: ResourceType[];
 }
 
 // ─── Settlement Culture ────────────────────────────────────────────────────────
@@ -224,6 +244,7 @@ export type BuildingId =
   | 'great_hall'
   | 'clan_lodge'
   | 'granary'
+  | 'fields'
   | 'workshop'
   | 'trading_post'
   | 'healers_hut'

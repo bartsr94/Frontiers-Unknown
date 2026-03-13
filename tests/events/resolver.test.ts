@@ -685,3 +685,146 @@ describe('applyEventChoice — result flags (EventView routing)', () => {
     expect(result.state.pendingEvents[0]!.id).toBe('existing_event');
   });
 });
+
+// ─── Away-on-mission ──────────────────────────────────────────────────────────
+
+describe('resolveSkillCheck — skips away persons', () => {
+  it('best_council: ignores council member with role away, picks next best', () => {
+    const strong = makePerson('p1', { leadership: 80 });
+    const away   = { ...makePerson('p2', { leadership: 90 }), role: 'away' as const };
+    const state: GameState = {
+      ...makeState(),
+      people:           new Map([['p1', strong], ['p2', away]]),
+      councilMemberIds: ['p1', 'p2'],
+    } as unknown as GameState;
+    const check: SkillCheck = { skill: 'leadership', difficulty: 50, actorSelection: 'best_council' };
+    const res = resolveSkillCheck(check, state);
+    // p2 would normally win on score, but is away — should pick p1
+    expect(res.actorId).toBe('p1');
+    expect(res.actorScore).toBe(80);
+  });
+
+  it('best_council: auto-fails when all council members are away', () => {
+    const away = { ...makePerson('p1', { leadership: 70 }), role: 'away' as const };
+    const state: GameState = {
+      ...makeState(),
+      people:           new Map([['p1', away]]),
+      councilMemberIds: ['p1'],
+    } as unknown as GameState;
+    const check: SkillCheck = { skill: 'leadership', difficulty: 30, actorSelection: 'best_council' };
+    const res = resolveSkillCheck(check, state);
+    expect(res.passed).toBe(false);
+    expect(res.actorScore).toBe(0);
+    expect(res.actorName).toBe('No one');
+  });
+
+  it('best_settlement: ignores away settler, picks next best', () => {
+    const normal = makePerson('p1', { plants: 60 });
+    const away   = { ...makePerson('p2', { plants: 90 }), role: 'away' as const };
+    const state: GameState = {
+      ...makeState(),
+      people:           new Map([['p1', normal], ['p2', away]]),
+      councilMemberIds: [],
+    } as unknown as GameState;
+    const check: SkillCheck = { skill: 'plants', difficulty: 50, actorSelection: 'best_settlement' };
+    const res = resolveSkillCheck(check, state);
+    expect(res.actorId).toBe('p1');
+    expect(res.actorScore).toBe(60);
+  });
+});
+
+describe('applyEventChoice — missionActorSlot', () => {
+  it('marks the mission actor as away when a deferred choice is made', () => {
+    const envoy = makePerson('envoy-1', { leadership: 50 });
+    const state: GameState = {
+      ...makeState(),
+      people: new Map([['envoy-1', envoy]]),
+    } as unknown as GameState;
+    const event: GameEvent = {
+      id: 'mission_event',
+      title: 'Mission',
+      category: 'diplomacy',
+      prerequisites: [],
+      weight: 1,
+      cooldown: 0,
+      isUnique: false,
+      description: 'Send someone.',
+      choices: [{
+        id: 'send',
+        label: 'Send them.',
+        description: '',
+        consequences: [],
+        deferredEventId: 'mission_return',
+        deferredTurns: 4,
+        missionActorSlot: 'envoy',
+      }],
+    };
+    const boundActors = { envoy: 'envoy-1' };
+    const result = applyEventChoice(event, 'send', state, undefined, boundActors);
+    const updatedPerson = result.state.people.get('envoy-1')!;
+    expect(updatedPerson.role).toBe('away');
+  });
+
+  it('stores missionActorId and prevRole in DeferredEventEntry.context', () => {
+    const envoy = { ...makePerson('envoy-2', {}), role: 'trader' as const };
+    const state: GameState = {
+      ...makeState(),
+      people: new Map([['envoy-2', envoy]]),
+    } as unknown as GameState;
+    const event: GameEvent = {
+      id: 'mission_event_2',
+      title: 'Mission 2',
+      category: 'diplomacy',
+      prerequisites: [],
+      weight: 1,
+      cooldown: 0,
+      isUnique: false,
+      description: 'Send someone.',
+      choices: [{
+        id: 'send',
+        label: 'Send them.',
+        description: '',
+        consequences: [],
+        deferredEventId: 'mission_return_2',
+        deferredTurns: 3,
+        missionActorSlot: 'envoy',
+      }],
+    };
+    const result = applyEventChoice(event, 'send', state, undefined, { envoy: 'envoy-2' });
+    const entry = result.state.deferredEvents[0]!;
+    expect(entry.context['missionActorId']).toBe('envoy-2');
+    expect(entry.context['prevRole']).toBe('trader');
+  });
+
+  it('does not change role when missionActorSlot is not set on the choice', () => {
+    const p = { ...makePerson('p-no-slot', {}), role: 'farmer' as const };
+    const state: GameState = {
+      ...makeState(),
+      people: new Map([['p-no-slot', p]]),
+    } as unknown as GameState;
+    const event: GameEvent = {
+      id: 'no_slot_event',
+      title: 'No Slot',
+      category: 'domestic',
+      prerequisites: [],
+      weight: 1,
+      cooldown: 0,
+      isUnique: false,
+      description: 'No mission actor.',
+      choices: [{
+        id: 'go',
+        label: 'Go',
+        description: '',
+        consequences: [],
+        deferredEventId: 'no_slot_return',
+        deferredTurns: 2,
+        // no missionActorSlot
+      }],
+    };
+    const result = applyEventChoice(event, 'go', state);
+    const updatedPerson = result.state.people.get('p-no-slot')!;
+    expect(updatedPerson.role).toBe('farmer');
+    const entry = result.state.deferredEvents[0]!;
+    expect(entry.context['missionActorId']).toBeUndefined();
+  });
+});
