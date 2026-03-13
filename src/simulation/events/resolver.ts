@@ -296,6 +296,16 @@ function applyConsequence(
       };
     }
 
+    case 'queue_deferred_event': {
+      const entry: DeferredEventEntry = {
+        eventId: consequence.target,
+        scheduledTurn: state.turnNumber + (consequence.value as number),
+        context: {},
+        boundActors: boundActors ?? {},
+      };
+      return { ...state, deferredEvents: [...state.deferredEvents, entry] };
+    }
+
     default:
       return state;
   }

@@ -68,8 +68,8 @@ type SexCounts   = Record<'male' | 'female', StageCounts>;
  */
 const PORTRAIT_REGISTRY: Record<PortraitCategory, SexCounts> = {
   imanian: {
-    male:   { child: 0, young_adult: 0, adult: 1, senior: 0 },
-    female: { child: 0, young_adult: 0, adult: 0, senior: 0 },
+    male:   { child: 0, young_adult: 1, adult: 1, senior: 1 },
+    female: { child: 0, young_adult: 0, adult: 1, senior: 0 },
   },
   kiswani: {
     male:   { child: 0, young_adult: 0, adult: 0, senior: 0 },
@@ -77,7 +77,7 @@ const PORTRAIT_REGISTRY: Record<PortraitCategory, SexCounts> = {
   },
   hanjoda: {
     male:   { child: 0, young_adult: 0, adult: 0, senior: 0 },
-    female: { child: 0, young_adult: 0, adult: 0, senior: 0 },
+    female: { child: 0, young_adult: 0, adult: 1, senior: 0 },
   },
   mixed_imanian_kiswani: {
     male:   { child: 0, young_adult: 0, adult: 0, senior: 0 },

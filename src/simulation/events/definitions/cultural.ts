@@ -1106,4 +1106,81 @@ export const CULTURAL_EVENTS: GameEvent[] = [
       },
     ],
   },
+
+  // ─── Language tension ─────────────────────────────────────────────────────
+
+  {
+    id: 'cul_tongue_war',
+    title: 'What He Said',
+    category: 'cultural',
+    prerequisites: [
+      { type: 'min_population', params: { value: 8 } },
+      { type: 'language_tension_above', params: { threshold: 0.4 } },
+    ],
+    weight: 3,
+    cooldown: 10,
+    isUnique: false,
+    actorRequirements: [
+      { slot: 'imanian', criteria: { sex: 'male', religion: 'imanian_orthodox' } },
+      { slot: 'sauromatian', criteria: { sex: 'female', religion: 'sacred_wheel' } },
+    ],
+    description:
+      'At the evening meal, a heated exchange between {imanian} and {sauromatian} ' +
+      'spills into the open. Neither has more than a few words of the other\'s language. ' +
+      'The rest of the settlement watches. What started as a dispute over a shared tool ' +
+      'has become, in the absence of a shared tongue, something that sounds much worse ' +
+      'than it probably is. Volume is filling the gap that vocabulary cannot.',
+    choices: [
+      {
+        id: 'mediate_directly',
+        label: 'Step in and mediate — use whoever can translate, even imperfectly.',
+        description:
+          'A halting three-way conversation. Most of what is said is approximate. ' +
+          'But the temperature comes down and neither party walks away feeling dismissed.',
+        consequences: [
+          { type: 'modify_opinion', target: 'sauromatian_women',    value: 3 },
+          { type: 'modify_opinion', target: 'traditional_imanians', value: 3 },
+        ],
+        skillCheck: {
+          skill: 'diplomacy',
+          difficulty: 42,
+          actorSelection: 'best_council',
+          attemptLabel: 'Bridge the gap',
+        },
+        successText: 'The translation is imperfect but the intent is clear. Both parties say something they did not know they needed to say. The issue that started it was, in the end, the tool.',
+        failureText: 'The mediation becomes a second argument, this time about what was or wasn\'t said. You separate them before it escalates further, but nothing is resolved.',
+        onSuccess: [
+          { type: 'modify_standing', target: 'company', value: 1 },
+        ],
+        onFailure: [
+          { type: 'modify_opinion', target: 'sauromatian_women',    value: -2 },
+          { type: 'modify_opinion', target: 'traditional_imanians', value: -2 },
+        ],
+      },
+      {
+        id: 'enforce_silence',
+        label: 'Order both parties to drop it until morning, then hear them separately.',
+        description:
+          'Authority over understanding. It works in the short term. ' +
+          'The underlying tension finds another outlet soon enough.',
+        consequences: [
+          { type: 'modify_standing', target: 'company', value: 1 },
+          { type: 'modify_opinion', target: 'sauromatian_women',    value: -4 },
+          { type: 'modify_opinion', target: 'traditional_imanians', value: -2 },
+        ],
+      },
+      {
+        id: 'assign_language_lessons',
+        label: 'Turn the incident into a policy: assign shared language lessons for all settlers.',
+        description:
+          'This will not fix the immediate argument. But it is the only response ' +
+          'that addresses the cause rather than the symptom.',
+        consequences: [
+          { type: 'modify_opinion', target: 'sauromatian_women',    value: 5 },
+          { type: 'modify_opinion', target: 'traditional_imanians', value: -1 },
+          { type: 'modify_resource', target: 'goods', value: -2 },
+        ],
+      },
+    ],
+  },
 ];

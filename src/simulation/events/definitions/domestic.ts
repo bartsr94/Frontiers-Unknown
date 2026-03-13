@@ -952,4 +952,96 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       },
     ],
   },
+
+  // ─── Deferred chain: settler illness ─────────────────────────────────────
+
+  {
+    id: 'dom_settler_falls_ill',
+    title: 'A Fever Takes Hold',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'min_population', params: { value: 5 } },
+    ],
+    actorRequirements: [
+      { slot: 'patient', criteria: { minAge: 18, maxAge: 55 } },
+    ],
+    weight: 2,
+    cooldown: 6,
+    isUnique: false,
+    description:
+      '{patient} has been feverish since yesterday morning. {patient.He} has not ' +
+      'eaten. {patient.His} work has slowed to nothing and {patient.he} is not ' +
+      'complaining — which is the part that worries you most. ' +
+      'It may be the marsh air. It may be something worse.',
+    choices: [
+      {
+        id: 'rest_and_wait',
+        label: 'Have {patient.him} rest and let the fever run its course.',
+        description:
+          'Rest costs less than medicine but demands patience. ' +
+          'The outcome will depend on whoever tends to {patient.him}.',
+        consequences: [],
+        deferredEventId: 'dom_settler_recovery',
+        deferredTurns: 2,
+        pendingText:
+          '{patient.first} is made comfortable and left to rest. ' +
+          'The camp continues without {patient.him}. You will know more in a day or two.',
+      },
+      {
+        id: 'spend_medicine',
+        label: 'Use your medicine stores to treat {patient.him} immediately. (−3 medicine)',
+        description:
+          'Costly, but it does not leave outcomes to chance. ' +
+          '{patient.He} will be back on his feet within the season.',
+        consequences: [
+          { type: 'modify_resource', target: 'medicine', value: -3 },
+        ],
+      },
+      {
+        id: 'push_through',
+        label: 'Tell {patient.him} to keep working. The sweat will break the fever.',
+        description:
+          'A risk. It may work — frontier men are tougher than they look. ' +
+          'It may not.',
+        consequences: [],
+      },
+    ],
+  },
+
+  {
+    id: 'dom_settler_recovery',
+    title: 'The Fever Breaks',
+    category: 'domestic',
+    prerequisites: [],
+    isDeferredOutcome: true,
+    weight: 1,
+    cooldown: 0,
+    isUnique: false,
+    description:
+      '{patient.first} has been resting for two days. The camp has been quieter for it. ' +
+      'Whoever is tending to {patient.him} brings you a report this morning.',
+    choices: [
+      {
+        id: 'resolve',
+        label: 'Hear how {patient.he} fares.',
+        description: '',
+        consequences: [],
+        skillCheck: {
+          skill: 'plants',
+          difficulty: 38,
+          actorSelection: 'best_council',
+          attemptLabel: 'tends to the patient',
+        },
+        successText:
+          'The fever has broken cleanly. {patient.first} is pale and a little thinner ' +
+          'but sitting up and asking for food — a reliable sign of recovery. ' +
+          '{patient.He} will be back at work within the season.',
+        failureText:
+          'The fever has worsened overnight. The treatment options are limited ' +
+          'and expensive. The camp\'s medicine stores take a hard hit.',
+        onSuccess: [],
+        onFailure:  [{ type: 'modify_resource', target: 'medicine', value: -4 }],
+      },
+    ],
+  },
 ];

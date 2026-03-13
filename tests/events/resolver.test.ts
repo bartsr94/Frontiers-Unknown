@@ -12,7 +12,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { applyEventChoice, resolveSkillCheck } from '../../src/simulation/events/resolver';
-import type { GameEvent, EventConsequence, SkillCheck } from '../../src/simulation/events/engine';
+import type { GameEvent, BoundEvent, EventConsequence, SkillCheck } from '../../src/simulation/events/engine';
 import type { Person } from '../../src/simulation/population/person';
 import type { GameState } from '../../src/simulation/turn/game-state';
 import { createRNG } from '../../src/utils/rng';
@@ -293,6 +293,70 @@ describe('resolveSkillCheck', () => {
     const res = resolveSkillCheck(check, state);
     expect(res.passed).toBe(false);
   });
+
+  it('actor_slot — picks person by ID from boundActors', () => {
+    const p1 = makePerson('p1', { bargaining: 55 });
+    const p2 = makePerson('p2', { bargaining: 70 });
+    const state = {
+      ...makeState(),
+      people: new Map([['p1', p1], ['p2', p2]]),
+      councilMemberIds: [],
+    } as unknown as GameState;
+    const check: SkillCheck = {
+      skill: 'bargaining',
+      difficulty: 50,
+      actorSelection: 'actor_slot',
+      actorSlot: 'merchant',
+    };
+    // Explicitly bind p1 to the 'merchant' slot — even though p2 has a higher score
+    const res = resolveSkillCheck(check, state, {}, { merchant: 'p1' });
+    expect(res.actorId).toBe('p1');
+    expect(res.actorScore).toBe(55);
+    expect(res.passed).toBe(true);
+  });
+
+  it('best_settlement — picks highest scorer among all living settlers', () => {
+    const low  = makePerson('p1', { plants: 20 });
+    const high = makePerson('p2', { plants: 65 });
+    const state = {
+      ...makeState(),
+      people: new Map([['p1', low], ['p2', high]]),
+      councilMemberIds: [], // neither is on the council
+    } as unknown as GameState;
+    const check: SkillCheck = { skill: 'plants', difficulty: 50, actorSelection: 'best_settlement' };
+    const res = resolveSkillCheck(check, state);
+    expect(res.actorId).toBe('p2');
+    expect(res.actorScore).toBe(65);
+    expect(res.passed).toBe(true);
+  });
+});
+
+describe('applyEventChoice — boundActors persisted to DeferredEventEntry', () => {
+  it('carries boundActors into the scheduled DeferredEventEntry', () => {
+    const state = makeState();
+    const event = {
+      id: 'deferred_bound',
+      title: 'Bound Deferred',
+      category: 'domestic' as const,
+      prerequisites: [],
+      weight: 1,
+      cooldown: 0,
+      isUnique: false,
+      description: 'A bound deferred event.',
+      boundActors: { scout: 'p99' },
+      choices: [{
+        id: 'go',
+        label: 'Go',
+        description: 'Head out.',
+        consequences: [],
+        deferredEventId: 'follow_up_event',
+        deferredTurns: 3,
+      }],
+    };
+    const result = applyEventChoice(event as unknown as GameEvent, 'go', state);
+    expect(result.isDeferredOutcome).toBe(true);
+    expect(result.state.deferredEvents[0]?.boundActors).toEqual({ scout: 'p99' });
+  });
 });
 
 describe('applyEventChoice — skill checks', () => {
@@ -502,5 +566,122 @@ describe('applyEventChoice — add_person', () => {
     const children = people.filter(p => p.age < 28);
     expect(adult).toHaveLength(1);
     expect(children).toHaveLength(2);
+  });
+});
+
+// ─── Result flags (EventView routing) ────────────────────────────────────────
+//
+// EventView reads isDeferredOutcome and skillCheckResult from the result to
+// decide which screen to show and whether to call nextEvent() immediately.
+// Incorrect flags here cause the "stuck button" regression.
+
+describe('applyEventChoice — result flags (EventView routing)', () => {
+  it('basic choice: isDeferredOutcome false, no skillCheckResult → nextEvent called immediately', () => {
+    const state  = makeState();
+    const event  = makeEvent([{ type: 'modify_resource', target: 'food', value: 5 }]);
+    const result = applyEventChoice(event, 'choice_a', state);
+    expect(result.isDeferredOutcome).toBe(false);
+    expect(result.skillCheckResult).toBeUndefined();
+    expect(result.followUpEventId).toBeUndefined();
+  });
+
+  it('skill-check choice: isDeferredOutcome false, skillCheckResult present → outcome screen shown', () => {
+    const p = makePerson('p1', { combat: 70 });
+    const state: GameState = {
+      ...makeState(),
+      people: new Map([['p1', p]]),
+      councilMemberIds: ['p1'],
+    } as unknown as GameState;
+    const event: GameEvent = {
+      id: 'sc_event',
+      title: 'Skill Check Event',
+      category: 'domestic',
+      prerequisites: [],
+      weight: 1,
+      cooldown: 0,
+      isUnique: false,
+      description: 'A test.',
+      choices: [{
+        id: 'attempt',
+        label: 'Attempt',
+        consequences: [],
+        skillCheck: { skill: 'combat', difficulty: 50, actorSelection: 'best_council' },
+        onSuccess: [],
+        onFailure: [],
+      }],
+    };
+    const result = applyEventChoice(event, 'attempt', state);
+    expect(result.isDeferredOutcome).toBe(false);
+    expect(result.skillCheckResult).toBeDefined();
+    expect(result.skillCheckResult?.passed).toBe(true);
+  });
+
+  it('deferred choice: isDeferredOutcome true, no skillCheckResult → pending screen shown', () => {
+    const state = makeState();
+    const event: GameEvent = {
+      id: 'deferred_event',
+      title: 'Deferred Event',
+      category: 'domestic',
+      prerequisites: [],
+      weight: 1,
+      cooldown: 0,
+      isUnique: false,
+      description: 'A test.',
+      choices: [{
+        id: 'wait',
+        label: 'Wait',
+        consequences: [],
+        deferredEventId: 'some_future_event',
+        deferredTurns:   3,
+      }],
+    };
+    const result = applyEventChoice(event, 'wait', state);
+    expect(result.isDeferredOutcome).toBe(true);
+    expect(result.skillCheckResult).toBeUndefined();
+  });
+
+  it('follow-up choice: followUpEventId set, isDeferredOutcome false → nextEvent called immediately', () => {
+    const state = makeState();
+    const event: GameEvent = {
+      id: 'followup_src',
+      title: 'Follow-up Source',
+      category: 'domestic',
+      prerequisites: [],
+      weight: 1,
+      cooldown: 0,
+      isUnique: false,
+      description: 'A test.',
+      choices: [{
+        id: 'trigger',
+        label: 'Trigger',
+        consequences: [],
+        followUpEventId: 'the_followup_event',
+      }],
+    };
+    const result = applyEventChoice(event, 'trigger', state);
+    expect(result.isDeferredOutcome).toBe(false);
+    expect(result.followUpEventId).toBe('the_followup_event');
+    expect(result.skillCheckResult).toBeUndefined();
+  });
+
+  it('resolver never modifies GameState.pendingEvents — queue management belongs to the store', () => {
+    const initialPending: BoundEvent[] = [{
+      id:          'existing_event',
+      title:       'Existing',
+      category:    'domestic',
+      prerequisites: [],
+      weight:      1,
+      cooldown:    0,
+      isUnique:    false,
+      description: 'Existing queued event.',
+      choices:     [{ id: 'ok', label: 'OK', consequences: [] }],
+      boundActors: {},
+    }];
+    const state: GameState = { ...makeState(), pendingEvents: initialPending } as unknown as GameState;
+    const event  = makeEvent();
+    const result = applyEventChoice(event, 'choice_a', state);
+    // pendingEvents must be unchanged — only nextEvent() may remove events
+    expect(result.state.pendingEvents).toHaveLength(1);
+    expect(result.state.pendingEvents[0]!.id).toBe('existing_event');
   });
 });

@@ -66,4 +66,96 @@ export const DIPLOMACY_EVENTS: GameEvent[] = [
       },
     ],
   },
+
+  // ─── Deferred chain: upstream Kiswani camp ────────────────────────────────
+
+  {
+    id: 'dip_upriver_camp_spotted',
+    title: 'Smoke Upstream',
+    category: 'diplomacy',
+    prerequisites: [
+      { type: 'tribe_exists',            params: { tribeId: 'njaro_matu_riverfolk' } },
+      { type: 'tribe_disposition_above', params: { tribeId: 'njaro_matu_riverfolk', value: -10 } },
+    ],
+    actorRequirements: [
+      { slot: 'envoy', criteria: { sex: 'male' } },
+    ],
+    weight: 1,
+    cooldown: 30,
+    isUnique: true,
+    description:
+      'Your scouts report a Kiswani camp two days upstream — perhaps forty souls. ' +
+      'Cooking fires visible in the morning, but no approach has been made. ' +
+      'They are aware of you. The question is whether you make the first move.',
+    choices: [
+      {
+        id: 'send_emissary',
+        label: 'Send {envoy} upstream to make contact.',
+        description:
+          'A gesture of good faith. It will take time — you will not know the outcome for several days.',
+        consequences: [],
+        deferredEventId: 'dip_upriver_emissary_return',
+        deferredTurns: 4,
+        pendingText:
+          '{envoy.first} sets out at dawn with trade gifts and a careful manner. ' +
+          'You will hear from him in time.',
+      },
+      {
+        id: 'wait_and_watch',
+        label: 'Post observers and wait. Let them approach on their own terms.',
+        description: 'Patient. Costs nothing. May cost opportunity.',
+        consequences: [],
+      },
+      {
+        id: 'show_strength',
+        label: 'Patrol the river bank in force. Let them see your numbers.',
+        description:
+          'You are not prey, and they should know it from the beginning. ' +
+          'First impressions, once made, are hard to revise.',
+        consequences: [
+          { type: 'modify_disposition', target: 'njaro_matu_riverfolk', value: -5 },
+          { type: 'modify_standing',    target: 'company',              value:  2 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'dip_upriver_emissary_return',
+    title: 'The Emissary Returns',
+    category: 'diplomacy',
+    prerequisites: [],
+    isDeferredOutcome: true,
+    weight: 1,
+    cooldown: 0,
+    isUnique: true,
+    description:
+      '{envoy} has returned from the Kiswani camp upstream. ' +
+      '{envoy.He} looks tired but is unharmed. The camp received {envoy.him} — ' +
+      'whether they received {envoy.him} well is another matter.',
+    choices: [
+      {
+        id: 'resolve',
+        label: 'Hear {envoy.his} report.',
+        description: '',
+        consequences: [],
+        skillCheck: {
+          skill: 'diplomacy',
+          difficulty: 50,
+          actorSelection: 'best_council',
+          attemptLabel: 'recounts what passed between them',
+        },
+        successText:
+          '{envoy.first} chose his words with care and read the room well. ' +
+          'He leaves the camp with an open invitation to trade — a quiet, ' +
+          'provisional trust that neither side need announce aloud.',
+        failureText:
+          '{envoy.first} came back rattled. The Kiswani received him, ' +
+          'tested him, and found him wanting in some way he cannot fully articulate. ' +
+          'He was sent away with courtesy but no warmth.',
+        onSuccess: [{ type: 'modify_disposition', target: 'njaro_matu_riverfolk', value: 15 }],
+        onFailure: [{ type: 'modify_disposition', target: 'njaro_matu_riverfolk', value: -5 }],
+      },
+    ],
+  },
 ];

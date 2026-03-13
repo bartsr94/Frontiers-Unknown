@@ -73,7 +73,7 @@ If the exact age stage has no portraits yet, the resolver tries: `adult` → `yo
 
 ```bash
 npm run dev          # Vite dev server → http://localhost:5173
-npm test             # Run Vitest (493 passing across rng, inheritance, gender-ratio, fertility, event-filter, resolver, council-advice, resources, demographics, marriage, culture, language-acquisition, skills, buildings, actor-resolver, interpolation)
+npm test             # Run Vitest (513 passing across rng, inheritance, gender-ratio, fertility, event-filter, event-queue, resolver, council-advice, resources, demographics, marriage, culture, language-acquisition, skills, buildings, actor-resolver, interpolation)
 npx tsc --noEmit     # Type-check without building
 ```
 
@@ -309,8 +309,10 @@ idle
 - **Slot-targeted consequences**: `target: '{leaver}'` → `resolveConsequenceTarget()` strips braces and resolves to the bound person's ID
 - **Text interpolation tokens**: `{slot}` → full name; `{slot.first}` → given name; `{slot.he/his/him}` → pronouns matching sex; `{slot.He/His/Him}` → capitalised variants; unknown tokens passed through unchanged
 - **Deferred actors**: `DeferredEventEntry.boundActors` persists the binding across the deferred gap
+- **`queue_deferred_event` consequence**: implemented in `applyConsequence()` — schedules a deferred entry from a consequence (alternative to `choice.deferredEventId`)
 - **EventView actor strip**: when `boundActors` is non-empty, renders `CouncilPortrait` + first name for each bound actor above the event description
 - **All 28+ events retrofitted**: `domestic.ts` (12 events), `cultural.ts` (13 events), `building.ts` (2 events), `diplomacy.ts` (1 event), `economic.ts` (2 events); `environmental.ts`/`company.ts` have no slots (elemental/external events)
+- **Deferred chain pairs**: `dip_upriver_camp_spotted` → `dip_upriver_emissary_return` (diplomacy-50, 4 turns); `dom_settler_falls_ill` → `dom_settler_recovery` (plants-38, 2 turns)
 
 ---
 
@@ -375,8 +377,9 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/genetics/inheritance.test.ts` — 10/10 passing
 - `tests/genetics/gender-ratio.test.ts` — 26/26 passing
 - `tests/genetics/fertility.test.ts` — 31/31 passing
-- `tests/events/event-filter.test.ts` — 47/47 passing
-- `tests/events/resolver.test.ts` — 28/28 passing (14 original + 6 skill-check / deferred-event + 8 add_person)
+- `tests/events/event-filter.test.ts` — 53/53 passing
+- `tests/events/resolver.test.ts` — 36/36 passing (14 original + 6 skill-check / deferred-event + 8 add_person + 5 new: actor_slot, best_settlement, boundActors persistence, queue_deferred_event)
+- `tests/events/event-queue.test.ts` — 6/6 passing (nextEvent transitions, follow-up insertion, resolveEventChoice/pendingEvents isolation)
 - `tests/events/council-advice.test.ts` — 95/95 passing (archetype mapping, choice scoring, hash determinism, advice generation, template coverage)
 - `tests/economy/resources.test.ts` — 24/24 passing
 - `tests/population/demographics.test.ts` — 16/16 passing (includes 4 child-culture blending tests)
@@ -388,4 +391,4 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/buildings/building-effects.test.ts` — 23/23 passing (shelterCapacity, productionBonus, childMortalityModifier, overcrowding, hasBuilding, etc.)
 - `tests/events/actor-resolver.test.ts` — 33/33 passing (matchesCriteria per-field, canFillSlot, canResolveActors mutual exclusion, selectActor RNG determinism, resolveActors multi-slot exclusion + optional slots)
 - `tests/events/interpolation.test.ts` — 25/25 passing (all `{slot.*}` token variants, both sexes, capitalised pronouns, unknown slot/suffix passthrough, multi-slot strings)
-- **Total: 493/493 passing**
+- **Total: 513/513 passing**

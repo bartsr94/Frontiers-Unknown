@@ -38,6 +38,7 @@ import type {
   SettlementCulture,
   CompanyRelation,
   GameConfig,
+  GameFlags,
   BuildingId,
   BuildingStyle,
 } from '../simulation/turn/game-state';
@@ -72,10 +73,18 @@ export interface GameStore {
   _pendingProduction: ResourceStock | undefined;
   /** Resource consumption delta from the last Dawn phase; applied in endTurn(). */
   _pendingConsumption: ResourceStock | undefined;
+  /**
+   * A one-time notification message to display to the player (e.g. creole emergence).
+   * UI components should show this and then call `dismissNotification()`.
+   * Null when no notification is pending.
+   */
+  pendingNotification: string | null;
   // ── Game lifecycle ────────────────────────────────────────────────────────
   newGame: (config: GameConfig, settlementName: string) => void;
   loadGame: (saveData: string) => void;
   saveGame: () => string;
+  /** Clear the current pending notification. */
+  dismissNotification: () => void;
 
   // ── Turn flow ─────────────────────────────────────────────────────────────
   startTurn: () => void;
@@ -193,6 +202,7 @@ function deserializeGameState(json: string): GameState {
     },
     eventCooldowns: new Map(s.eventCooldowns),
     deferredEvents: s.deferredEvents ?? [],
+    flags: (s as GameState).flags ?? { creoleEmergedNotified: false },
   };
 }
 
@@ -209,9 +219,9 @@ const FOUNDING_SETTLERS: Array<{
   traits:     Person['traits'];
   genetics:   Person['genetics'];
 }> = [
-  // 0 – Edmund Farrow, farmer 22 — young, earnest, careful
+  // 0 – Edmund Farrow, farmer 17 — young, earnest, careful
   {
-    firstName: 'Edmund', familyName: 'Farrow', role: 'farmer', age: 22,
+    firstName: 'Edmund', familyName: 'Farrow', role: 'farmer', age: 17,
     traits: ['patient', 'humble'],
     genetics: { visibleTraits: { skinTone: 0.14, skinUndertone: 'cool_pink', hairColor: 'blonde',      hairTexture: 'straight', eyeColor: 'blue',  buildType: 'lean',     height: 'average',       facialStructure: 'oval'    }, genderRatioModifier: 0.5, extendedFertility: false },
   },
@@ -245,9 +255,9 @@ const FOUNDING_SETTLERS: Array<{
     traits: ['gregarious', 'honest'],
     genetics: { visibleTraits: { skinTone: 0.13, skinUndertone: 'cool_pink', hairColor: 'blonde',      hairTexture: 'wavy',     eyeColor: 'blue',  buildType: 'lean',     height: 'tall',          facialStructure: 'oval'    }, genderRatioModifier: 0.5, extendedFertility: false },
   },
-  // 6 – Bastian Thorn, farmer 35 — the old hand, heavyset and weathered
+  // 6 – Bastian Thorn, farmer 60 — the old hand, heavyset and weathered
   {
-    firstName: 'Bastian', familyName: 'Thorn', role: 'farmer', age: 35,
+    firstName: 'Bastian', familyName: 'Thorn', role: 'farmer', age: 60,
     traits: ['traditional', 'veteran'],
     genetics: { visibleTraits: { skinTone: 0.26, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'grey',  buildType: 'heavyset', height: 'average',       facialStructure: 'broad'   }, genderRatioModifier: 0.5, extendedFertility: false },
   },
@@ -461,6 +471,7 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
     councilMemberIds: seedCouncil(people),
     deferredEvents: [],
     config,
+    flags: { creoleEmergedNotified: false },
   };
 }
 
@@ -489,9 +500,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     lastChoiceResult: null,
     _pendingProduction: undefined,
     _pendingConsumption: undefined,
-    currentEventIndex: 0,
-    lastSkillCheckResult: null,
-    lastChoiceResult: null,
+    pendingNotification: null,
 
     // ── Game lifecycle ────────────────────────────────────────────────────
     newGame(config, settlementName) {
@@ -516,6 +525,10 @@ export const useGameStore = create<GameStore>((set, get) => {
       const json = serializeGameState(gameState);
       localStorage.setItem(SAVE_KEY, json);
       return json;
+    },
+
+    dismissNotification() {
+      set({ pendingNotification: null });
     },
 
     // ── Turn flow ─────────────────────────────────────────────────────────
@@ -602,13 +615,26 @@ export const useGameStore = create<GameStore>((set, get) => {
       // Deferred events are prepended so they resolve before new draws.
       const allPending: BoundEvent[] = [...deferredBoundEvents, ...boundDrawn];
 
+      // One-time creole emergence notification.
+      const showCreoleNotification =
+        dawnResult.creoleEmerged && !gameState.flags.creoleEmergedNotified;
+      const stateWithFlags: GameState = showCreoleNotification
+        ? { ...stateAfterDrain, flags: { ...stateAfterDrain.flags, creoleEmergedNotified: true } }
+        : stateAfterDrain;
+
       set({
-        gameState: stateAfterDrain,
+        gameState: stateWithFlags,
         currentPhase: allPending.length > 0 ? 'event' : 'management',
         pendingEvents: allPending,
         currentEventIndex: 0,
         _pendingProduction: dawnResult.production,
         _pendingConsumption: dawnResult.consumption,
+        ...(showCreoleNotification && {
+          pendingNotification:
+            'A new tongue is being born. Children raised in this settlement blend ' +
+            'Imanian and Sauromatian speech into something neither — a settlement creole, ' +
+            'native to this place and no other.',
+        }),
       });
     },
 
@@ -625,28 +651,34 @@ export const useGameStore = create<GameStore>((set, get) => {
       const rng = createRNG(gameState.seed ^ (gameState.turnNumber * 2654435761));
       const result = applyEventChoice(event, choiceId, gameState, rng, event.boundActors);
 
-      // If the choice produced a follow-up event, insert it next in the queue.
-      const updatedPending: BoundEvent[] = result.followUpEventId
-        ? (() => {
-            const followUp = getEventById(result.followUpEventId);
-            const front: BoundEvent[] = followUp ? [{ ...followUp, boundActors: {} }] : [];
-            const remaining = pendingEvents.filter(e => e.id !== eventId);
-            return [...front, ...remaining];
-          })()
-        : pendingEvents.filter(e => e.id !== eventId);
-
+      // Do NOT remove the event from pendingEvents here. The event must remain
+      // visible so the outcome/pending screen can reference it. nextEvent() is
+      // responsible for removing it once the player has acknowledged the result.
       set({
         gameState: result.state,
-        pendingEvents: updatedPending,
         lastSkillCheckResult: result.skillCheckResult ?? null,
         lastChoiceResult: result,
       });
     },
 
     nextEvent() {
-      const { currentEventIndex, pendingEvents } = get();
-      if (currentEventIndex < pendingEvents.length - 1) {
-        set({ currentEventIndex: currentEventIndex + 1 });
+      const { currentEventIndex, pendingEvents, lastChoiceResult } = get();
+
+      // Remove the just-resolved event from the front of the queue.
+      const remaining = pendingEvents.filter((_, i) => i !== currentEventIndex);
+
+      // If the resolved choice spawns a follow-up event, insert it next.
+      const withFollowUp: BoundEvent[] = lastChoiceResult?.followUpEventId
+        ? (() => {
+            const followUp = getEventById(lastChoiceResult.followUpEventId);
+            return followUp
+              ? [{ ...followUp, boundActors: {} } as BoundEvent, ...remaining]
+              : remaining;
+          })()
+        : remaining;
+
+      if (withFollowUp.length > 0) {
+        set({ pendingEvents: withFollowUp, currentEventIndex: 0 });
       } else {
         // All events resolved — clear queue and enter management phase.
         set({ currentPhase: 'management', pendingEvents: [], currentEventIndex: 0 });

@@ -54,8 +54,10 @@ export default function GameScreen() {
         {/* Main column: content view + council footer */}
         <div className="flex flex-col flex-1 min-w-0">
 
-          {/* Scrollable content area */}
-          <div className="flex-1 overflow-y-auto">
+          {/* Content area — overflow-hidden so views that use h-full (EventView,
+              SettlementView, PeopleView) get a bounded height. Each view manages
+              its own internal scrolling where needed. */}
+          <div className="flex-1 overflow-hidden min-h-0">
             {renderView()}
           </div>
 

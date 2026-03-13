@@ -614,4 +614,74 @@ describe('ALL_EVENTS deck', () => {
     const hasCheck = event!.prerequisites.some(p => p.type === 'has_person_matching');
     expect(hasCheck).toBe(false);
   });
+
+  it('cul_tongue_war uses language_tension_above prerequisite', () => {
+    const event = ALL_EVENTS.find(e => e.id === 'cul_tongue_war');
+    expect(event, 'cul_tongue_war missing from ALL_EVENTS').toBeDefined();
+    const hasTensionPrereq = event!.prerequisites.some(
+      p => p.type === 'language_tension_above',
+    );
+    expect(hasTensionPrereq).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// language_tension_above prerequisite
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('language_tension_above prerequisite', () => {
+  function makeStateWithTension(languageTension: number): GameState {
+    const base = makeState();
+    return {
+      ...base,
+      culture: { ...base.culture, languageTension },
+    } as unknown as GameState;
+  }
+
+  it('allows the event when languageTension meets the threshold exactly', () => {
+    const event = makeEvent({
+      prerequisites: [{ type: 'language_tension_above', params: { threshold: 0.4 } }],
+    });
+    expect(isEventEligible(event, makeStateWithTension(0.4))).toBe(true);
+  });
+
+  it('allows the event when languageTension exceeds the threshold', () => {
+    const event = makeEvent({
+      prerequisites: [{ type: 'language_tension_above', params: { threshold: 0.4 } }],
+    });
+    expect(isEventEligible(event, makeStateWithTension(0.75))).toBe(true);
+  });
+
+  it('blocks the event when languageTension is below the threshold', () => {
+    const event = makeEvent({
+      prerequisites: [{ type: 'language_tension_above', params: { threshold: 0.4 } }],
+    });
+    expect(isEventEligible(event, makeStateWithTension(0.2))).toBe(false);
+  });
+
+  it('blocks the event when languageTension is zero', () => {
+    const event = makeEvent({
+      prerequisites: [{ type: 'language_tension_above', params: { threshold: 0.4 } }],
+    });
+    expect(isEventEligible(event, makeStateWithTension(0))).toBe(false);
+  });
+
+  it('cul_tongue_war is eligible only when tension is high enough', () => {
+    const event = ALL_EVENTS.find(e => e.id === 'cul_tongue_war')!;
+    // Event also requires actorRequirements: an imanian_orthodox male + sacred_wheel female
+    const imanianMan  = makePerson({ id: 'p_ima',  sex: 'male',   religion: 'imanian_orthodox' });
+    const saurWoman   = makePerson({ id: 'p_saur', sex: 'female', religion: 'sacred_wheel' });
+    const people = new Map([['p_ima', imanianMan], ['p_saur', saurWoman]]);
+
+    const highTension = makeStateWithTension(0.6);
+    const lowTension  = makeStateWithTension(0.1);
+    const withPop = (s: GameState) => ({
+      ...s,
+      people,
+      settlement: { ...s.settlement, populationCount: 10 },
+    } as unknown as GameState);
+
+    expect(isEventEligible(event, withPop(highTension))).toBe(true);
+    expect(isEventEligible(event, withPop(lowTension))).toBe(false);
+  });
 });

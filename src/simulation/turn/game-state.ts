@@ -372,6 +372,20 @@ export interface GameConfig {
   includeSauromatianWomen?: boolean;
 }
 
+// ─── Game Flags ───────────────────────────────────────────────────────────────
+
+/**
+ * One-time event flags that ensure certain notifications or transitions only
+ * occur once per game, regardless of save/load cycles.
+ */
+export interface GameFlags {
+  /**
+   * Set to true the first time `creoleEmerged` fires in a DawnResult.
+   * Prevents the creole emergence notification from repeating on subsequent turns.
+   */
+  creoleEmergedNotified: boolean;
+}
+
 // ─── Master Game State ────────────────────────────────────────────────────────
 
 /**
@@ -441,4 +455,7 @@ export interface GameState {
 
   /** Immutable configuration from game start. */
   config: GameConfig;
+
+  /** One-time event flags — prevent duplicate notifications across turns. */
+  flags: GameFlags;
 }

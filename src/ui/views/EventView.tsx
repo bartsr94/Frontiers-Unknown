@@ -1,6 +1,10 @@
 /**
  * EventView — KoDP-style event card with three-phase UI.
  *
+ * Layout: full-bleed horizontal split.
+ *   Left  60%: event artwork (fallback: per-event → category → generic → CSS gradient)
+ *   Right 40%: scrollable category header, description, choices / outcome / pending
+ *
  * Phase flow:
  *   'choosing'  → event description + choices
  *   'outcome'   → skill check result panel + consequence text + Continue
@@ -17,6 +21,42 @@ import type { SkillCheckResult } from '../../simulation/events/engine';
 import type { Person } from '../../simulation/population/person';
 import { interpolateText } from '../../simulation/events/actor-resolver';
 import { skinToneColor } from '../components/Portrait';
+
+// ─── Event image panel ────────────────────────────────────────────────────────
+
+function EventImagePanel({
+  event,
+}: {
+  event: { id: string; image?: string; category: string };
+}) {
+  const [fallbackIdx, setFallbackIdx] = useState(0);
+
+  const srcs: string[] = [
+    ...(event.image ? [`/events/${event.image}`] : []),
+    `/events/categories/${event.category}.png`,
+    `/events/placeholder.png`,
+  ];
+
+  if (fallbackIdx >= srcs.length) {
+    // All images missing — amber-tinted gradient so the layout looks intentional at launch
+    return (
+      <div className="w-[60%] flex-shrink-0 bg-gradient-to-br from-amber-950 via-stone-900 to-stone-950" />
+    );
+  }
+
+  return (
+    <div className="w-[60%] flex-shrink-0 overflow-hidden">
+      <img
+        key={srcs[fallbackIdx]}
+        src={srcs[fallbackIdx]}
+        alt=""
+        className="w-full h-full object-cover object-top"
+        onError={() => setFallbackIdx(i => i + 1)}
+        aria-hidden="true"
+      />
+    </div>
+  );
+}
 
 // ─── Actor badge ──────────────────────────────────────────────────────────────
 
@@ -39,7 +79,7 @@ function ActorBadge({ person }: { person: Person }) {
 // ─── Skill check result panel ─────────────────────────────────────────────────
 
 function SkillCheckPanel({ result }: { result: SkillCheckResult }) {
-  const pct = Math.round((result.actorScore / 100) * 100);
+  const pct     = Math.round((result.actorScore / 100) * 100);
   const diffPct = Math.round((result.difficulty / 100) * 100);
 
   return (
@@ -76,7 +116,9 @@ function SkillCheckPanel({ result }: { result: SkillCheckResult }) {
       </div>
 
       <div className="flex justify-between text-xs text-stone-400 mt-0.5">
-        <span className="capitalize">{result.skill} score: <strong className="text-stone-200">{result.actorScore}</strong></span>
+        <span className="capitalize">
+          {result.skill} score: <strong className="text-stone-200">{result.actorScore}</strong>
+        </span>
         <span>Difficulty: <strong className="text-stone-200">{result.difficulty}</strong></span>
       </div>
     </div>
@@ -88,13 +130,13 @@ function SkillCheckPanel({ result }: { result: SkillCheckResult }) {
 type ViewPhase = 'choosing' | 'outcome' | 'pending';
 
 export default function EventView() {
-  const pendingEvents    = useGameStore(s => s.pendingEvents);
-  const currentIndex     = useGameStore(s => s.currentEventIndex);
-  const resolveChoice    = useGameStore(s => s.resolveEventChoice);
-  const nextEvent        = useGameStore(s => s.nextEvent);
-  const gameState        = useGameStore(s => s.gameState);
+  const pendingEvents = useGameStore(s => s.pendingEvents);
+  const currentIndex  = useGameStore(s => s.currentEventIndex);
+  const resolveChoice = useGameStore(s => s.resolveEventChoice);
+  const nextEvent     = useGameStore(s => s.nextEvent);
+  const gameState     = useGameStore(s => s.gameState);
 
-  const [viewPhase, setViewPhase]           = useState<ViewPhase>('choosing');
+  const [viewPhase, setViewPhase]               = useState<ViewPhase>('choosing');
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
 
   // Reset to 'choosing' when the event changes.
@@ -107,12 +149,10 @@ export default function EventView() {
   // ── No events ─────────────────────────────────────────────────────────────
   if (pendingEvents.length === 0) {
     return (
-      <div className="p-4 flex flex-col items-center justify-center min-h-64">
+      <div className="flex h-full items-center justify-center">
         <div className="max-w-md w-full bg-stone-800 border border-stone-700 rounded-lg p-6 text-center">
           <div className="text-4xl mb-3">📜</div>
-          <h3 className="text-amber-200 font-bold text-lg mb-2">
-            A Quiet Season
-          </h3>
+          <h3 className="text-amber-200 font-bold text-lg mb-2">A Quiet Season</h3>
           <p className="text-stone-400 text-sm italic leading-relaxed">
             The settlement holds its breath. No messengers arrive, no crises
             demand attention. The men go about their work in silence.
@@ -137,7 +177,7 @@ export default function EventView() {
 
   // ── Actor strip (shown when at least one slot is bound) ───────────────────
   const actorStrip = Object.keys(resolvedSlots).length > 0 && (
-    <div className="px-5 pt-3 pb-1 flex flex-wrap gap-2 border-b border-stone-700">
+    <div className="px-5 py-3 flex flex-wrap gap-2 border-b border-stone-700/60 flex-shrink-0">
       {Object.entries(resolvedSlots).map(([slot, person]) => (
         <ActorBadge key={slot} person={person} />
       ))}
@@ -174,40 +214,47 @@ export default function EventView() {
     setSelectedChoiceId(null);
   }
 
-  // ── Shared card shell ─────────────────────────────────────────────────────
-  const progressBar = pendingEvents.length > 1 && (
-    <p className="text-stone-500 text-xs mb-3">
+  // ── Shared right-panel pieces ─────────────────────────────────────────────
+  const progressNote = pendingEvents.length > 1 && (
+    <p className="text-stone-500 text-xs mb-2">
       Event {currentIndex + 1} of {pendingEvents.length}
     </p>
   );
 
-  const cardHeader = (
-    <div className="bg-amber-900 px-5 py-3">
+  const eventHeader = (
+    <div className="px-5 py-4 border-b border-amber-900/40 flex-shrink-0 bg-amber-950/50">
+      {progressNote}
       <span className="text-amber-400 text-xs uppercase tracking-widest font-semibold">
         {event.category}
       </span>
-      <h3 className="text-amber-100 font-bold text-xl mt-0.5">{interp(event.title)}</h3>
+      <h3 className="text-amber-100 font-bold text-xl mt-0.5 leading-snug">
+        {interp(event.title)}
+      </h3>
     </div>
   );
 
+  // Right panel: dark bg, left border, scrollable
+  const rightPanel = 'w-[40%] flex flex-col bg-stone-900 border-l border-amber-900/40 overflow-y-auto';
+
   // ── Outcome phase ─────────────────────────────────────────────────────────
   if (viewPhase === 'outcome') {
-    const lastResult = useGameStore.getState().lastChoiceResult;
+    const lastResult  = useGameStore.getState().lastChoiceResult;
     const skillResult = lastResult?.skillCheckResult;
     const outcomeText = skillResult?.passed
       ? interp(choice?.successText ?? 'The attempt succeeds.')
       : interp(choice?.failureText ?? 'The attempt falls short.');
 
     return (
-      <div className="p-4 flex flex-col items-center">
-        {progressBar}
-        <div className="max-w-lg w-full bg-stone-800 border border-amber-800 rounded-lg overflow-hidden shadow-xl">
-          {cardHeader}
-          <div className="px-5 py-4 space-y-4">
+      <div className="flex h-full overflow-hidden">
+        <EventImagePanel key={event.id} event={event} />
+        <div className={rightPanel}>
+          {eventHeader}
+          {actorStrip}
+          <div className="px-5 py-4 space-y-4 flex-1">
             {skillResult && <SkillCheckPanel result={skillResult} />}
             <p className="text-stone-300 text-sm leading-relaxed">{outcomeText}</p>
           </div>
-          <div className="px-5 pb-5">
+          <div className="px-5 pb-6 flex-shrink-0">
             <button
               onClick={handleContinue}
               className="w-full bg-amber-700 hover:bg-amber-600 text-amber-100 font-semibold
@@ -229,17 +276,18 @@ export default function EventView() {
     const turns = choice?.deferredTurns ?? 4;
 
     return (
-      <div className="p-4 flex flex-col items-center">
-        {progressBar}
-        <div className="max-w-lg w-full bg-stone-800 border border-amber-800 rounded-lg overflow-hidden shadow-xl">
-          {cardHeader}
-          <div className="px-5 py-4 space-y-4">
+      <div className="flex h-full overflow-hidden">
+        <EventImagePanel key={event.id} event={event} />
+        <div className={rightPanel}>
+          {eventHeader}
+          {actorStrip}
+          <div className="px-5 py-4 space-y-4 flex-1">
             <div className="bg-stone-700/50 border border-stone-600 rounded p-3 text-sm text-stone-400 italic">
               ⏳ Outcome expected in approximately {turns} turns.
             </div>
             <p className="text-stone-300 text-sm leading-relaxed">{pendingText}</p>
           </div>
-          <div className="px-5 pb-5">
+          <div className="px-5 pb-6 flex-shrink-0">
             <button
               onClick={handleContinue}
               className="w-full bg-stone-600 hover:bg-stone-500 text-stone-200 font-semibold
@@ -255,19 +303,19 @@ export default function EventView() {
 
   // ── Choosing phase (default) ───────────────────────────────────────────────
   return (
-    <div className="p-4 flex flex-col items-center">
-      {progressBar}
-      <div className="max-w-lg w-full bg-stone-800 border border-amber-800 rounded-lg overflow-hidden shadow-xl">
-        {cardHeader}
+    <div className="flex h-full overflow-hidden">
+      <EventImagePanel key={event.id} event={event} />
+      <div className={rightPanel}>
+        {eventHeader}
         {actorStrip}
 
         {/* Description */}
-        <div className="px-5 py-4">
+        <div className="px-5 py-4 flex-shrink-0">
           <p className="text-stone-300 text-sm leading-relaxed">{interp(event.description)}</p>
         </div>
 
         {/* Choices */}
-        <div className="px-5 pb-5 space-y-2">
+        <div className="px-5 pb-6 space-y-2 flex-shrink-0">
           {event.choices.map(c => (
             <button
               key={c.id}

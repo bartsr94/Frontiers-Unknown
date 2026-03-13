@@ -347,4 +347,10 @@ export interface GameEvent {
    * eligible for normal deck draws. Used for chain-event resolution events.
    */
   isDeferredOutcome?: boolean;
+  /**
+   * Optional filename for event artwork, relative to /events/.
+   * e.g. "riders_on_the_shore.jpg" → served from /events/riders_on_the_shore.jpg
+   * Fallback chain: per-event → /events/categories/{category}.jpg → /events/placeholder.jpg → CSS gradient
+   */
+  image?: string;
 }
