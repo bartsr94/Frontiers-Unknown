@@ -20,6 +20,7 @@ import type { CultureId } from '../turn/game-state';
 import type { TraitId } from '../personality/traits';
 import { CONVERSATIONAL_THRESHOLD } from '../culture/language-acquisition';
 import { SAUROMATIAN_CULTURE_IDS } from './culture';
+import { getSauromatianFraction, getImanianFraction } from '../genetics/gender-ratio';
 import { createHousehold, addToHousehold, countWives } from './household';
 
 // ─── Marriage Types ───────────────────────────────────────────────────────────
@@ -34,7 +35,7 @@ import { createHousehold, addToHousehold, countWives } from './household';
  */
 export interface MarriageRules {
   /** The cultural tradition these rules derive from. */
-  tradition: 'sauromatian' | 'imanian';
+  tradition: 'sauromatian' | 'imanian' | 'ansberite';
   /** Maximum number of wives a man may take under this tradition. */
   maxWives: number;
   /** Maximum concubines permitted beyond wives (Imanian only). */
@@ -135,19 +136,51 @@ export function getLanguageCompatibility(a: Person, b: Person): LanguageCompatib
 // ─── Cultural Rules ───────────────────────────────────────────────────────────
 
 /**
- * Returns the marriage rules appropriate for the given cultural identity.
+ * Returns the marriage rules appropriate for the given person, taking into
+ * account both their primary culture and their bloodline heritage.
+ *
+ * Three tiers:
+ *
+ * **Sauromatian** — primary culture is Sauromatian/settlement_native AND
+ *   Imanian bloodline fraction < 30%. The full wife-council model: up to 6
+ *   wives. Concubines are not a Sauromatian institution.
+ *
+ * **Ansberite** — the colonial hybrid tier, reached in two ways:
+ *   (a) Primary culture is Sauromatian but Imanian bloodline ≥ 30% — the man
+ *       is culturally Sauromatian but his blood still carries Imanian norms;
+ *   (b) Primary culture is Imanian but Sauromatian bloodline ≥ 30% — the man
+ *       hasn't culturally shifted yet, but his mixed heritage pulls him toward
+ *       multi-wife practice before the full cultural transition happens.
+ *   → Up to 2 wives, 2 concubines, hearth-companions permitted.
+ *
+ * **Imanian** — primary culture is Imanian AND Sauromatian bloodline < 30%.
+ *   One wife; up to 2 concubines; hearth-companions not recognised.
  *
  * Women's spouse count is always capped at 1 regardless of which rules apply —
  * this asymmetry is enforced in `canMarry()`, not here.
  *
- * @param primaryCulture - The CultureId of the person (typically the man).
+ * @param man - The person whose rules are being evaluated.
  * @returns The applicable MarriageRules.
  */
-export function getMarriageRules(primaryCulture: CultureId): MarriageRules {
-  if (SAUROMATIAN_CULTURE_IDS.has(primaryCulture) || primaryCulture === 'settlement_native') {
+export function getMarriageRules(man: Person): MarriageRules {
+  const sauroFrac = getSauromatianFraction(man.heritage.bloodline);
+  const imanFrac  = getImanianFraction(man.heritage.bloodline);
+  const isSauroCulture =
+    SAUROMATIAN_CULTURE_IDS.has(man.heritage.primaryCulture) ||
+    man.heritage.primaryCulture === 'settlement_native';
+
+  // Full Sauromatian: culturally Sauromatian with predominantly Sauromatian blood
+  if (isSauroCulture && imanFrac < 0.3) {
     return { tradition: 'sauromatian', maxWives: 6, maxConcubines: 0, allowsHearthCompanion: false };
   }
-  // Imanian (imanian_homeland, ansberite) and townborn default
+
+  // Ansberite hybrid: either culture has shifted but blood is still mixed,
+  // or blood is mixed enough to adopt multi-wife norms before full cultural shift
+  if (isSauroCulture || sauroFrac >= 0.3) {
+    return { tradition: 'ansberite', maxWives: 2, maxConcubines: 2, allowsHearthCompanion: true };
+  }
+
+  // Imanian default: culturally Imanian with low Sauromatian bloodline
   return { tradition: 'imanian', maxWives: 1, maxConcubines: 2, allowsHearthCompanion: false };
 }
 
@@ -209,7 +242,7 @@ export function canMarry(
   }
 
   // Man's limit is determined by his cultural rules
-  const rules = getMarriageRules(man.heritage.primaryCulture);
+  const rules = getMarriageRules(man);
   const manMaxSpouses = rules.maxWives + rules.maxConcubines;
   if (man.spouseIds.length >= manMaxSpouses) {
     return { allowed: false, reason: 'man_at_spouse_limit' };
@@ -453,7 +486,7 @@ export function getMarriageability(person: Person, _state: GameState): MarriageI
   }
 
   // Men: apply cultural rules
-  const rules = getMarriageRules(culturalContext);
+  const rules = getMarriageRules(person);
   const maxSpouses = rules.maxWives + rules.maxConcubines;
   const isEligible = person.age >= 16 && currentSpouseCount < maxSpouses;
 

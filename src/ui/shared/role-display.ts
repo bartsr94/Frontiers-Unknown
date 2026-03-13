@@ -1,5 +1,8 @@
 import type { WorkRole } from '../../simulation/population/person';
 
+/** Maximum number of seats on the Expedition Council. */
+export const MAX_COUNCIL_SEATS = 7;
+
 export const ROLE_LABELS: Record<WorkRole, string> = {
   farmer:         'Farmer',
   trader:         'Trader',

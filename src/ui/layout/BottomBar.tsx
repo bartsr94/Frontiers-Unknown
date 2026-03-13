@@ -9,21 +9,13 @@
 import { useGameStore } from '../../stores/game-store';
 import { calculateProduction, calculateConsumption, addResourceStocks } from '../../simulation/economy/resources';
 import type { ResourceType } from '../../simulation/turn/game-state';
+import { ALL_RESOURCES } from '../shared/resource-display';
 
-interface ResourcePill {
-  emoji: string;
-  label: string;
-  key: ResourceType;
-}
-
-const PILLS: ResourcePill[] = [
-  { emoji: '🌾', label: 'Food',   key: 'food'   },
-  { emoji: '🐄', label: 'Cattle', key: 'cattle' },
-  { emoji: '📦', label: 'Goods',  key: 'goods'  },
-  { emoji: '💰', label: 'Gold',   key: 'gold'   },
-  { emoji: '🪵', label: 'Lumber', key: 'lumber' },
-  { emoji: '🪨', label: 'Stone',  key: 'stone'  },
-];
+// Display only the six resources shown in the bottom bar summary strip.
+const BOTTOM_BAR_KEYS: ReadonlySet<ResourceType> = new Set(
+  ['food', 'cattle', 'goods', 'gold', 'lumber', 'stone'] as const,
+);
+const PILLS = ALL_RESOURCES.filter(r => BOTTOM_BAR_KEYS.has(r.key));
 
 export default function BottomBar() {
   const gameState = useGameStore(s => s.gameState);

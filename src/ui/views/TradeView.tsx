@@ -13,20 +13,7 @@ import { getTradeValue, validateTrade } from '../../simulation/economy/trade';
 import { hasBuilding } from '../../simulation/buildings/building-effects';
 import type { ResourceType, ExternalTribe } from '../../simulation/turn/game-state';
 import type { TradeOffer } from '../../simulation/economy/trade';
-
-// ─── Resource display data ─────────────────────────────────────────────────────
-
-const ALL_RESOURCES: { key: ResourceType; emoji: string; label: string }[] = [
-  { key: 'food',     emoji: '🌾', label: 'Food'     },
-  { key: 'cattle',   emoji: '🐄', label: 'Cattle'   },
-  { key: 'goods',    emoji: '📦', label: 'Goods'    },
-  { key: 'gold',     emoji: '💰', label: 'Gold'     },
-  { key: 'lumber',   emoji: '🪵', label: 'Lumber'   },
-  { key: 'stone',    emoji: '🪨', label: 'Stone'    },
-  { key: 'medicine', emoji: '💊', label: 'Medicine' },
-  { key: 'steel',    emoji: '⚙️', label: 'Steel'    },
-  { key: 'horses',   emoji: '🐎', label: 'Horses'   },
-];
+import { ALL_RESOURCES } from '../shared/resource-display';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

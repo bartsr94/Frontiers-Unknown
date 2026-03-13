@@ -1,14 +1,17 @@
 # Opinions System — Design & Implementation Plan
 
 **Feature:** §6.2 — Inter-person opinion scores  
-**Phase:** 3 (Living Settlement)  
-**Status:** Planned
+**Phase:** Phase A of the Autonomous Character Agency System  
+**Status:** Planned  
+**Companion doc:** `AUTONOMY_SYSTEM.md` (ambitions, autonomous events — Phase B)
 
 ---
 
 ## Overview
 
-Every person holds an opinion score (−100 to +100) toward every other person they know. Opinions are driven by shared culture, shared religion, common language, personality trait affinities and clashes, family bonds, and event history. Over time they decay toward neutral unless reinforced. When opinions drop far enough, emergent events fire — the player must choose how to respond, KoDP style. Autonomous behaviour means the *events fire inevitably*, not that the simulation acts without the player.
+Every person holds an opinion score (−100 to +100) toward every other person they know. Opinions are driven by shared culture, shared religion, common language, personality trait affinities and clashes, family bonds, and event history. Over time they decay toward neutral unless reinforced. When opinions matter — for marriages, departures, or household tension — they produce emergent events the player must engage with.
+
+Crucially, **opinions gate player actions**. A player cannot force two unwilling people to marry. If either party holds an opinion below −30 of the other, `canMarry()` returns false and the action is blocked outright. This is Phase A of a broader shift toward characters with genuine agency — see `AUTONOMY_SYSTEM.md` for Phase B.
 
 ---
 
@@ -75,7 +78,13 @@ The existing `EventConsequence` shape requires no structural changes.
 
 ### Marriage
 
-When a marriage is arranged, each spouse's opinion of the other is raised to at least **+40** (a floor, not an override — a pre-existing higher opinion is kept). The existing bystander opinion logic (trait-driven reaction from observers) is unchanged.
+When a marriage is arranged via the player action, each spouse's opinion of the other is raised to at least **+40** (a floor, not an override — a pre-existing higher opinion is kept). The existing bystander opinion logic (trait-driven reaction from observers) is unchanged.
+
+**Marriage resistance gate:** `canMarry()` checks both parties' opinions first. If either person holds an opinion below **−30** toward the other, the action is refused:
+
+> `{ allowed: false, reason: 'They are unwilling — one party refuses this match.' }`
+
+This is a hard block, not a cost. The same gate applies to `formConcubineRelationship()`. The MarriageDialog surface must surface both opinions and warn when one falls below threshold.
 
 ---
 
@@ -166,14 +175,15 @@ The three relationship events below live in `src/simulation/events/definitions/r
 |------|------|--------|
 | 1 | `src/data/trait-affinities.ts` | **New file** — `TRAIT_CONFLICTS` and `TRAIT_SHARED_BONUS` data |
 | 2 | `src/simulation/population/opinions.ts` | **New module** — all pure opinion functions |
-| 3 | `src/simulation/events/resolver.ts` | Implement `modify_opinion` case (currently falls through to `default`) |
-| 4 | `src/simulation/turn/turn-processor.ts` | Wire `applyOpinionDrift` + `decayOpinions` into `processDawn()`; family bond init on births |
+| 3 | `src/simulation/events/resolver.ts` | Implement `modify_opinion` broadcast (currently falls through to `default`) |
+| 4 | `src/simulation/turn/turn-processor.ts` | Wire `applyOpinionDrift` + `decayOpinions` into `processDawn()`; family bond init on births; baseline discovery for new pairs when population ≤ cap |
 | 5 | `src/stores/game-store.ts` | Apply marriage opinion floor (+40) in `arrangeMarriage` action |
-| 6 | `src/simulation/events/engine.ts` | Add `min_opinion_pair` / `max_opinion_pair` prerequisite types |
-| 7 | `src/simulation/events/event-filter.ts` | Add 3 new events to `ALL_EVENTS`; evaluate opinion prerequisites |
-| 8 | `src/simulation/events/definitions/relationships.ts` | **New file** — 3 autonomous events |
-| 9 | `src/ui/views/PersonDetail.tsx` | Add "Relationships" section (top 5 positive, top 5 negative) |
-| 10 | `src/ui/overlays/MarriageDialog.tsx` | Add mutual opinion display below language compatibility row |
+| 6 | `src/simulation/population/marriage.ts` | Add opinion gate (< −30 = hard block) to both `canMarry()` and `formConcubineRelationship()` |
+| 7 | `src/simulation/events/engine.ts` | Add `min_opinion_pair` / `max_opinion_pair` prerequisite types |
+| 8 | `src/simulation/events/event-filter.ts` | Add 3 new events to `ALL_EVENTS`; evaluate opinion prerequisites |
+| 9 | `src/simulation/events/definitions/relationships.ts` | **New file** — 3 tension-driven events |
+| 10 | `src/ui/views/PersonDetail.tsx` | Add "Relationships" section (top 5 positive, top 5 negative) |
+| 11 | `src/ui/overlays/MarriageDialog.tsx` | Add mutual opinion row + threshold warning below language compatibility row |
 
 ---
 
@@ -200,7 +210,12 @@ export function initializeFamilyOpinions(
   siblings: Person[],
 ): OpinionDelta[]
 
-export function applyOpinionDrift(people: Map<string, Person>): Map<string, Person>
+// state param needed to check language fluency and religion distribution
+export function applyOpinionDrift(
+  people: Map<string, Person>,
+  state: GameState,
+): Map<string, Person>
+
 export function decayOpinions(people: Map<string, Person>): Map<string, Person>
 ```
 
@@ -225,6 +240,7 @@ Inserted below the language compatibility row, above the trait display.
 - Label: **"Current opinion"**
 - Content: `[Person A → B: +12]` `[Person B → A: −5]` (two badges)
 - If both are zero (no prior relationship): `"No prior relationship"` in muted text
+- If either opinion is < −30: row is highlighted with a red border and a warning: `"This match will be refused."`
 
 ---
 
@@ -248,8 +264,10 @@ New file: `tests/population/opinions.test.ts`
 | `applyOpinionDrift` — no shared language | Opinion decreases each call |
 | `applyOpinionDrift` — above OPINION_TRACK_CAP | No new entries created |
 | `applyOpinionDrift` — above cap, existing entry | Existing entry still updated |
+| `canMarry` — personA opinion of B is −35 | Returns `{ allowed: false }` |
+| `canMarry` — both opinions ≥ 0 | Opinion gate does not block |
 
-All 385 existing tests continue to pass — no existing interfaces are modified.
+All 713 existing tests continue to pass — no existing interfaces are removed or changed.
 
 ---
 
@@ -262,3 +280,5 @@ All 385 existing tests continue to pass — no existing interfaces are modified.
 3. **`reject_role` autonomous signal** — Phase 4 design: if a person's average opinion of the settlement (mean across all their relationship entries) drops below −50, they show as `"Reluctant"` in the role assignment UI. This is a display flag only and does not prevent assignment — the departure event handles the harder consequence.
 
 4. **Friendship / enmity events** — Mirror of the feud event: if two people have mutual opinion above +75 for several turns, an `evt_close_friendship` event fires, offering the player a chance to deepen it into a formal bond that gives stat bonuses.
+
+5. **Phase B** — Once opinions are live, the Ambitions system (see `AUTONOMY_SYSTEM.md`) builds on top of them. The marriage gate is the first point of leverage; ambitions extend it into proactive character behaviour.

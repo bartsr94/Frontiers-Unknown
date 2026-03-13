@@ -335,6 +335,28 @@ export function getDerivedSkill(skills: PersonSkills, id: DerivedSkillId): numbe
   }
 }
 
+/**
+ * All derived skill IDs. Exported so resolvers, filters, and advisers can share
+ * a single source of truth rather than each maintaining their own copy.
+ */
+export const DERIVED_SKILL_IDS: ReadonlyArray<DerivedSkillId> = [
+  'deception', 'diplomacy', 'exploring', 'farming', 'hunting', 'poetry', 'strategy',
+];
+
+/**
+ * Returns the skill score for a person, handling both base skills (looked up
+ * directly) and derived skills (computed from base skill averages).
+ *
+ * Use this instead of duplicating the base-vs-derived dispatch in event resolvers,
+ * actor selectors, and council advisers.
+ */
+export function getPersonSkillScore(person: Person, skill: SkillId | DerivedSkillId): number {
+  if ((DERIVED_SKILL_IDS as readonly string[]).includes(skill)) {
+    return getDerivedSkill(person.skills, skill as DerivedSkillId);
+  }
+  return person.skills[skill as SkillId];
+}
+
 /** Additive bonuses applied to specific base skills based on a person's traits. */
 const SKILL_TRAIT_BONUSES: Partial<Record<TraitId, Partial<PersonSkills>>> = {
   brave:           { combat: 15, leadership: 5 },

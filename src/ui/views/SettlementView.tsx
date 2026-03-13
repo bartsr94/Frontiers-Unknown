@@ -19,6 +19,7 @@ import {
 import { getAvailableCrafts, CRAFT_RECIPES, validateCraft } from '../../simulation/economy/crafting';
 import type { CraftRecipeId } from '../../simulation/economy/crafting';
 import type { BuildingId, BuildingStyle, BuiltBuilding, ConstructionProject, ResourceType } from '../../simulation/turn/game-state';
+import { RESOURCE_EMOJI } from '../shared/resource-display';
 
 // ─── Helper constants ─────────────────────────────────────────────────────────
 
@@ -250,11 +251,6 @@ function BuildMenuItem({
 }
 
 // ─── Crafting Panel ───────────────────────────────────────────────────────────
-
-const RESOURCE_EMOJI: Partial<Record<ResourceType, string>> = {
-  food: '🌾', cattle: '🐄', goods: '📦', gold: '💰',
-  lumber: '🪵', stone: '🪨', medicine: '💊', steel: '⚙️', horses: '🐎',
-};
 
 function CraftingPanel({ disabled }: { disabled: boolean }) {
   const gameState   = useGameStore(s => s.gameState);

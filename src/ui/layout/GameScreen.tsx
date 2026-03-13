@@ -21,11 +21,7 @@ import SettlementView from '../views/SettlementView';
 import TradeView from '../views/TradeView';
 import { useGameStore } from '../../stores/game-store';
 import type { ResourceType } from '../../simulation/turn/game-state';
-
-const RESOURCE_EMOJI: Partial<Record<ResourceType, string>> = {
-  food: '🌾', cattle: '🐄', goods: '📦', gold: '💰',
-  lumber: '🪵', stone: '🪨', medicine: '💊', steel: '⚙️', horses: '🐎',
-};
+import { RESOURCE_EMOJI } from '../shared/resource-display';
 
 function SpoilageNotification() {
   const lastSpoilage    = useGameStore(s => s.lastSpoilage);

@@ -22,12 +22,10 @@ import type { WorkRole, Person } from '../../simulation/population/person';
 import { generateAdvice, hashPersonEvent } from '../../simulation/events/council-advice';
 import CouncilPortrait from '../components/CouncilPortrait';
 import AdviceBubble from '../components/AdviceBubble';
-import { ROLE_LABELS as BASE_ROLE_LABELS, ROLE_COLORS } from '../shared/role-display';
+import { ROLE_LABELS as BASE_ROLE_LABELS, ROLE_COLORS, MAX_COUNCIL_SEATS } from '../shared/role-display';
 
 // CouncilFooter shows '—' for unassigned seats rather than the full word.
 const ROLE_LABELS: Record<WorkRole, string> = { ...BASE_ROLE_LABELS, unassigned: '—' };
-
-const MAX_SEATS = 7;
 
 export default function CouncilFooter() {
   const gameState         = useGameStore(s => s.gameState);
@@ -48,8 +46,8 @@ export default function CouncilFooter() {
   const currentEvent =
     currentPhase === 'event' ? (pendingEvents[currentEventIndex] ?? null) : null;
 
-  // Build an array of MAX_SEATS entries: Person | null
-  const seats: Array<Person | null> = Array.from({ length: MAX_SEATS }, (_, i) => {
+  // Build an array of MAX_COUNCIL_SEATS entries: Person | null
+  const seats: Array<Person | null> = Array.from({ length: MAX_COUNCIL_SEATS }, (_, i) => {
     const id = councilIds[i];
     if (!id || !people) return null;
     return people.get(id) ?? null;
@@ -108,7 +106,7 @@ export default function CouncilFooter() {
           Expedition Council
         </p>
         <span className="text-stone-600 text-xs group-hover:text-stone-400 transition-colors">
-          {filledCount}/{MAX_SEATS} seats
+          {filledCount}/{MAX_COUNCIL_SEATS} seats
         </span>
       </button>
 

@@ -22,21 +22,8 @@
 import type { ActorCriteria, ActorRequirement } from './engine';
 import type { GameState } from '../turn/game-state';
 import type { Person, DerivedSkillId, SkillId, HouseholdRole } from '../population/person';
-import { getDerivedSkill } from '../population/person';
+import { DERIVED_SKILL_IDS, getPersonSkillScore } from '../population/person';
 import type { SeededRNG } from '../../utils/rng';
-
-// ─── Derived skill IDs (mirrors resolver.ts constant) ─────────────────────────
-
-const DERIVED_SKILL_IDS: DerivedSkillId[] = [
-  'deception', 'diplomacy', 'exploring', 'farming', 'hunting', 'poetry', 'strategy',
-];
-
-function getSkillScore(person: Person, skill: SkillId | DerivedSkillId): number {
-  if (DERIVED_SKILL_IDS.includes(skill as DerivedSkillId)) {
-    return getDerivedSkill(person.skills, skill as DerivedSkillId);
-  }
-  return person.skills[skill as SkillId];
-}
 
 // ─── Criteria matching ────────────────────────────────────────────────────────
 
@@ -62,7 +49,7 @@ export function matchesCriteria(person: Person, criteria: ActorCriteria): boolea
   if (criteria.householdRole !== undefined && person.householdRole !== (criteria.householdRole as HouseholdRole)) return false;
   if (criteria.hasTrait !== undefined && !person.traits.includes(criteria.hasTrait)) return false;
   if (criteria.minSkill !== undefined) {
-    const score = getSkillScore(person, criteria.minSkill.skill);
+    const score = getPersonSkillScore(person, criteria.minSkill.skill);
     if (score < criteria.minSkill.value) return false;
   }
   return true;

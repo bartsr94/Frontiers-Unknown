@@ -17,7 +17,7 @@
 import type { TraitId } from '../personality/traits';
 import type { GameEvent, EventChoice, EventCategory, EventConsequence } from './engine';
 import type { Person } from '../population/person';
-import { getDerivedSkill } from '../population/person';
+import { DERIVED_SKILL_IDS, getPersonSkillScore } from '../population/person';
 import type { DerivedSkillId, SkillId } from '../population/person';
 
 // ─── Voice Archetype ──────────────────────────────────────────────────────────
@@ -551,18 +551,6 @@ const SKILL_SUFFIXES: Record<VoiceArchetype, SkillSuffixSet> = {
   },
 };
 
-// ─── Skill Score Helper ───────────────────────────────────────────────────────
-
-const DERIVED_SKILL_IDS: ReadonlyArray<DerivedSkillId> = [
-  'deception', 'diplomacy', 'exploring', 'farming', 'hunting', 'poetry', 'strategy',
-];
-
-function getPersonSkillScore(person: Person, skill: SkillId | DerivedSkillId): number {
-  if ((DERIVED_SKILL_IDS as readonly string[]).includes(skill)) {
-    return getDerivedSkill(person.skills, skill as DerivedSkillId);
-  }
-  return person.skills[skill as SkillId];
-}
 
 // ─── Main Entry Point ─────────────────────────────────────────────────────────
 

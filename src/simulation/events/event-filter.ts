@@ -9,11 +9,11 @@
  * when they need filtering and drawing functionality.
  */
 
-import type { GameEvent, EventPrerequisite, DeferredEventEntry } from './engine';
+import type { GameEvent, EventPrerequisite, DeferredEventEntry, ActorCriteria } from './engine';
 import type { GameState, ResourceType, BuildingId } from '../turn/game-state';
 import type { SeededRNG } from '../../utils/rng';
 import { hasBuilding, lacksBuilding, getOvercrowdingRatio } from '../buildings/building-effects';
-import { canResolveActors } from './actor-resolver';
+import { canResolveActors, matchesCriteria } from './actor-resolver';
 
 import { ENVIRONMENTAL_EVENTS } from './definitions/environmental';
 import { ECONOMIC_EVENTS }      from './definitions/economic';
@@ -55,21 +55,12 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
       const amount = prereq.params['amount'] as number;
       return state.settlement.resources[res] >= amount;
     }
-    case 'has_person_matching': {
-      // Checks that at least one living person satisfies all supplied criteria.
-      // Supported criteria keys: sex, religion, culturalIdentity, minAge, maxAge, socialStatus, role.
-      const criteria = prereq.params as Record<string, unknown>;
-      return Array.from(state.people.values()).some(person => {
-        if (criteria['sex']             !== undefined && person.sex                          !== criteria['sex'])             return false;
-        if (criteria['religion']        !== undefined && person.religion                     !== criteria['religion'])        return false;
-        if (criteria['culturalIdentity']!== undefined && person.heritage.primaryCulture     !== criteria['culturalIdentity']) return false;
-        if (criteria['minAge']          !== undefined && person.age                          <  (criteria['minAge'] as number))  return false;
-        if (criteria['maxAge']          !== undefined && person.age                          >  (criteria['maxAge'] as number))  return false;
-        if (criteria['socialStatus']    !== undefined && person.socialStatus                 !== criteria['socialStatus'])    return false;
-        if (criteria['role']            !== undefined && person.role                         !== criteria['role'])            return false;
-        return true;
-      });
-    }
+    case 'has_person_matching':
+      // Delegates to matchesCriteria so all ActorCriteria fields (hasTrait, minSkill, etc.)
+      // are supported automatically and the two checks can never drift apart.
+      return Array.from(state.people.values()).some(
+        p => matchesCriteria(p, prereq.params as ActorCriteria),
+      );
     case 'cultural_blend_above':
       return state.culture.culturalBlend >= (prereq.params['value'] as number);
     case 'cultural_blend_below':
@@ -164,7 +155,7 @@ export function filterEligibleEvents(events: GameEvent[], state: GameState): Gam
 // ─── Drawing ─────────────────────────────────────────────────────────────────
 
 /**
-/**
+
  * Draws up to `count` events from the eligible pool using weighted random
  * selection without replacement.
  *

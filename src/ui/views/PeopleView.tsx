@@ -14,9 +14,9 @@ import { skinToneColor } from '../components/Portrait';
 import { heritageAbbr } from '../components/heritage-helpers';
 import PersonDetail from './PersonDetail';
 import MarriageDialog from '../overlays/MarriageDialog';
-import { ROLE_LABELS, ROLE_COLORS } from '../shared/role-display';
+import { ROLE_LABELS, ROLE_COLORS, MAX_COUNCIL_SEATS } from '../shared/role-display';
 
-const MAX_COUNCIL = 7;
+const MAX_COUNCIL = MAX_COUNCIL_SEATS;
 
 type SortKey = 'name' | 'age' | 'heritage' | 'role' | SkillId;
 

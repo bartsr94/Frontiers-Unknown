@@ -30,10 +30,12 @@ import type {
   DeferredEventEntry,
 } from './engine';
 import type { GameState, ResourceType, EventRecord } from '../turn/game-state';
-import type { Person, EthnicGroup, ReligionId, SocialStatus, CultureId, WorkRole, HouseholdRole } from '../population/person';
+import type { Person, EthnicGroup, ReligionId, SocialStatus, CultureId, WorkRole, HouseholdRole, TraitId } from '../population/person';
 import type { HouseholdTradition } from '../turn/game-state';
 import {
   getDerivedSkill,
+  DERIVED_SKILL_IDS,
+  getPersonSkillScore,
   createPerson,
   ETHNIC_GROUP_CULTURE,
   ETHNIC_GROUP_PRIMARY_LANGUAGE,
@@ -67,17 +69,6 @@ export interface ApplyChoiceResult {
 
 // ─── Skill check resolution ───────────────────────────────────────────────────
 
-const DERIVED_SKILL_IDS: DerivedSkillId[] = [
-  'deception', 'diplomacy', 'exploring', 'farming', 'hunting', 'poetry', 'strategy',
-];
-
-function getActorScore(person: Person, skill: SkillId | DerivedSkillId): number {
-  if (DERIVED_SKILL_IDS.includes(skill as DerivedSkillId)) {
-    return getDerivedSkill(person.skills, skill as DerivedSkillId);
-  }
-  return person.skills[skill as SkillId];
-}
-
 /**
  * Finds the best actor for a skill check and determines pass/fail.
  *
@@ -100,11 +91,11 @@ export function resolveSkillCheck(
     actor = state.councilMemberIds
       .map(id => state.people.get(id))
       .filter((p): p is Person => p !== undefined && p.role !== 'away')
-      .sort((a, b) => getActorScore(b, check.skill) - getActorScore(a, check.skill))[0];
+      .sort((a, b) => getPersonSkillScore(b, check.skill) - getPersonSkillScore(a, check.skill))[0];
   } else if (check.actorSelection === 'best_settlement') {
     actor = Array.from(state.people.values())
       .filter(p => p.role !== 'away')
-      .sort((a, b) => getActorScore(b, check.skill) - getActorScore(a, check.skill))[0];
+      .sort((a, b) => getPersonSkillScore(b, check.skill) - getPersonSkillScore(a, check.skill))[0];
   } else if (check.actorSelection === 'actor_slot' && check.actorSlot) {
     // bondActors takes precedence; fall back to legacy context map
     const actorId = boundActors?.[check.actorSlot] ?? (context[check.actorSlot] as string | undefined);
@@ -122,7 +113,7 @@ export function resolveSkillCheck(
     };
   }
 
-  const score = getActorScore(actor, check.skill);
+  const score = getPersonSkillScore(actor, check.skill);
   return {
     actorId: actor.id,
     actorName: `${actor.firstName} ${actor.familyName}`,
@@ -201,21 +192,102 @@ function applyConsequence(
       return { ...state, tribes: updatedTribes };
     }
 
-    // ── Slot-targeted person consequences ───────────────────────────────────
-    // These resolve the target slot to a real person ID.
-    // Full side-effect implementations will be added as events use these types.
+    // ── Slot-targeted person consequences ──────────────────────────────────
 
-    case 'wound_person':
-    case 'kill_person':
-    case 'start_pregnancy':
-    case 'add_trait':
-    case 'remove_trait':
-    case 'remove_person':
-    case 'modify_opinion': {
-      const _resolvedTarget = resolveConsequenceTarget(consequence.target, boundActors);
-      void _resolvedTarget;
-      return state;
+    case 'wound_person': {
+      // Resolve target: slot token, literal person ID, or the 'random_adult' keyword.
+      let woundTargetId: string | undefined;
+      const rawTarget = resolveConsequenceTarget(consequence.target, boundActors);
+      if (rawTarget === 'random_adult') {
+        if (rng) {
+          const adults = Array.from(state.people.values()).filter(p => p.age >= 16);
+          woundTargetId = adults[rng.nextInt(0, adults.length - 1)]?.id;
+        }
+      } else {
+        woundTargetId = rawTarget;
+      }
+      const woundTarget = woundTargetId ? state.people.get(woundTargetId) : undefined;
+      if (!woundTarget) return state;
+      const damage = typeof consequence.value === 'number' ? consequence.value : 10;
+      const updatedPeople = new Map(state.people);
+      updatedPeople.set(woundTarget.id, {
+        ...woundTarget,
+        health: {
+          ...woundTarget.health,
+          currentHealth: clamp(woundTarget.health.currentHealth - damage, 0, 100),
+          conditions: woundTarget.health.conditions.includes('wounded')
+            ? woundTarget.health.conditions
+            : [...woundTarget.health.conditions, 'wounded'],
+        },
+      });
+      return { ...state, people: updatedPeople };
     }
+
+    case 'remove_person': {
+      const removeId = resolveConsequenceTarget(consequence.target, boundActors);
+      const removePerson = state.people.get(removeId);
+      if (!removePerson) return state;
+      const updatedPeople = new Map(state.people);
+      updatedPeople.delete(removePerson.id);
+      // Clean up household membership.
+      let updatedHouseholds = state.households;
+      if (removePerson.householdId) {
+        const household = state.households.get(removePerson.householdId);
+        if (household) {
+          updatedHouseholds = new Map(state.households);
+          updatedHouseholds.set(household.id, {
+            ...household,
+            memberIds: household.memberIds.filter(id => id !== removePerson.id),
+            ashkaMelathiBonds: household.ashkaMelathiBonds.filter(
+              ([a, b]) => a !== removePerson.id && b !== removePerson.id,
+            ),
+            headId: household.headId === removePerson.id ? null : household.headId,
+            seniorWifeId: household.seniorWifeId === removePerson.id ? null : household.seniorWifeId,
+          });
+        }
+      }
+      return {
+        ...state,
+        people: updatedPeople,
+        households: updatedHouseholds,
+        councilMemberIds: state.councilMemberIds.filter(id => id !== removePerson.id),
+        settlement: {
+          ...state.settlement,
+          populationCount: Math.max(0, state.settlement.populationCount - 1),
+        },
+      };
+    }
+
+    case 'add_trait': {
+      const addTraitId = resolveConsequenceTarget(consequence.target, boundActors);
+      const addTraitPerson = state.people.get(addTraitId);
+      if (!addTraitPerson) return state;
+      const newTrait = consequence.value as TraitId;
+      if (addTraitPerson.traits.includes(newTrait)) return state;
+      const updatedPeople = new Map(state.people);
+      updatedPeople.set(addTraitPerson.id, { ...addTraitPerson, traits: [...addTraitPerson.traits, newTrait] });
+      return { ...state, people: updatedPeople };
+    }
+
+    case 'remove_trait': {
+      const removeTraitId = resolveConsequenceTarget(consequence.target, boundActors);
+      const removeTraitPerson = state.people.get(removeTraitId);
+      if (!removeTraitPerson) return state;
+      const removeTrait = consequence.value as TraitId;
+      const updatedPeople = new Map(state.people);
+      updatedPeople.set(removeTraitPerson.id, {
+        ...removeTraitPerson,
+        traits: removeTraitPerson.traits.filter(t => t !== removeTrait),
+      });
+      return { ...state, people: updatedPeople };
+    }
+
+    // ── Stubs — implemented when first used by a live event ─────────────────
+
+    case 'kill_person':      return state; // TODO: move to graveyard, clean up relationships
+    case 'start_pregnancy':  return state; // TODO: set pregnancyState on target person
+    case 'modify_opinion':   return state; // TODO: update relationships Map on observer
+    case 'trigger_event':    return state; // TODO: push follow-up into pendingEvents via followUpEventId
 
     // ── Phase 3+ ─────────────────────────────────────────────────────────────
 
@@ -364,8 +436,12 @@ function applyConsequence(
       return { ...state, households: updatedHouseholds };
     }
 
-    default:
+    // Exhaustiveness guard — compile error if a new ConsequenceType is added without a handler.
+    default: {
+      const _exhaustive: never = consequence;
+      void _exhaustive;
       return state;
+    }
   }
 }
 

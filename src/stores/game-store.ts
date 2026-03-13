@@ -60,9 +60,6 @@ import { generateId } from '../utils/id';
 // Re-export economy types consumed by UI components.
 export type { TradeOffer };
 
-/** Stub: diplomatic action interface. Fully implemented in Phase 3. */
-export interface DiplomaticAction {}
-
 // ─── Store interface ─────────────────────────────────────────────────────────
 
 export interface GameStore {
@@ -75,12 +72,6 @@ export interface GameStore {
   lastSkillCheckResult: SkillCheckResult | null;
   /** The full result object from the last resolved event choice. */
   lastChoiceResult: ApplyChoiceResult | null;
-  /** Resource production delta from the last Dawn phase; applied in endTurn(). */
-  _pendingProduction: ResourceStock | undefined;
-  /** Resource consumption delta from the last Dawn phase; applied in endTurn(). */
-  _pendingConsumption: ResourceStock | undefined;
-  /** Spoilage losses from the last Dawn phase; applied in endTurn(). */
-  _pendingSpoilage: Partial<ResourceStock> | undefined;
   /**
    * The spoilage from the current turn's dawn, if significant (> 3 units total).
    * Shown as a notification to the player during the management phase.
@@ -121,7 +112,6 @@ export interface GameStore {
   assignKethThara: (personId: string) => void;
   /** Execute a barter trade with an external tribe (management phase only). */
   executeTrade: (tribeId: string, offer: TradeOffer, requested: TradeOffer) => void;
-  sendDiplomaticAction: (tribeId: string, action: DiplomaticAction) => void;
   /** Contribute gold and/or goods toward the Company's annual quota. */
   contributeToQuota: (gold: number, goods: number) => void;
   /** Execute a crafting recipe (management phase only). */
@@ -356,6 +346,18 @@ function seedCouncil(people: Map<string, Person>): string[] {
 
 // ─── Initial game state factory ───────────────────────────────────────────────
 
+/**
+ * Returns the key with the highest weight from a partial weight map.
+ * Used to pick the most typical visible trait for a given ethnic distribution.
+ */
+function dominantTrait<T extends string>(
+  weights: Partial<Record<T, number>>,
+  fallback: T,
+): T {
+  const top = (Object.entries(weights) as [T, number][]).sort((a, b) => b[1] - a[1])[0];
+  return top?.[0] ?? fallback;
+}
+
 function createInitialState(config: GameConfig, settlementName: string, seed?: number): GameState {
   // Generate a high-quality seed via the Web Crypto API when none is provided.
   // This avoids Math.random() (forbidden by Hard Rule #1) while still allowing
@@ -422,20 +424,13 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
         genetics: {
           visibleTraits: {
             skinTone: sauroTraitDist.skinTone.mean,
-            skinUndertone: (Object.entries(sauroTraitDist.skinUndertone.weights)
-              .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? 'warm') as Person['genetics']['visibleTraits']['skinUndertone'],
-            hairColor: (Object.entries(sauroTraitDist.hairColor.weights)
-              .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? 'black') as Person['genetics']['visibleTraits']['hairColor'],
-            hairTexture: (Object.entries(sauroTraitDist.hairTexture.weights)
-              .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? 'coily') as Person['genetics']['visibleTraits']['hairTexture'],
-            eyeColor: (Object.entries(sauroTraitDist.eyeColor.weights)
-              .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? 'brown') as Person['genetics']['visibleTraits']['eyeColor'],
-            buildType: (Object.entries(sauroTraitDist.buildType.weights)
-              .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? 'athletic') as Person['genetics']['visibleTraits']['buildType'],
-            height: (Object.entries(sauroTraitDist.height.weights)
-              .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? 'average') as Person['genetics']['visibleTraits']['height'],
-            facialStructure: (Object.entries(sauroTraitDist.facialStructure.weights)
-              .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? 'oval') as Person['genetics']['visibleTraits']['facialStructure'],
+            skinUndertone: dominantTrait(sauroTraitDist.skinUndertone.weights, 'warm'  as Person['genetics']['visibleTraits']['skinUndertone']),
+            hairColor:     dominantTrait(sauroTraitDist.hairColor.weights,     'black' as Person['genetics']['visibleTraits']['hairColor']),
+            hairTexture:   dominantTrait(sauroTraitDist.hairTexture.weights,   'coily' as Person['genetics']['visibleTraits']['hairTexture']),
+            eyeColor:      dominantTrait(sauroTraitDist.eyeColor.weights,      'brown' as Person['genetics']['visibleTraits']['eyeColor']),
+            buildType:     dominantTrait(sauroTraitDist.buildType.weights,     'athletic' as Person['genetics']['visibleTraits']['buildType']),
+            height:        dominantTrait(sauroTraitDist.height.weights,        'average' as Person['genetics']['visibleTraits']['height']),
+            facialStructure: dominantTrait(sauroTraitDist.facialStructure.weights, 'oval' as Person['genetics']['visibleTraits']['facialStructure']),
           },
           genderRatioModifier: 0.14, // Pure Sauromatian
           extendedFertility: true,
@@ -541,6 +536,12 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
 export const useGameStore = create<GameStore>((set, get) => {
   // Attempt to restore an existing save on first load.
   let initialState: GameState | null = null;
+
+  // Cross-phase temporaries: set during startTurn (dawn), consumed by endTurn (dusk).
+  // Kept as closure locals rather than reactive Zustand state to avoid spurious re-renders.
+  let _pendingProduction: ResourceStock | undefined;
+  let _pendingConsumption: ResourceStock | undefined;
+  let _pendingSpoilage: Partial<ResourceStock> | undefined;
   try {
     const saved = localStorage.getItem(SAVE_KEY);
     if (saved) {
@@ -559,9 +560,6 @@ export const useGameStore = create<GameStore>((set, get) => {
     currentEventIndex: 0,
     lastSkillCheckResult: null,
     lastChoiceResult: null,
-    _pendingProduction: undefined,
-    _pendingConsumption: undefined,
-    _pendingSpoilage: undefined,
     lastSpoilage: null,
     pendingNotification: null,
 
@@ -713,14 +711,14 @@ export const useGameStore = create<GameStore>((set, get) => {
         ? { ...stateAfterDrain, flags: { ...stateAfterDrain.flags, creoleEmergedNotified: true } }
         : stateAfterDrain;
 
+      _pendingProduction = dawnResult.production;
+      _pendingConsumption = dawnResult.consumption;
+      _pendingSpoilage = dawnResult.spoilageThisTurn;
       set({
         gameState: stateWithFlags,
         currentPhase: allPending.length > 0 ? 'event' : 'management',
         pendingEvents: allPending,
         currentEventIndex: 0,
-        _pendingProduction: dawnResult.production,
-        _pendingConsumption: dawnResult.consumption,
-        _pendingSpoilage: dawnResult.spoilageThisTurn,
         lastSpoilage: (() => {
           const s = dawnResult.spoilageThisTurn;
           const total = Object.values(s).reduce((acc, v) => acc + (v ?? 0), 0);
@@ -787,16 +785,11 @@ export const useGameStore = create<GameStore>((set, get) => {
     },
 
     endTurn() {
-      const store = get() as GameStore & {
-        _pendingProduction?: ResourceStock;
-        _pendingConsumption?: ResourceStock;
-        _pendingSpoilage?: Partial<ResourceStock>;
-      };
-      const { gameState } = store;
+      const { gameState } = get();
       if (!gameState) return;
 
-      const production = store._pendingProduction ?? emptyResourceStock();
-      const consumption = store._pendingConsumption ?? emptyResourceStock();
+      const production = _pendingProduction ?? emptyResourceStock();
+      const consumption = _pendingConsumption ?? emptyResourceStock();
 
       // Apply resource deltas: production + consumption (consumption is already negative).
       let rawResources = addResourceStocks(
@@ -805,8 +798,8 @@ export const useGameStore = create<GameStore>((set, get) => {
       );
 
       // Apply spoilage losses.
-      if (store._pendingSpoilage) {
-        rawResources = applySpoilage(rawResources, store._pendingSpoilage);
+      if (_pendingSpoilage) {
+        rawResources = applySpoilage(rawResources, _pendingSpoilage);
       }
 
       const updatedResources = clampResourceStock(rawResources);
@@ -852,12 +845,12 @@ export const useGameStore = create<GameStore>((set, get) => {
       const json = serializeGameState(updatedState);
       localStorage.setItem(SAVE_KEY, json);
 
+      _pendingProduction = undefined;
+      _pendingConsumption = undefined;
+      _pendingSpoilage = undefined;
       set({
         gameState: updatedState,
         currentPhase: 'idle',
-        _pendingProduction: undefined,
-        _pendingConsumption: undefined,
-        _pendingSpoilage: undefined,
         lastSpoilage: null,
       });
     },
@@ -994,10 +987,6 @@ export const useGameStore = create<GameStore>((set, get) => {
           settlement: { ...gameState.settlement, resources: result.newResources },
         },
       });
-    },
-
-    sendDiplomaticAction(_tribeId, _action) {
-      // Phase 3: diplomacy logic.
     },
 
     contributeToQuota(gold, goods) {
