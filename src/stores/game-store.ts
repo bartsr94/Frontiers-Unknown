@@ -28,6 +28,8 @@ import { createRNG } from '../utils/rng';
 import { createTribe, TRIBE_PRESETS } from '../simulation/world/tribes';
 import { canMarry, performMarriage, formConcubineRelationship } from '../simulation/population/marriage';
 import type { InformalUnionStyle } from '../simulation/population/marriage';
+import { applyMarriageOpinionFloor, initializeBaselineOpinions } from '../simulation/population/opinions';
+import { generateAmbition } from '../simulation/population/ambitions';
 import { createFertilityProfile } from '../simulation/genetics/fertility';
 import { ETHNIC_DISTRIBUTIONS } from '../data/ethnic-distributions';
 import {
@@ -49,6 +51,7 @@ import type {
   GameFlags,
   BuildingId,
   BuildingStyle,
+  ReligiousPolicy,
 } from '../simulation/turn/game-state';
 import type { Person, WorkRole, CultureId } from '../simulation/population/person';
 import { ETHNIC_GROUP_PRIMARY_LANGUAGE, ETHNIC_GROUP_CULTURE } from '../simulation/population/person';
@@ -125,6 +128,9 @@ export interface GameStore {
   removeBuilder: (projectId: string, personId: string) => void;
   /** Cancel a project in the construction queue; refunds 50% of resource cost. */
   cancelConstruction: (projectId: string) => void;
+  // ── Religion ───────────────────────────────────────────────────────────────
+  /** Update the settlement's religious policy. */
+  setReligiousPolicy: (policy: ReligiousPolicy) => void;
   // ── Expedition Council ─────────────────────────────────────────
   /** Add a person to the Expedition Council (max 7 seats). No-op if already a member. */
   assignCouncilMember: (personId: string) => void;
@@ -192,6 +198,10 @@ function deserializePerson(s: SerialPerson): Person {
     householdId: s.householdId ?? null,
     householdRole: s.householdRole ?? null,
     ashkaMelathiPartnerIds: s.ashkaMelathiPartnerIds ?? [],
+    // Old saves pre-dating the ambitions system default to null.
+    ambition: s.ambition ?? null,
+    // Old saves pre-dating the timed opinion modifier system default to empty.
+    opinionModifiers: s.opinionModifiers ?? [],
   };
 }
 
@@ -244,11 +254,20 @@ function deserializeGameState(json: string): GameState {
       ...s.culture,
       languages: new Map(s.culture.languages as [import('../simulation/population/person').LanguageId, number][]),
       religions: new Map(s.culture.religions as [import('../simulation/population/person').ReligionId, number][]),
+      // Fallbacks for saves created before the religion system was added.
+      hiddenWheelDivergenceTurns: (s.culture as Partial<typeof s.culture>).hiddenWheelDivergenceTurns ?? 0,
+      hiddenWheelSuppressedTurns: (s.culture as Partial<typeof s.culture>).hiddenWheelSuppressedTurns ?? 0,
+      hiddenWheelEmerged:         (s.culture as Partial<typeof s.culture>).hiddenWheelEmerged         ?? false,
     },
     eventCooldowns: new Map(s.eventCooldowns),
     households: new Map(s.households ?? []),
     deferredEvents: s.deferredEvents ?? [],
     flags: (s as GameState).flags ?? { creoleEmergedNotified: false },
+    identityPressure: (s as Partial<GameState>).identityPressure ?? { companyPressureTurns: 0, tribalPressureTurns: 0 },
+    settlement: {
+      ...(s.settlement as typeof s.settlement),
+      religiousPolicy: ((s.settlement as Partial<typeof s.settlement>).religiousPolicy) ?? 'tolerant',
+    },
   };
 }
 
@@ -471,6 +490,7 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
     constructionQueue: [],
     resources: initialResources,
     populationCount: people.size,
+    religiousPolicy: 'tolerant',
   };
 
   const culture: SettlementCulture = {
@@ -483,6 +503,9 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
     governance: 'patriarchal_imanian',
     languageDiversityTurns: 0,
     languageTension: 0,
+    hiddenWheelDivergenceTurns: 0,
+    hiddenWheelSuppressedTurns: 0,
+    hiddenWheelEmerged: false,
   };
 
   const company: CompanyRelation = {
@@ -508,7 +531,7 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
     }
   }
 
-  return {
+  const initialGameState: GameState = {
     version: '1.0.0',
     seed: resolvedSeed,
     turnNumber: 0,
@@ -528,7 +551,23 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
     households: new Map(),
     config,
     flags: { creoleEmergedNotified: false },
+    identityPressure: { companyPressureTurns: 0, tribalPressureTurns: 0 },
   };
+
+  // ── Seed opinions and ambitions at game start ──────────────────────────────
+  // Both systems normally run inside processDawn, but we initialize them
+  // here so that Key Opinions and ambition badges are visible immediately
+  // before the player takes their first turn.
+  const opinionsSeeded = initializeBaselineOpinions(initialGameState.people);
+  const seededPeople = new Map(opinionsSeeded);
+  for (const [id, person] of seededPeople) {
+    const ambition = generateAmbition(person, { ...initialGameState, people: seededPeople }, rng);
+    if (ambition) {
+      seededPeople.set(id, { ...person, ambition });
+    }
+  }
+
+  return { ...initialGameState, people: seededPeople };
 }
 
 // ─── Store implementation ────────────────────────────────────────────────────
@@ -641,7 +680,41 @@ export const useGameStore = create<GameStore>((set, get) => {
           languageDiversityTurns: dawnResult.newLanguageDiversityTurns,
           culturalBlend: dawnResult.updatedCultureBlend,
           religions: dawnResult.updatedReligions,
+          religiousTension: dawnResult.updatedReligiousTension,
+          hiddenWheelDivergenceTurns: dawnResult.updatedHiddenWheelDivergenceTurns,
+          hiddenWheelSuppressedTurns: dawnResult.updatedHiddenWheelSuppressedTurns,
+          hiddenWheelEmerged:
+            dawnResult.shouldFireHiddenWheelEvent
+              ? gameState.culture.hiddenWheelEmerged  // stays as-is until player resolves the event
+              : gameState.culture.hiddenWheelEmerged,
         },
+        // Apply identity pressure: update counters and passive standing/disposition deltas.
+        identityPressure: dawnResult.identityPressureResult.updatedPressure,
+        company: {
+          ...gameState.company,
+          standing: Math.max(
+            0,
+            Math.min(
+              100,
+              gameState.company.standing + dawnResult.identityPressureResult.companyStandingDelta,
+            ),
+          ),
+        },
+        tribes: (() => {
+          const deltas = dawnResult.identityPressureResult.tribeDispositionDeltas;
+          if (deltas.length === 0) return gameState.tribes;
+          const updatedTribes = new Map(gameState.tribes);
+          for (const { tribeId, delta } of deltas) {
+            const tribe = updatedTribes.get(tribeId);
+            if (tribe) {
+              updatedTribes.set(tribeId, {
+                ...tribe,
+                disposition: Math.max(-100, Math.min(100, tribe.disposition + delta)),
+              });
+            }
+          }
+          return updatedTribes;
+        })(),
         // Append birth records to event history for genealogy / event-chain queries.
         eventHistory: [
           ...gameState.eventHistory,
@@ -700,6 +773,15 @@ export const useGameStore = create<GameStore>((set, get) => {
         const actors = resolveActors(event.actorRequirements, stateAfterDrain, rng);
         return { ...event, boundActors: actors ?? {} } as BoundEvent;
       });
+
+      // If the Hidden Wheel divergence counter just crossed its threshold this dawn,
+      // inject the emergence event as the first thing the player sees this turn.
+      if (dawnResult.shouldFireHiddenWheelEvent) {
+        const hiddenWheelEv = getEventById('rel_hidden_wheel_emerges');
+        if (hiddenWheelEv) {
+          deferredBoundEvents.unshift({ ...hiddenWheelEv, boundActors: {} } as BoundEvent);
+        }
+      }
 
       // Deferred events are prepended so they resolve before new draws.
       const allPending: BoundEvent[] = [...deferredBoundEvents, ...boundDrawn];
@@ -815,6 +897,14 @@ export const useGameStore = create<GameStore>((set, get) => {
         updatedCompany = { ...updatedCompany, quotaContributedGold: 0, quotaContributedGoods: 0 };
       }
 
+      // Apply religious standing drain (winter only).
+      if (duskResult.winterReligiousStandingDelta !== 0) {
+        updatedCompany = {
+          ...updatedCompany,
+          standing: Math.max(0, Math.min(100, updatedCompany.standing + duskResult.winterReligiousStandingDelta)),
+        };
+      }
+
       // Queue triggered Company event for next turn's event phase.
       let updatedDeferredEvents = gameState.deferredEvents;
       if (duskResult.quotaEventId) {
@@ -822,6 +912,17 @@ export const useGameStore = create<GameStore>((set, get) => {
           ...updatedDeferredEvents,
           {
             eventId: duskResult.quotaEventId,
+            scheduledTurn: gameState.turnNumber + 1,
+            context: {},
+            boundActors: {},
+          },
+        ];
+      }
+      if (duskResult.shouldFireCompanyReligionEvent) {
+        updatedDeferredEvents = [
+          ...updatedDeferredEvents,
+          {
+            eventId: 'rel_company_concern_letter',
             scheduledTurn: gameState.turnNumber + 1,
             context: {},
             boundActors: {},
@@ -916,6 +1017,15 @@ export const useGameStore = create<GameStore>((set, get) => {
         updatedPeople.set(observer.id, { ...observer, relationships: updatedRelationships });
       }
 
+      // Apply marriage opinion floor (+40 minimum between spouses).
+      {
+        const updatedA = updatedPeople.get(result.updatedPersonA.id)!;
+        const updatedB = updatedPeople.get(result.updatedPersonB.id)!;
+        const [flooredA, flooredB] = applyMarriageOpinionFloor(updatedA, updatedB);
+        updatedPeople.set(flooredA.id, flooredA);
+        updatedPeople.set(flooredB.id, flooredB);
+      }
+
       // Apply household changes.
       const updatedHouseholds = new Map(gameState.households);
       updatedHouseholds.set(result.household.id, result.household);
@@ -958,6 +1068,22 @@ export const useGameStore = create<GameStore>((set, get) => {
         ...gameState,
         people: updatedPeople,
         deferredEvents: [...gameState.deferredEvents, deferredEntry],
+      };
+      const json = serializeGameState(updatedState);
+      localStorage.setItem(SAVE_KEY, json);
+      set({ gameState: updatedState });
+    },
+
+    setReligiousPolicy(policy) {
+      const { gameState } = get();
+      if (!gameState) return;
+      const updatedState: GameState = {
+        ...gameState,
+        settlement: { ...gameState.settlement, religiousPolicy: policy },
+        // Recognising the Hidden Wheel automatically marks it as emerged.
+        culture: policy === 'hidden_wheel_recognized'
+          ? { ...gameState.culture, hiddenWheelEmerged: true }
+          : gameState.culture,
       };
       const json = serializeGameState(updatedState);
       localStorage.setItem(SAVE_KEY, json);

@@ -154,7 +154,10 @@ export const DIPLOMACY_EVENTS: GameEvent[] = [
           '{envoy.first} came back rattled. The Kiswani received him, ' +
           'tested him, and found him wanting in some way he cannot fully articulate. ' +
           'He was sent away with courtesy but no warmth.',
-        onSuccess: [{ type: 'modify_disposition', target: 'njaro_matu_riverfolk', value: 15 }],
+        onSuccess: [
+          { type: 'modify_disposition', target: 'njaro_matu_riverfolk', value: 15 },
+          { type: 'modify_opinion_labeled', target: '{envoy}', value: 5, params: { label: 'Successful envoy' } },
+        ],
         onFailure: [{ type: 'modify_disposition', target: 'njaro_matu_riverfolk', value: -5 }],
       },
     ],

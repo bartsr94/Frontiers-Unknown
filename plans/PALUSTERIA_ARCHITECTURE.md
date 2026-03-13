@@ -1,6 +1,6 @@
 # Palusteria: Children of the Ashmark — Architecture & Implementation Guide
 
-**Version:** 1.3 (updated after Phase 3.5 — Household Depth)  
+**Version:** 1.7 (updated after Phase 3.8 — Cultural Identity Pressure)  
 **Document Type:** Technical Architecture (How)  
 **Companion Document:** `PALUSTERIA_GAME_DESIGN.md` (What & Why)  
 **Stack:** React 19 + TypeScript (strict) + Vite + Zustand + Tailwind CSS
@@ -48,11 +48,13 @@ palusteria-game/
 │   │   │
 │   │   ├── population/
 │   │   │   ├── person.ts               # Person interface, createPerson() factory, skills ✅
-│   │   │   ├── culture.ts              # CultureId, processCulturalDrift, deriveCulture ✅
+│   │   │   ├── culture.ts              # CultureId, processCulturalDrift, deriveCulture; religion formulae (computeReligiousTension, computeHiddenWheelDivergence, computeCompanyReligiousPressure) ✅
 │   │   │   ├── marriage.ts             # Marriage matching, polygamy rules, formConcubineRelationship ✅
 │   │   │   ├── household.ts            # createHousehold, addToHousehold, removeFromHousehold, dissolveHousehold ✅
+│   │   │   ├── opinions.ts             # Opinion scores, baseline, drift/decay, OpinionModifier, getEffectiveOpinion ✅
+│   │   │   ├── ambitions.ts            # PersonAmbition model, generation, intensity tick, evaluation ✅
 │   │   │   ├── naming.ts               # Culturally appropriate name generation ✅
-│   │   │   └── relationships.ts        # Opinion system, social bond calculations
+│   │   │   └── relationships.ts        # (placeholder — opinion logic lives in opinions.ts)
 │   │   │
 │   │   ├── personality/
 │   │   │   ├── traits.ts               # Trait definitions and mechanical effects
@@ -68,7 +70,7 @@ palusteria-game/
 │   │   │
 │   │   ├── culture/
 │   │   │   ├── language-acquisition.ts # Language learning rates, drift, child acquisition ✅
-│   │   │   └── religion.ts             # Religious composition, tension calculations
+│   │   │   └── identity-pressure.ts    # IDENTITY_THRESHOLDS, processIdentityPressure(), IdentityPressureResult ✅
 │   │   │
 │   │   ├── world/
 │   │   │   ├── tribes.ts               # External tribe state and AI behavior ✅
@@ -81,7 +83,7 @@ palusteria-game/
 │   │   │   ├── resolver.ts             # applyEventChoice(…, boundActors?), resolveSkillCheck(), resolveConsequenceTarget(), add_person handler ✅
 │   │   │   ├── actor-resolver.ts       # matchesCriteria, canFillSlot, canResolveActors, selectActor, resolveActors, interpolateText ✅
 │   │   │   ├── council-advice.ts       # VoiceArchetype, generateAdvice() — pure logic ✅
-│   │   │   └── definitions/            # 39 events across 8 files; all events with named actors have actorRequirements ✅
+│   │   │   └── definitions/            # 51 events across 10 files; all events with named actors have actorRequirements ✅
 │   │   │       ├── company.ts          # Company Supply Delivery, Letter from the Company ✅
 │   │   │       ├── diplomacy.ts        # Watchers at the River (Riverfolk first contact) ✅
 │   │   │       ├── domestic.ts         # Game Tracks, Weight of Distance, Men at Work ✅
@@ -89,7 +91,9 @@ palusteria-game/
 │   │   │       ├── environmental.ts    # Bountiful Season, Sudden Storm, Cold Bites Deep ✅
 │   │   │       ├── cultural.ts         # 13 cultural/domestic events ✅
 │   │   │       ├── building.ts         # 5 settlement events (overcrowding, construction) ✅
-│   │   │       └── household.ts        # 6 household events (thralls, Keth-Thara, wife-council, Ashka-Melathi) ✅
+│   │   │       ├── household.ts        # 6 household events (thralls, Keth-Thara, wife-council, Ashka-Melathi) ✅
+│   │   │       ├── relationships.ts    # 5 autonomous ambition-driven events (mutual attraction, council petition, etc.) ✅
+│   │   │       └── identity.ts         # 6 cultural identity pressure events (Company concern, inspector, tribal recognition, etc.) ✅
 │   │   │
 │   │   ├── buildings/
 │   │   │   ├── building-definitions.ts # BuildingId (13 types), BuildingDef, BUILDING_CATALOG ✅
@@ -114,7 +118,7 @@ palusteria-game/
 │   │   │   ├── PeopleView.tsx          # Population roster with sort/filter ✅
 │   │   │   ├── PersonDetail.tsx        # Individual deep-dive panel ✅
 │   │   │   ├── FamilyTree.tsx          # 3-generation genealogy browser ✅
-│   │   │   ├── SettlementView.tsx      # 4-panel: standing buildings, construction queue, build menu, crafting ✅
+│   │   │   ├── SettlementView.tsx      # 5-panel: buildings, construction, build menu, crafting, Religion sidebar (IdentityScale + ReligionPanel) ✅
 │   │   │   ├── TradeView.tsx           # Trade & Commerce: Company quota, tribe barter, fairness meter ✅
 │   │   │   ├── DiplomacyView.tsx       # Relations with tribes and Company (Phase 3)
 │   │   │   └── MapView.tsx             # Canvas-rendered regional map (Phase 3)
@@ -124,6 +128,7 @@ palusteria-game/
 │   │   │   ├── portrait-resolver.ts    # resolvePortraitSrc() — bloodline × sex → /portraits/… path ✅
 │   │   │   ├── CouncilPortrait.tsx     # 40×50px img with skin-tone swatch fallback ✅
 │   │   │   ├── AdviceBubble.tsx        # Italic speech bubble for adviser voice ✅
+│   │   │   ├── IdentityScale.tsx       # Five-zone cultural blend bar + pressure badges ✅
 │   │   │   ├── heritage-helpers.ts     # heritageAbbr(), GROUP_ABBR lookup ✅
 │   │   │   ├── TraitBadge.tsx          # Personality trait pill/badge
 │   │   │   ├── ResourceBar.tsx         # Resource display widget
@@ -137,6 +142,7 @@ palusteria-game/
 │   │
 │   ├── data/
 │   │   ├── ethnic-distributions.ts     # All ethnic trait distributions (constants)
+│   │   ├── trait-affinities.ts         # TRAIT_CONFLICTS (8 pairs) + TRAIT_SHARED_BONUS (7 traits) ✅
 │   │   ├── trait-definitions.ts        # All personality trait definitions
 │   │   ├── name-lists.ts              # Names organized by culture and gender
 │   │   ├── cultural-practices.ts       # Practice definitions and effects
@@ -178,6 +184,8 @@ palusteria-game/
     │   ├── demographics.test.ts        # Population simulation sanity checks ✅
     │   ├── marriage.test.ts            # Marriage rule correctness, household formation ✅
     │   ├── household.test.ts           # createHousehold, addTo/removeFrom, getSeniorWife, dissolve ✅
+    │   ├── opinions.test.ts            # Opinion scoring, drift/decay, marriage floor, OpinionModifier suite (75 tests) ✅
+    │   ├── ambitions.test.ts           # Ambition generation, intensity ticking, evaluation, labels ✅
     │   ├── culture.test.ts             # Cultural drift and blending ✅
     │   └── skills.test.ts              # Skill rating, derived formulas, generation ✅
     ├── economy/
@@ -196,7 +204,9 @@ palusteria-game/
     │   ├── construction.test.ts        # canBuild, startConstruction, processConstruction ✅
     │   └── building-effects.test.ts    # Shelter, overcrowding, production bonuses ✅
     ├── culture/
-    │   └── language-acquisition.test.ts # Language drift and child acquisition ✅
+    │   ├── language-acquisition.test.ts # Language drift and child acquisition ✅
+    │   ├── religion.test.ts            # computeReligiousTension, computeHiddenWheelDivergence, computeCompanyReligiousPressure ✅
+    │   └── identity-pressure.test.ts  # processIdentityPressure — all zones, counters, trait multipliers, multi-tribe ✅
     └── utils/
         └── rng.test.ts                 # Deterministic output from known seeds ✅
 
@@ -263,9 +273,36 @@ interface Person {
   childrenIds: string[];
   relationships: Map<string, number>; // personId → opinion (-100 to +100)
 
+  ambition: PersonAmbition | null;   // Active personal goal (null = no ambition)
+
+  opinionModifiers: OpinionModifier[]; // Timed decaying per-event experience modifiers
+
   role: WorkRole;
   socialStatus: SocialStatus;
   isPlayerControlled: boolean;
+}
+```
+
+### 4.1a Opinion Modifier
+
+```typescript
+/**
+ * A timed, decaying opinion modifier attached to a person.
+ * Created by event consequences (modify_opinion_pair / modify_opinion_labeled)
+ * and by the automatic co-actor bond when an event resolves with multiple actors.
+ *
+ * Decay: |value| decrements by 1 per turn; modifier is removed when it reaches 0.
+ * A +8 modifier represents a favour that lasts 8 turns; a −6 lasts 6 turns.
+ */
+interface OpinionModifier {
+  id: string;        // Deduplication key — same event refiring replaces stale entry.
+                     // Formats: "{eventId}:auto:{idA}:{idB}"  (co-actor bond)
+                     //          "{eventId}:pair:{personAId}:{personBId}"  (explicit pair)
+                     //          "{eventId}:labeled:{targetId}"  (broadcast)
+  targetId: string;  // The person this modifier affects opinions of
+  label: string;     // Human-readable source, e.g. "Joint project", "Bitter quarrel"
+  value: number;     // Sign = favour/disfavour; |value| = turns remaining
+  eventId: string;   // Source event (for debugging / future UI)
 }
 ```
 
@@ -531,6 +568,13 @@ interface EventChoice {
   deferredEventId?: string;
   /** Number of turns to wait before the deferred event fires. Default: 4. */
   deferredTurns?: number;
+
+  /**
+   * When true, suppresses the automatic +2 "Shared: {event.title}" opinion
+   * modifier that would otherwise be applied between every pair of bound actors.
+   * Use on hostile or quarrel-outcome choices.
+   */
+  skipActorBond?: boolean;
 }
 
 // ─── Skill Check Definition ───────────────────────────────────────────────────
@@ -607,7 +651,9 @@ type ConsequenceType =
   | 'add_person'
   | 'remove_person'
   | 'modify_resource'
-  | 'modify_opinion'
+  | 'modify_opinion'                 // Permanent broadcast to all observers (big public acts)
+  | 'modify_opinion_pair'            // Timed bidirectional modifier between two named actor slots
+  | 'modify_opinion_labeled'         // Timed broadcast modifier from a named actor to all observers
   | 'modify_disposition'             // Tribe disposition
   | 'modify_standing'                // Company standing
   | 'add_trait'
@@ -617,7 +663,11 @@ type ConsequenceType =
   | 'start_pregnancy'
   | 'trigger_event'
   /** Schedules a deferred follow-up event. `target` = eventId, `value` = turns to wait. */
-  | 'queue_deferred_event';
+  | 'queue_deferred_event'
+  | 'modify_religion'               // Change a person's religion
+  | 'set_religious_policy'          // Change the settlement's religious policy
+  | 'set_hidden_wheel_emerged'      // Mark the Hidden Wheel as emerged
+  | 'set_hidden_wheel_suppressed';  // Pause the Hidden Wheel divergence counter for N turns
 
 type EventCategory = 'diplomacy' | 'domestic' | 'economic' | 'military' | 'cultural' | 'personal' | 'environmental' | 'company';
 
@@ -666,7 +716,12 @@ type PersonSkills = Record<SkillId, number>; // integers 1–100
   | 'has_person_matching'            // e.g., unmarried Sauromatian woman
   | 'season_is'
   | 'cultural_blend_above'
-  | 'cultural_blend_below';
+  | 'cultural_blend_below'
+  | 'religion_fraction_above'       // e.g., Sacred Wheel > 25% of population
+  | 'religion_fraction_below'
+  | 'religious_tension_above'       // tension > threshold
+  | 'religious_policy_is'           // settlement's religiousPolicy matches value
+  | 'hidden_wheel_emerged';         // hiddenWheelEmerged === true
 ```
 
 ### 4.9 External Tribes
@@ -698,14 +753,20 @@ interface SettlementCulture {
   languageDiversityTurns: number;         // consecutive turns where ≥2 languages each exceed 10% share
   languageTension: number;                // 0.0–1.0; peaks at perfect 50/50 bilingual split
   religions: Map<ReligionId, number>;
-  religiousTension: number;               // 0.0–1.0
+  religiousTension: number;               // 0.0–1.0; peaks at 50/50 Orthodox/Wheel split
+  hiddenWheelDivergenceTurns: number;     // counter toward emergence; fires rel_hidden_wheel_emerges at 20
+  hiddenWheelSuppressedTurns: number;     // turns remaining on active suppression
+  hiddenWheelEmerged: boolean;            // true once the Hidden Wheel has publicly emerged
   culturalBlend: number;                  // 0.0 (fully Imanian) → 1.0 (fully Sauromatian)
   practices: CulturalPracticeId[];
   governance: GovernanceStyle;
 }
 
 type LanguageId = 'imanian' | 'kiswani' | 'hanjoda' | 'tradetalk' | 'settlement_creole';
-type ReligionId = 'imanian_orthodox' | 'sacred_wheel' | 'syncretic_hidden_wheel' | 'irreligious';
+type ReligionId = 'imanian_orthodox' | 'sacred_wheel' | 'syncretic_hidden_wheel';
+// Note: 'irreligious' was removed — it was never assigned to any person
+
+type ReligiousPolicy = 'tolerant' | 'orthodox_enforced' | 'wheel_permitted' | 'hidden_wheel_recognized';
 type GovernanceStyle = 'patriarchal_imanian' | 'council_hybrid' | 'matriarchal_sauromatian';
 
 type CulturalPracticeId =
@@ -849,7 +910,15 @@ interface GameState {
   pendingEvents: GameEvent[];        // Events queued for the current Event Phase
   councilMemberIds: string[];        // IDs of up to 7 Expedition Council members (seat order)
 
+  // Added in Phase 3.8
+  identityPressure: IdentityPressure; // Consecutive-season counters for blend-zone pressure
+
   config: GameConfig;
+}
+
+interface IdentityPressure {
+  companyPressureTurns: number;      // Seasons blend has been in native zone consecutively
+  tribalPressureTurns: number;       // Seasons blend has been in Imanian zone consecutively
 }
 
 type Season = 'spring' | 'summer' | 'autumn' | 'winter';
@@ -887,6 +956,64 @@ interface EventRecord {
   involvedPersonIds: string[];
 }
 ```
+
+### 4.13 Religion System
+
+**Module:** `src/simulation/population/culture.ts` (formulae) · `src/simulation/events/definitions/religious.ts` (events)
+
+#### Core functions
+
+```typescript
+/**
+ * Returns religious tension in [0, 1].
+ * Peaks at 1.0 on a pure 50/50 Orthodox/Wheel split.
+ * Damped as Hidden Wheel spreads — a three-way split reduces tension.
+ *   rawTension = 4 × orthodoxFrac × wheelFrac
+ *   damping    = clamp(1 − hiddenFrac × 2, 0, 1)
+ */
+function computeReligiousTension(
+  religions: Map<ReligionId, number>
+): number
+
+/**
+ * Annual Company standing drain when Sacred Wheel fraction > 25%.
+ *   drain = −Math.round((wheelFrac − 0.25) × 10), cap −5/yr
+ * Doubled under `hidden_wheel_recognized`; zero under `orthodox_enforced`.
+ */
+function computeCompanyReligiousPressure(
+  religions: Map<ReligionId, number>,
+  policy: ReligiousPolicy
+): number
+
+/**
+ * Advances the Hidden Wheel divergence counter by 1 when:
+ *   Orthodox ≥ 15% AND Wheel ≥ 15% AND policy ≠ 'orthodox_enforced'
+ * Returns { newTurns, shouldFire } — shouldFire is true when counter reaches 20.
+ * Suppression (hiddenWheelSuppressedTurns > 0) freezes the counter.
+ */
+function computeHiddenWheelDivergence(
+  religions: Map<ReligionId, number>,
+  policy: ReligiousPolicy,
+  currentTurns: number,
+  suppressedTurns: number
+): { newTurns: number; shouldFire: boolean }
+```
+
+#### Programmatic event injection (store)
+
+Two events with `isDeferredOutcome: true` are never drawn from the normal deck — they are injected by `game-store.ts`:
+
+- `rel_hidden_wheel_emerges` — unshifted into `pendingEvents` when `dawnResult.shouldFireHiddenWheelEvent` is true; `isUnique: true` so it fires only once
+- `rel_company_concern_letter` — enqueued for the following turn when `duskResult.shouldFireCompanyReligionEvent` is true (checks each Winter dusk)
+
+#### Religious policy effects
+
+| Policy | Company drain | Wheel ceremonies | Notes |
+|--------|--------------|-----------------|-------|
+| `tolerant` | normal | allowed | Default |
+| `orthodox_enforced` | zero | blocked | Freezes Hidden Wheel counter |
+| `wheel_permitted` | normal + flat −1 | allowed | Sauromatian women +5 opinion |
+| `hidden_wheel_recognized` | ×2 | allowed | Requires `hiddenWheelEmerged`; doubles HW spread |
 
 ---
 
@@ -1132,6 +1259,23 @@ interface GameStore {
 | 11 | Opinion/relationship system active |
 
 **Exit criteria:** Guide a settlement through 50+ years with trade, diplomacy, and cultural transformation.
+
+### Phase 3.8: Cultural Identity Pressure ✅ Complete
+
+| Step | Deliverable | Status |
+|------|-------------|--------|
+| 1 | `IdentityPressure` interface + `identityPressure` field on `GameState` | ✅ |
+| 2 | `min_company_pressure_turns` / `min_tribal_pressure_turns` prerequisites | ✅ |
+| 3 | `modify_cultural_blend` / `modify_all_tribe_dispositions` consequences | ✅ |
+| 4 | `sauromatianHeritage` actor criterion | ✅ |
+| 5 | `identity-pressure.ts` pure logic module (`processIdentityPressure`, five-zone table, tribe trait multipliers) | ✅ |
+| 6 | 6 identity events in `definitions/identity.ts` | ✅ |
+| 7 | Wire `processIdentityPressure` into `processDawn()` and apply deltas in `game-store.startTurn()` | ✅ |
+| 8 | `IdentityScale` UI widget — five-zone bar with pressure badges | ✅ |
+| 9 | Mount `IdentityScale` in SettlementView Religion sidebar above `ReligionPanel` | ✅ |
+| 10 | 35 tests in `tests/culture/identity-pressure.test.ts` | ✅ |
+
+**Exit criteria:** Cultural blend drifts outside the safe zone, passive Company standing and tribe disposition deltas apply, pressure-gated events fire, IdentityScale renders in SettlementView.
 
 ### Phase 4: Polish ("The Ashmark Remembers")
 

@@ -29,7 +29,7 @@ import type {
   SkillCheckResult,
   DeferredEventEntry,
 } from './engine';
-import type { GameState, ResourceType, EventRecord } from '../turn/game-state';
+import type { GameState, ResourceType, EventRecord, ReligiousPolicy } from '../turn/game-state';
 import type { Person, EthnicGroup, ReligionId, SocialStatus, CultureId, WorkRole, HouseholdRole, TraitId } from '../population/person';
 import type { HouseholdTradition } from '../turn/game-state';
 import {
@@ -40,7 +40,8 @@ import {
   ETHNIC_GROUP_CULTURE,
   ETHNIC_GROUP_PRIMARY_LANGUAGE,
 } from '../population/person';
-import type { DerivedSkillId, SkillId } from '../population/person';
+import type { DerivedSkillId, SkillId, OpinionModifier } from '../population/person';
+import { addOpinionModifier } from '../population/opinions';
 import { generateName } from '../population/naming';
 import { createFertilityProfile } from '../genetics/fertility';
 import { ETHNIC_DISTRIBUTIONS } from '../../data/ethnic-distributions';
@@ -149,6 +150,7 @@ function applyConsequence(
   state: GameState,
   rng?: SeededRNG,
   boundActors?: Record<string, string>,
+  eventId?: string,
 ): GameState {
   switch (consequence.type) {
 
@@ -229,6 +231,19 @@ function applyConsequence(
       if (!removePerson) return state;
       const updatedPeople = new Map(state.people);
       updatedPeople.delete(removePerson.id);
+      // Add to graveyard so opinion/family references can still resolve their name.
+      const departureEntry = {
+        id: removePerson.id,
+        firstName: removePerson.firstName,
+        familyName: removePerson.familyName,
+        sex: removePerson.sex,
+        birthYear: Math.floor(state.currentYear - removePerson.age),
+        deathYear: state.currentYear,
+        deathCause: 'departed',
+        parentIds: removePerson.parentIds,
+        childrenIds: removePerson.childrenIds,
+        heritage: removePerson.heritage,
+      };
       // Clean up household membership.
       let updatedHouseholds = state.households;
       if (removePerson.householdId) {
@@ -250,6 +265,7 @@ function applyConsequence(
         ...state,
         people: updatedPeople,
         households: updatedHouseholds,
+        graveyard: [...state.graveyard, departureEntry],
         councilMemberIds: state.councilMemberIds.filter(id => id !== removePerson.id),
         settlement: {
           ...state.settlement,
@@ -286,7 +302,30 @@ function applyConsequence(
 
     case 'kill_person':      return state; // TODO: move to graveyard, clean up relationships
     case 'start_pregnancy':  return state; // TODO: set pregnancyState on target person
-    case 'modify_opinion':   return state; // TODO: update relationships Map on observer
+    case 'modify_opinion': {
+      // Broadcast: shift every living person's opinion of the target by `value`.
+      // target may be a slot reference or a literal person ID.
+      const targetId = resolveConsequenceTarget(consequence.target, boundActors);
+      const delta = consequence.value as number;
+      if (!targetId || targetId === '' || !Number.isFinite(delta)) return state;
+
+      const updatedPeople = new Map(state.people);
+      for (const [id, person] of state.people) {
+        if (id === targetId) continue;
+        const current = person.relationships.get(targetId) ?? 0;
+        const next = Math.max(-100, Math.min(100, current + delta));
+        const updatedRelationships = new Map(person.relationships);
+        if (next !== current) {
+          if (next === 0) {
+            updatedRelationships.delete(targetId);
+          } else {
+            updatedRelationships.set(targetId, next);
+          }
+          updatedPeople.set(id, { ...person, relationships: updatedRelationships });
+        }
+      }
+      return { ...state, people: updatedPeople };
+    }
     case 'trigger_event':    return state; // TODO: push follow-up into pendingEvents via followUpEventId
 
     // ── Phase 3+ ─────────────────────────────────────────────────────────────
@@ -436,6 +475,110 @@ function applyConsequence(
       return { ...state, households: updatedHouseholds };
     }
 
+    // ── Timed opinion modifiers ───────────────────────────────────────────
+
+    case 'modify_opinion_labeled': {
+      // Broadcast a decaying modifier to every observer's opinion of the target.
+      const targetId = resolveConsequenceTarget(consequence.target, boundActors);
+      const delta = consequence.value as number;
+      const label = (consequence.params?.label as string | undefined) ?? 'Event';
+      const srcId = eventId ?? 'unknown';
+      if (!targetId || !state.people.has(targetId) || !Number.isFinite(delta)) return state;
+
+      const modId = `${srcId}:labeled:${targetId}`;
+      const updatedPeople = new Map(state.people);
+      for (const [id, person] of state.people) {
+        if (id === targetId) continue;
+        const modifier: OpinionModifier = { id: modId, targetId, label, value: delta, eventId: srcId };
+        updatedPeople.set(id, addOpinionModifier(person, modifier));
+      }
+      return { ...state, people: updatedPeople };
+    }
+
+    case 'modify_opinion_pair': {
+      // Bidirectional timed modifier between two named actor slots.
+      const personAId = resolveConsequenceTarget(consequence.target, boundActors);
+      const slotBRaw = consequence.params?.slotB as string | undefined;
+      if (!slotBRaw) return state;
+      const personBId = resolveConsequenceTarget(slotBRaw, boundActors);
+      const valueAB = consequence.value as number;
+      const valueBA = typeof consequence.params?.valueB === 'number'
+        ? consequence.params.valueB
+        : valueAB;
+      const label = (consequence.params?.label as string | undefined) ?? 'Shared experience';
+      const srcId = eventId ?? 'unknown';
+
+      const personA = state.people.get(personAId);
+      const personB = state.people.get(personBId);
+      if (!personA || !personB || personAId === personBId) return state;
+
+      const modIdAB: OpinionModifier = { id: `${srcId}:pair:${personAId}:${personBId}`, targetId: personBId, label, value: valueAB, eventId: srcId };
+      const modIdBA: OpinionModifier = { id: `${srcId}:pair:${personBId}:${personAId}`, targetId: personAId, label, value: valueBA, eventId: srcId };
+
+      const updatedPeople = new Map(state.people);
+      updatedPeople.set(personAId, addOpinionModifier(personA, modIdAB));
+      updatedPeople.set(personBId, addOpinionModifier(personB, modIdBA));
+      return { ...state, people: updatedPeople };
+    }
+
+    case 'modify_religion': {
+      // Changes a person's religion. target = personId or slot token; value = ReligionId string.
+      const resolvedId = resolveConsequenceTarget(consequence.target, boundActors);
+      if (!resolvedId) return state;
+      const religionTarget = state.people.get(resolvedId);
+      if (!religionTarget) return state;
+      const newReligion = consequence.value as ReligionId;
+      const updatedPeople = new Map(state.people);
+      updatedPeople.set(resolvedId, { ...religionTarget, religion: newReligion });
+      return { ...state, people: updatedPeople };
+    }
+
+    case 'set_religious_policy': {
+      const newPolicy = consequence.value as ReligiousPolicy;
+      // 'hidden_wheel_recognized' implicitly marks the Hidden Wheel as emerged.
+      const hiddenWheelEmerged =
+        newPolicy === 'hidden_wheel_recognized'
+          ? true
+          : state.culture.hiddenWheelEmerged;
+      return {
+        ...state,
+        settlement: { ...state.settlement, religiousPolicy: newPolicy },
+        culture: { ...state.culture, hiddenWheelEmerged },
+      };
+    }
+
+    case 'set_hidden_wheel_emerged':
+      return { ...state, culture: { ...state.culture, hiddenWheelEmerged: true } };
+
+    case 'set_hidden_wheel_suppressed': {
+      const turns = typeof consequence.value === 'number' ? consequence.value : 30;
+      return {
+        ...state,
+        culture: { ...state.culture, hiddenWheelSuppressedTurns: turns },
+      };
+    }
+
+    case 'modify_cultural_blend': {
+      const delta = consequence.value as number;
+      const updated = clamp(state.culture.culturalBlend + delta, 0, 1);
+      return {
+        ...state,
+        culture: { ...state.culture, culturalBlend: updated },
+      };
+    }
+
+    case 'modify_all_tribe_dispositions': {
+      const delta = consequence.value as number;
+      const updatedTribes = new Map(state.tribes);
+      for (const [id, tribe] of state.tribes) {
+        updatedTribes.set(id, {
+          ...tribe,
+          disposition: clamp(tribe.disposition + delta, -100, 100),
+        });
+      }
+      return { ...state, tribes: updatedTribes };
+    }
+
     // Exhaustiveness guard — compile error if a new ConsequenceType is added without a handler.
     default: {
       const _exhaustive: never = consequence;
@@ -477,7 +620,7 @@ export function applyEventChoice(
   // 1. Always-fire consequences.
   let updatedState = state;
   for (const consequence of choice.consequences) {
-    updatedState = applyConsequence(consequence, updatedState, rng, resolvedBoundActors);
+    updatedState = applyConsequence(consequence, updatedState, rng, resolvedBoundActors, event.id);
   }
 
   // 2. Skill check (only when there is no deferral — deferred outcomes resolve later).
@@ -488,7 +631,30 @@ export function applyEventChoice(
       ? (choice.onSuccess ?? [])
       : (choice.onFailure ?? []);
     for (const consequence of outcomeConsequences) {
-      updatedState = applyConsequence(consequence, updatedState, rng, resolvedBoundActors);
+      updatedState = applyConsequence(consequence, updatedState, rng, resolvedBoundActors, event.id);
+    }
+  }
+
+  // 2b. Auto-apply: +2 "shared experience" modifier between every pair of bound actors.
+  // Suppressed by choice.skipActorBond = true (hostile/quarrel outcomes).
+  if (!choice.skipActorBond && resolvedBoundActors) {
+    const actorIds = Object.values(resolvedBoundActors).filter(id => updatedState.people.has(id));
+    if (actorIds.length >= 2) {
+      const updatedPeople = new Map(updatedState.people);
+      const bondLabel = `Shared: ${event.title}`;
+      for (let i = 0; i < actorIds.length; i++) {
+        for (let j = i + 1; j < actorIds.length; j++) {
+          const idA = actorIds[i]!;
+          const idB = actorIds[j]!;
+          const modAB: OpinionModifier = { id: `${event.id}:auto:${idA}:${idB}`, targetId: idB, label: bondLabel, value: 5, eventId: event.id };
+          const modBA: OpinionModifier = { id: `${event.id}:auto:${idB}:${idA}`, targetId: idA, label: bondLabel, value: 5, eventId: event.id };
+          const pA = updatedPeople.get(idA);
+          const pB = updatedPeople.get(idB);
+          if (pA) updatedPeople.set(idA, addOpinionModifier(pA, modAB));
+          if (pB) updatedPeople.set(idB, addOpinionModifier(pB, modBA));
+        }
+      }
+      updatedState = { ...updatedState, people: updatedPeople };
     }
   }
 

@@ -219,9 +219,11 @@ export const HOUSEHOLD_EVENTS: GameEvent[] = [
           'You make your position clear. {senior.first} manages the household. ' +
           '{newcomer.first} adapts or finds her own way. The tension does not ' +
           'disappear, but it finds a shape.',
+        skipActorBond: true,
         consequences: [
           { type: 'modify_opinion', target: '{senior}', value: 6 },
           { type: 'modify_opinion', target: '{newcomer}', value: -8 },
+          { type: 'modify_opinion_pair', target: '{senior}', value: -8, params: { slotB: '{newcomer}', label: 'Seniority enforced' } },
         ],
       },
       {
@@ -244,6 +246,7 @@ export const HOUSEHOLD_EVENTS: GameEvent[] = [
         onSuccess: [
           { type: 'modify_opinion', target: '{senior}', value: 4 },
           { type: 'modify_opinion', target: '{newcomer}', value: 4 },
+          { type: 'modify_opinion_pair', target: '{senior}', value: 8, params: { slotB: '{newcomer}', label: 'Common ground found' } },
         ],
         onFailure: [],
       },
@@ -253,6 +256,7 @@ export const HOUSEHOLD_EVENTS: GameEvent[] = [
         description:
           "Time passes. They find a working distance, if not warmth. " +
           "Households have survived worse.",
+        skipActorBond: true,
         consequences: [],
       },
     ],

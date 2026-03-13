@@ -17,6 +17,8 @@ export type ConsequenceType =
   | 'remove_person'
   | 'modify_resource'
   | 'modify_opinion'
+  /** Changes a person's religion. `target` = personId or slot token; `value` = ReligionId string. */
+  | 'modify_religion'
   /** Changes a neighbouring tribe's disposition toward the player settlement. */
   | 'modify_disposition'
   /** Changes the Ansberry Company's standing score. */
@@ -37,7 +39,43 @@ export type ConsequenceType =
   /** Removes a person from their household (clears householdId and householdRole). `target` = personId or slot token. */
   | 'clear_household'
   /** Changes a household's tradition. `target` = householdId or '{head}' slot. `value` = new HouseholdTradition string. */
-  | 'set_household_tradition';
+  | 'set_household_tradition'
+  /**
+   * Timed broadcast: creates a decaying `OpinionModifier` on every observer toward the target.
+   * `target` = slot token or person ID. `value` = signed magnitude (abs = turns remaining).
+   * `params.label` = display label shown in opinion breakdown tooltip.
+   */
+  | 'modify_opinion_labeled'
+  /**
+   * Timed bidirectional modifier between two named actor slots.
+   * `target` = slot token for person A (e.g. `'{lead}'`). `value` = signed magnitude for A→B.
+   * `params.slotB` = slot token for person B. `params.label` = display label.
+   * `params.valueB` (optional) = magnitude for B→A; defaults to `value` if omitted.
+   */
+  | 'modify_opinion_pair'
+  /** Sets the settlement's religious policy. `value` = ReligiousPolicy string. */
+  | 'set_religious_policy'
+  /**
+   * Marks the Hidden Wheel as having emerged (sets SettlementCulture.hiddenWheelEmerged = true).
+   * No target or value needed.
+   */
+  | 'set_hidden_wheel_emerged'
+  /**
+   * Freezes the Hidden Wheel divergence clock for N turns.
+   * `value` = number of turns to suppress (e.g. 30).
+   */
+  | 'set_hidden_wheel_suppressed'
+  /**
+   * Nudges the settlement's cultural blend by a signed delta.
+   * `value` = delta (e.g. -0.03 toward Imanian, +0.02 toward native).
+   * Result is clamped to [0.0, 1.0].
+   */
+  | 'modify_cultural_blend'
+  /**
+   * Applies a disposition delta to every external tribe in the region.
+   * `value` = numeric delta. Result is clamped to [-100, 100] per tribe.
+   */
+  | 'modify_all_tribe_dispositions';
 
 // ─── Event Category ──────────────────────────────────────────────────────────
 
@@ -90,7 +128,27 @@ export type PrerequisiteType =
   /** True when at least one household has two or more wives. */
   | 'has_multi_wife_household'
   /** True when at least one Ashka-Melathi bond exists in any household. */
-  | 'has_ashka_melathi_bond';
+  | 'has_ashka_melathi_bond'
+  /** True when at least one living person holds an opinion of another above the given threshold (params: { threshold: number }). */
+  | 'min_opinion_pair'
+  /** True when at least one living person holds an opinion of another below the given threshold (params: { threshold: number }). */
+  | 'max_opinion_pair'
+  /** True when at least one living person has an active ambition of the given type (params: { ambitionType: AmbitionId }). */
+  | 'has_person_with_ambition'
+  /** True when the named religion's population fraction is above the threshold (params: { religion: ReligionId; threshold: number }). */
+  | 'religion_fraction_above'
+  /** True when the named religion's population fraction is below the threshold (params: { religion: ReligionId; threshold: number }). */
+  | 'religion_fraction_below'
+  /** True when religiousTension is above the threshold (params: { threshold: number }). */
+  | 'religious_tension_above'
+  /** True when the settlement's religiousPolicy equals the given value (params: { policy: string }). */
+  | 'religious_policy_is'
+  /** True when the Hidden Wheel has emerged (SettlementCulture.hiddenWheelEmerged). */
+  | 'hidden_wheel_emerged'
+  /** True when companyPressureTurns (native-zone seasons) is >= the given value (params: { turns: number }). */
+  | 'min_company_pressure_turns'
+  /** True when tribalPressureTurns (Imanian-zone seasons) is >= the given value (params: { turns: number }). */
+  | 'min_tribal_pressure_turns';
 
 // ─── Prerequisite & Requirement Interfaces ────────────────────────────────────
 
@@ -137,6 +195,11 @@ export interface ActorCriteria {
   hasTrait?: TraitId;
   /** Person must have at least this score in the given skill. */
   minSkill?: { skill: SkillId | DerivedSkillId; value: number };
+  /**
+   * When true, person's primaryCulture must be in SAUROMATIAN_CULTURE_IDS.
+   * Useful for selecting "native" settlers regardless of their specific sub-group.
+   */
+  sauromatianHeritage?: boolean;
 }
 
 /**
@@ -282,6 +345,12 @@ export interface EventChoice {
    * event resolves. Ignored when deferredEventId is not set.
    */
   missionActorSlot?: string;
+  /**
+   * When true, suppresses the automatic +2 "shared experience" `OpinionModifier`
+   * that is applied between every pair of co-actors after choice resolution.
+   * Use on choices where working together is incidental or actively hostile.
+   */
+  skipActorBond?: boolean;
 
   // ── Outcome Narrative Text ────────────────────────────────────────────────
   /** Narrative shown on the outcome screen after a successful skill check. */

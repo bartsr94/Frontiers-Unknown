@@ -424,8 +424,8 @@ export default function PeopleView() {
             onClick={() => setSelectedId(null)}
           />
           <div className="
-            xl:relative xl:flex-none xl:w-80
-            max-xl:absolute max-xl:inset-y-0 max-xl:right-0 max-xl:w-80 max-xl:z-20
+            xl:relative xl:flex-none xl:w-[22rem]
+            max-xl:absolute max-xl:inset-y-0 max-xl:right-0 max-xl:w-[22rem] max-xl:z-20
             overflow-y-auto
           ">
             <PersonDetail

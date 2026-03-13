@@ -22,6 +22,7 @@ import { CONVERSATIONAL_THRESHOLD } from '../culture/language-acquisition';
 import { SAUROMATIAN_CULTURE_IDS } from './culture';
 import { getSauromatianFraction, getImanianFraction } from '../genetics/gender-ratio';
 import { createHousehold, addToHousehold, countWives } from './household';
+import { getEffectiveOpinion, MARRIAGE_REFUSAL_THRESHOLD } from './opinions';
 
 // ─── Marriage Types ───────────────────────────────────────────────────────────
 
@@ -232,9 +233,19 @@ export function canMarry(
     }
   }
 
-  // 4. Identify the man and woman, then apply spouse-slot limits
+  // 3.5 Opinion gate — either party refuses if they hold a strongly negative
+  // opinion of the other (below the MARRIAGE_REFUSAL_THRESHOLD).
   const man = personA.sex === 'male' ? personA : personB;
   const woman = personA.sex === 'female' ? personA : personB;
+
+  if (getEffectiveOpinion(man, woman.id) < MARRIAGE_REFUSAL_THRESHOLD) {
+    return { allowed: false, reason: 'unwilling_party' };
+  }
+  if (getEffectiveOpinion(woman, man.id) < MARRIAGE_REFUSAL_THRESHOLD) {
+    return { allowed: false, reason: 'unwilling_party' };
+  }
+
+  // 4. Apply spouse-slot limits using the already-identified man and woman
 
   // Women may only have one spouse under any cultural tradition
   if (woman.spouseIds.length >= 1) {
@@ -401,6 +412,27 @@ export interface InformalUnionResult {
   updatedWoman: Person;
   household: Household;
   householdCreated: boolean;
+}
+
+/**
+ * Checks whether a man and woman may form an informal union.
+ * Applies the same opinion gate as formal marriage: either party may refuse
+ * if their opinion of the other is below MARRIAGE_REFUSAL_THRESHOLD.
+ */
+export function canFormInformalUnion(
+  man: Person,
+  woman: Person,
+): { allowed: boolean; reason?: string } {
+  if (man.age < 16 || woman.age < 16) {
+    return { allowed: false, reason: 'underage' };
+  }
+  if (getEffectiveOpinion(man, woman.id) < MARRIAGE_REFUSAL_THRESHOLD) {
+    return { allowed: false, reason: 'unwilling_party' };
+  }
+  if (getEffectiveOpinion(woman, man.id) < MARRIAGE_REFUSAL_THRESHOLD) {
+    return { allowed: false, reason: 'unwilling_party' };
+  }
+  return { allowed: true };
 }
 
 /**

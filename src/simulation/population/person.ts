@@ -67,12 +67,14 @@ export type CultureId =
 /**
  * Religion identifiers.
  * Defined here (not in culture/) to keep game-state.ts's import graph acyclic.
+ *
+ * 'irreligious' was removed — the three active traditions are sufficient and
+ * its presence complicated the tension formula.
  */
 export type ReligionId =
   | 'imanian_orthodox'
   | 'sacred_wheel'
-  | 'syncretic_hidden_wheel'
-  | 'irreligious';
+  | 'syncretic_hidden_wheel';
 
 /**
  * Language identifiers.
@@ -248,6 +250,9 @@ export type WorkRole =
   | 'gather_food'    // Foraging, fishing, small game — no building required
   | 'gather_stone'   // Quarrying and collecting stone from the surrounding terrain
   | 'gather_lumber'  // Felling and preparing timber
+  | 'priest_solar'   // Male Orthodox minister; generates Company standing bonus annually
+  | 'wheel_singer'   // Sacred Wheel practitioner; generates fertility bonus each turn
+  | 'voice_of_wheel' // Syncretic mediator; reduces religious tension; requires hiddenWheelEmerged
   | 'unassigned';
 
 /** A person's social standing within the settlement community. */
@@ -276,6 +281,48 @@ export type HouseholdTradition =
   | 'sauromatian'  // Wife-council authority; husband is spiritual centre but not decision-maker
   | 'imanian'      // Patriarch nominally leads; women manage internally but perform deference
   | 'ansberite';   // Colonial hybrid; hearth-companions permitted; tradition contested
+
+// ─── Ambitions ────────────────────────────────────────────────────────────────
+
+/**
+ * The category of a personal ambition.
+ *
+ * - seek_spouse         — unmarried adult wants to marry someone they like
+ * - seek_council        — skilled person wants a council seat
+ * - seek_seniority      — wife wants to become senior_wife in a multi-wife household
+ * - seek_cultural_duty  — young Sauromatian male wants to perform keth-thara
+ * - seek_informal_union — Imanian man wants to formalise a concubine relationship
+ */
+export type AmbitionId =
+  | 'seek_spouse'
+  | 'seek_council'
+  | 'seek_seniority'
+  | 'seek_cultural_duty'
+  | 'seek_informal_union';
+
+/**
+ * A personal goal held by a character.
+ *
+ * Ambitions grow in intensity over time if unfulfilled (max 1.0) and
+ * become fulfilled or abandoned through events. When intensity reaches
+ * 0.5+ the character may take autonomous action via events.
+ */
+export interface PersonAmbition {
+  /** What kind of ambition this is.  */
+  type: AmbitionId;
+  /**
+   * Intensity in [0, 1]. Starts near 0 and grows +0.05/turn until fulfilled
+   * or the character gains the 'content' trait. 0 = dormant, 1 = consuming.
+   */
+  intensity: number;
+  /**
+   * Optional ID of the person this ambition is directed at (e.g. target of
+   * a relationship ambition). Null for general ambitions.
+   */
+  targetPersonId: string | null;
+  /** Turn number when the ambition was first formed. */
+  formedTurn: number;
+}
 
 // ─── Skills ──────────────────────────────────────────────────────────────────
 
@@ -410,6 +457,36 @@ const DEFAULT_SKILLS: PersonSkills = {
   animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25,
 };
 
+// ─── Opinion Modifiers ────────────────────────────────────────────────────────
+
+/**
+ * A named, time-limited opinion modifier arising from a shared event or experience.
+ *
+ * Modifiers sit alongside the stable `relationships` Map as a separate layer.
+ * They decay 1 point per turn. When the value reaches 0 the modifier is removed.
+ * The absolute magnitude of `value` equals the number of turns remaining.
+ *
+ * Two people can have simultaneous permanent base opinion (from relationships)
+ * AND temporary modifier stacks that fade. `getEffectiveOpinion()` combines both.
+ */
+export interface OpinionModifier {
+  /** Deduplication key — rebuilt on each event firing to replace stale copies. */
+  id: string;
+  /** ID of the person this modifier is about (the "target" of the opinion). */
+  targetId: string;
+  /** Human-readable label shown in UI tooltips, e.g. "Shared hunt", "Bitter quarrel". */
+  label: string;
+  /**
+   * Current modifier value.
+   * - Sign is preserved throughout decay (a negative modifier stays negative).
+   * - Absolute value decrements by 1 per turn; removed when it reaches 0.
+   * - Therefore `Math.abs(value)` also equals the number of turns remaining.
+   */
+  value: number;
+  /** ID of the event that created this modifier — for debugging and deduplication. */
+  eventId: string;
+}
+
 // ─── Person Interface ─────────────────────────────────────────────────────────
 
 /**
@@ -474,6 +551,13 @@ export interface Person {
    */
   relationships: Map<string, number>;
 
+  /**
+   * Timed opinion modifiers from shared events and experiences.
+   * Each entry decays 1 point per turn and is removed when it reaches 0.
+   * Combined with `relationships` via `getEffectiveOpinion()` for decision gates.
+   */
+  opinionModifiers: OpinionModifier[];
+
   /** Current work role in the settlement's economy. */
   role: WorkRole;
   /** Social standing within the community. */
@@ -500,6 +584,12 @@ export interface Person {
   householdRole: HouseholdRole | null;
   /** IDs of co-wives with whom this person shares an Ashka-Melathi bond. */
   ashkaMelathiPartnerIds: string[];
+
+  /**
+   * The character's current personal ambition, or null if they have none.
+   * Evaluated and potentially updated each turn by the ambitions engine.
+   */
+  ambition: PersonAmbition | null;
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
@@ -595,6 +685,7 @@ export function createPerson(options: CreatePersonOptions = {}, rng?: SeededRNG)
     parentIds: options.parentIds ?? [null, null],
     childrenIds: options.childrenIds ?? [],
     relationships: options.relationships ?? new Map<string, number>(),
+    opinionModifiers: options.opinionModifiers ?? [],
 
     role: options.role ?? 'unassigned',
     socialStatus: options.socialStatus ?? 'settler',
@@ -606,5 +697,6 @@ export function createPerson(options: CreatePersonOptions = {}, rng?: SeededRNG)
     householdId: options.householdId ?? null,
     householdRole: options.householdRole ?? null,
     ashkaMelathiPartnerIds: options.ashkaMelathiPartnerIds ?? [],
+    ambition: options.ambition ?? null,
   };
 }

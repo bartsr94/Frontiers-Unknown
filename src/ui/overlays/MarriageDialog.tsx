@@ -19,6 +19,7 @@ import type { InformalUnionStyle } from '../../simulation/population/marriage';
 import { averageBloodlines, blendTraitDistributions } from '../../simulation/genetics/inheritance';
 import { resolveGenderRatio } from '../../simulation/genetics/gender-ratio';
 import type { Person } from '../../simulation/population/person';
+import { getOpinion, MARRIAGE_REFUSAL_THRESHOLD } from '../../simulation/population/opinions';
 
 // ─── Mini helpers ─────────────────────────────────────────────────────────────
 
@@ -179,7 +180,17 @@ export default function MarriageDialog({ onClose }: MarriageDialogProps) {
     }
   }
 
-  const canConfirm = !!compatibility?.allowed && !!selectedMale && !!selectedFemale;
+  const maleOpinionOfFemale = selectedMale && selectedFemale
+    ? getOpinion(selectedMale, selectedFemale.id)
+    : null;
+  const femaleOpinionOfMale = selectedMale && selectedFemale
+    ? getOpinion(selectedFemale, selectedMale.id)
+    : null;
+  const opinionGateFails =
+    maleOpinionOfFemale !== null && femaleOpinionOfMale !== null &&
+    (maleOpinionOfFemale < MARRIAGE_REFUSAL_THRESHOLD || femaleOpinionOfMale < MARRIAGE_REFUSAL_THRESHOLD);
+
+  const canConfirm = !!compatibility?.allowed && !!selectedMale && !!selectedFemale && !opinionGateFails;
 
   // Informal union eligibility
   const informalMales   = allPeople.filter(p => p.sex === 'male'   && p.age >= 16);
@@ -385,7 +396,20 @@ export default function MarriageDialog({ onClose }: MarriageDialogProps) {
                   </span>
                   <span className="text-stone-500">Cultural distance:</span>
                   <span>{culturalDistanceLabel(selectedMale, selectedFemale)}</span>
+                  <span className="text-stone-500">His opinion of her:</span>
+                  <span className={maleOpinionOfFemale !== null && maleOpinionOfFemale < MARRIAGE_REFUSAL_THRESHOLD ? 'text-red-400 font-semibold' : maleOpinionOfFemale !== null && maleOpinionOfFemale > 0 ? 'text-green-300' : 'text-stone-400'}>
+                    {maleOpinionOfFemale !== null ? (maleOpinionOfFemale > 0 ? `+${maleOpinionOfFemale}` : `${maleOpinionOfFemale}`) : '—'}
+                  </span>
+                  <span className="text-stone-500">Her opinion of him:</span>
+                  <span className={femaleOpinionOfMale !== null && femaleOpinionOfMale < MARRIAGE_REFUSAL_THRESHOLD ? 'text-red-400 font-semibold' : femaleOpinionOfMale !== null && femaleOpinionOfMale > 0 ? 'text-green-300' : 'text-stone-400'}>
+                    {femaleOpinionOfMale !== null ? (femaleOpinionOfMale > 0 ? `+${femaleOpinionOfMale}` : `${femaleOpinionOfMale}`) : '—'}
+                  </span>
                 </div>
+                {opinionGateFails && (
+                  <p className="mt-2 text-red-400 text-xs border border-red-800 rounded px-2 py-1 bg-red-950/40">
+                    ✗ One or both parties refuses this union — their opinion is too low.
+                  </p>
+                )}
                 {langCompat === 'none' && (
                   <p className="mt-2 text-amber-400 text-xs border border-amber-700 rounded px-2 py-1 bg-amber-950/40">
                     ⚠ No shared language — this couple will struggle to communicate.

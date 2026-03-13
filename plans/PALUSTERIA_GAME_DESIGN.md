@@ -1,6 +1,6 @@
 # Palusteria: Children of the Ashmark — Game Design Document
 
-**Version:** 1.1 (updated after Phase 3.5 — Household Depth)  
+**Version:** 1.4 (updated after Phase 3.8 — Cultural Identity Pressure)  
 **Document Type:** Game Design (What & Why)  
 **Companion Document:** `PALUSTERIA_ARCHITECTURE.md` (How)  
 **Setting:** The Ashmark region of Palusteria
@@ -200,9 +200,36 @@ Some traits conflict — a person cannot be both Brave and Craven, or both Kind 
 
 ### 6.2 Opinions
 
-Every person holds opinions (-100 to +100) of others they know, modified by shared culture, religion, family bonds, trait interactions, and event history. Opinions drive autonomous behavior at higher population levels and influence event outcomes. Opinions decay toward neutral over time unless reinforced.
+Every person holds opinions (-100 to +100) of others they know, modified by shared culture, religion, family bonds, trait interactions, and event history. Opinions decay toward neutral over time unless reinforced.
 
-### 6.3 Future Expansion
+**Baseline sources:** Shared primary culture (+10), shared religion (+8), no common language above fluency 0.30 (−15), Tradetalk-only bridge (−5), trait conflicts (−10 to −20), shared rare traits (+8 to +12). Baselines are computed once when two people first encounter each other, then drift and decay with each passing turn.
+
+**Per-turn drift:** Same-culture pairs drift +1/turn; pairs with no shared language drift −1/turn. All stored opinions decay 1 point toward 0 each turn and are removed when they reach 0.
+
+**Marriage gate:** Neither party can marry or form an informal union if their opinion of the other is below −30.
+
+**Tracking cap (`OPINION_TRACK_CAP = 150`):** Below this population size all pairs are actively tracked; above it only established entries are updated. This keeps the system performant at larger scales.
+
+Opinions are visible in the PersonDetail panel as colour-coded chips (top‐3 positive in green, top-3 negative in red) with hover tooltips showing the breakdown by source.
+**Event-driven decaying modifiers:** Alongside the permanent `relationships` score, each person carries an `opinionModifiers` list of timed experience entries. These model the emotional residue of a shared event — a joint project that succeeded, a bitter quarrel that was never fully resolved, a publicly praised act of generosity. Each modifier has a label, a signed value (positive = favour, negative = disfavour), and a duration: the magnitude of the value is exactly the number of turns the modifier persists, decaying by 1 per turn until it is gone.
+
+New event consequences `modify_opinion_pair` and `modify_opinion_labeled` create timed modifiers. When an event resolves with multiple named actors, a small automatic `+2 "Shared: {event title}"` bond is applied between every co-actor pair unless the choice explicitly opts out (`skipActorBond: true` — used for hostile or quarrel outcomes). The tooltip in PersonDetail shows the countdown: **Joint project: +8 (6t)**.
+### 6.3 Character Autonomy
+
+Each settler can hold one active `PersonAmbition` at a time — a personal goal that grows in intensity each turn until it drives an event.
+
+**Five ambition types:**
+- `seek_spouse` — an unmarried adult wants to marry
+- `seek_council` — a skilled leader or diplomat wants a Council seat
+- `seek_seniority` — a wife in a polygamous household wants the senior position
+- `seek_cultural_duty` — a Sauromatian man wants to fulfil the keth-thara vow
+- `seek_informal_union` — two attracted people want to formalise their bond
+
+**Intensity:** Ambitions start at 10% intensity and grow +5% per turn. The `content` trait blocks intensity growth. At 70% intensity (`AMBITION_FIRING_THRESHOLD`), the ambition can trigger one of five autonomous events in `definitions/relationships.ts`.
+
+Ambitions are visible as a badge in each settler's detail panel, colour-coded by intensity (grey → amber → rose).
+
+### 6.4 Future Expansion
 
 The architecture reserves a module slot for a deeper Dwarf Fortress-style mood/needs system. When built, traits will modify how needs are weighted (a Gregarious person has higher social needs) and how mood is calculated, but the existing trait system won't change.
 
@@ -311,19 +338,73 @@ When arranging a marriage, the `MarriageDialog` warns the player if the two peop
 
 ### 9.2 Religion
 
-Three traditions plus a syncretic blend:
+Three faiths are active in the settlement from the founding generation:
 
-**Imanian Orthodoxy:** Formal, hierarchical, patriarchal. The Company expects it.
+**Imanian Orthodoxy (`imanian_orthodox`):** Formal, hierarchical, patriarchal. The Ansberry Company expects it. Founding traders all practice it. The Company's annual chaplain event attempts to keep it dominant.
 
-**Sauromatian Sacred Wheel:** Animist, matriarchal, connected to land and spirits.
+**Sauromatian Sacred Wheel (`sacred_wheel`):** Animist, matriarchal, tied to Kethara and the turning of seasons. Every Sauromatian founding woman practices it. Carries the fertility resonance of Kethara's Bargain.
 
-**Syncretic (Hidden Wheel):** The Townborn synthesis — Imanian saints mapped onto Sauromatian spirits. Emerges naturally in mixed communities.
+**Syncretic Hidden Wheel (`syncretic_hidden_wheel`):** The Townborn synthesis — Imanian saints mapped onto Sauromatian spirits. Never imported; it *emerges*. After 20 consecutive turns where both Orthodox and Wheel each claim at least 15% of the population, the Hidden Wheel crystallises as a third tradition. Until then it exists only as a counter the player cannot see.
 
-Religious tension generates events. An Imanian zealot demands you ban Sauromatian ceremonies. A Sauromatian elder threatens to leave if you enforce Imanian worship. Your choices shape which tradition dominates.
+#### Religious Tension
+
+Tension peaks at 1.0 on an exact 50/50 Orthodox/Wheel split and drops as one tradition dominates or as the Hidden Wheel spreads (three-way splits damp the conflict). High tension (> 0.75) gates the `rel_tension_eruption` event. Orthodox + Wheel coexistence that isn’t actively suppressed also advances the divergence counter.
+
+#### Religious Policy
+
+The settlement has a `religiousPolicy` that the player sets from the Religion panel:
+
+| Policy | Effect |
+|--------|-------|
+| `tolerant` | Default. No bonus, no penalty. Both faiths coexist openly. |
+| `orthodox_enforced` | Freezes the Hidden Wheel counter. Eliminates Company pressure drain. Sauromatian women resent it. |
+| `wheel_permitted` | Normal Company drain plus a flat −1 standing/year. Sauromatian women gain +5 opinion of the settlement. |
+| `hidden_wheel_recognized` | Only available after Hidden Wheel emerges. Doubles Company pressure drain. Doubles Hidden Wheel spread rate. |
+
+#### Company Religious Pressure
+
+Each Winter (at dusk), if Sacred Wheel followers exceed 25% of the population, the Company’s support standing takes an annual drain: `−round((wheelFraction − 0.25) × 10)`, capped at −5 per year. The drain doubles under `hidden_wheel_recognized` and falls to zero under `orthodox_enforced`. This is the invisible long-term cost of welcoming and integrating Sauromatian women without enforcing the Company’s faith.
+
+#### The Hidden Wheel
+
+Once emerged, the Hidden Wheel is a permanent third tradition. The `rel_hidden_wheel_emerges` event fires as a player-facing choice: the player must decide how to respond, which sets the religious policy going forward. Suppression (`set_hidden_wheel_suppressed` consequence) is possible but temporary — unless policy shifts to `orthodox_enforced`, the counter resumes after the suppression period ends.
+
+#### Priesthood Roles
+
+Three work roles represent religious specialists:
+- `priest_solar` — Imanian Orthodox. Male, age ≥ 25, leadership ≥ 30.
+- `wheel_singer` — Sacred Wheel. Female preferred, age ≥ 20, custom ≥ 30.
+- `voice_of_wheel` — Hidden Wheel. Requires `hiddenWheelEmerged`, custom ≥ 40.
+
+Religious tension generates events throughout. An Imanian zealot demands you ban Sauromatian ceremonies. A Sauromatian elder threatens to leave if you enforce Imanian worship. A wheel-singer begins quietly teaching a syncretic synthesis. Your choices shape which tradition eventually defines the settlement’s spiritual identity.
 
 ### 9.3 Settlement Culture
 
 The settlement's overall cultural character is an emergent property calculated from population composition, language distribution, religious practice, governance style, and active cultural practices (warrior training, bathhouse culture, chivalric codes, matriarchal/patriarchal households). This profile shifts over time as demographics change — a slow drift that the player can influence but never fully control.
+
+### 9.4 Cultural Identity Pressure
+
+The settlement's **cultural blend** is a continuous value from 0.0 (fully Imanian Ansberite) to 1.0 (fully Sauromatian native). This number emerges from demographics — who is alive, what culture they identify with, and how the settlement's character has drifted over generations.
+
+The blend is not just a statistic. It has external consequences that operate in the background every season.
+
+**Five zones with distinct effects:**
+
+| Zone | Blend range | Company reaction | Tribal reaction |
+|------|------------|-----------------|------------------|
+| Extreme Ansberite | < 0.10 | +0.5 standing/season | Tribes grow suspicious |
+| Soft Ansberite | 0.10–0.25 | +0.25 standing/season | Mild tribal unease |
+| Safe | 0.25–0.65 | No effect | No effect |
+| Soft Native | 0.65–0.80 | −0.5 standing/season | Tribes warm to you |
+| Extreme Native | > 0.80 | −1.5 standing/season | Tribes embrace you fully |
+
+The Company approves of an Imanian-character outpost; too Sauromatian and it begins to question your loyalty. The tribes respond inversely: a settlement that looks and feels like them is a neighbour; a settlement that feels like a foreign enclave is a threat.
+
+Tribal reactions are weighted by each tribe's behavioural traits. Warlike tribes react more strongly to an Imanian-character settlement (they see opportunity). Isolationist tribes ignore cultural signals almost entirely. Peaceful and trader tribes respond modestly.
+
+When the blend has been outside the safe zone for several consecutive seasons, **pressure counters** accumulate. These counters gate a set of identity events that force the player to respond — a Company inspector arrives, an elder extends a tribal invitation, a Sauromatian settler privately expresses feeling like a stranger in their own home.
+
+The player can see the current blend, zone, and pressure counters at any time in the Religion sidebar via the `IdentityScale` widget. The blend itself cannot be directly set — it can only be influenced by event consequences (`modify_cultural_blend`) that represent significant deliberate acts, like hosting a formal Imanian ceremony or a native celebration.
 
 ---
 

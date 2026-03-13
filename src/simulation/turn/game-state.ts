@@ -247,6 +247,22 @@ export interface SettlementCulture {
    * Contributes to cultural friction and gates language-conflict events.
    */
   languageTension: number;
+  /**
+   * Consecutive turns where both imanian_orthodox ≥ 15% AND sacred_wheel ≥ 15%.
+   * Reaches 20 (5 in-game years) → fires the Hidden Wheel emergence event and resets.
+   * Frozen while hiddenWheelSuppressedTurns > 0. Resets to 0 if either faith drops below threshold.
+   */
+  hiddenWheelDivergenceTurns: number;
+  /**
+   * Remaining cooldown turns after the player suppresses emergence.
+   * While > 0, hiddenWheelDivergenceTurns does not advance.
+   */
+  hiddenWheelSuppressedTurns: number;
+  /**
+   * True once the player has acknowledged or recognised the Hidden Wheel.
+   * Enables conversion events and (if policy = hidden_wheel_recognized) active spread.
+   */
+  hiddenWheelEmerged: boolean;
 }
 
 // ─── Settlement ───────────────────────────────────────────────────────────────
@@ -316,6 +332,16 @@ export interface ConstructionProject {
   resourcesSpent: Partial<ResourceStock>;
 }
 
+/**
+ * The player's current religious mandate for the settlement.
+ * Set through player choices in the Religion panel or specific event outcomes.
+ */
+export type ReligiousPolicy =
+  | 'tolerant'               // Default. No enforcement. All faiths practise freely.
+  | 'orthodox_enforced'      // Wheel ceremonies restricted. Company approves.
+  | 'wheel_permitted'        // Wheel ceremonies officially recognised.
+  | 'hidden_wheel_recognized'; // Syncretic faith given formal standing. Requires hiddenWheelEmerged.
+
 /** The physical settlement: its location, constructions, and resource stockpile. */
 export interface Settlement {
   /** Player-chosen display name of the settlement. */
@@ -337,6 +363,8 @@ export interface Settlement {
    * Use this for display performance rather than `state.people.size`.
    */
   populationCount: number;
+  /** The player's current religious mandate for the settlement. Defaults to 'tolerant'. */
+  religiousPolicy: ReligiousPolicy;
 }
 
 // ─── Turn & Season ────────────────────────────────────────────────────────────
@@ -414,6 +442,24 @@ export interface GameConfig {
    * falls back to kiswani_riverfolk if no tribes are selected.
    */
   includeSauromatianWomen?: boolean;
+}
+
+// ─── Cultural Identity Pressure ───────────────────────────────────────────────
+
+/**
+ * Pressure counters tracking how many consecutive seasons the settlement has
+ * spent outside the cultural identity safe zone (0.25–0.65 blend).
+ *
+ * companyPressureTurns — seasons in the Soft/Extreme Native zones (blend > 0.65).
+ *   The Company grows concerned that the settlement is "going native".
+ * tribalPressureTurns — seasons in the Soft/Extreme Imanian zones (blend < 0.25).
+ *   Surrounding tribes grow quietly hostile to the foreign enclave.
+ *
+ * Both counters reset to 0 the moment the blend re-enters the safe zone.
+ */
+export interface IdentityPressure {
+  companyPressureTurns: number;
+  tribalPressureTurns: number;
 }
 
 // ─── Game Flags ───────────────────────────────────────────────────────────────
@@ -505,4 +551,10 @@ export interface GameState {
 
   /** One-time event flags — prevent duplicate notifications across turns. */
   flags: GameFlags;
+
+  /**
+   * Consecutive-season counters for cultural identity pressure.
+   * Drive passive standing/disposition deltas and gate identity events.
+   */
+  identityPressure: IdentityPressure;
 }

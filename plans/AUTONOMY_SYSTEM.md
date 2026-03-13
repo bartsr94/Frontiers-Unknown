@@ -2,7 +2,7 @@
 
 **Feature:** Character Agency & Ambitions  
 **Phase:** Phase B of the Autonomous Character Agency System  
-**Status:** Planned  
+**Status:** ✅ Implemented (Phase 3.6)  
 **Prerequisite:** `OPINIONS_SYSTEM.md` (Phase A) must be implemented first  
 **Companion doc:** `OPINIONS_SYSTEM.md`
 
@@ -66,7 +66,7 @@ Evaluated every **8 turns** per person in `processDawn()`. Checked in priority o
 | Ambition | Generation condition |
 |---|---|
 | `seek_spouse` | Unmarried, age ≥ 18, has opinion ≥ 40 of any eligible marriage partner *(opposite sex, appropriate age, no shared parents, spouse slot available under their cultural rules)* |
-| `seek_council` | Not on council, in settlement ≥ 4 turns, leadership OR diplomacy skill ≥ 55 (Good–Very Good) |
+| `seek_council` | Not on council, in settlement ≥ 4 turns, leadership OR diplomacy skill ≥ **46** (Very Good) |
 | `seek_seniority` | `householdRole === 'wife'`, household has ≥ 3 wives, opinion of current `seniorWifeId` < 0 |
 | `seek_cultural_duty` | Male, age 16–24, `primaryCulture` in `SAUROMATIAN_CULTURE_IDS`, no prior keth-thara duty in `eventHistory` |
 | `seek_informal_union` | Male, `primaryCulture` Imanian (concubine rules allow), opinion ≥ 50 of an unmarried adult woman already in the settlement |
@@ -227,13 +227,17 @@ export function tickAmbitionIntensity(person: Person): Person
 
 | Step | File | Action |
 |------|------|--------|
-| 1 | `src/simulation/population/person.ts` | Add `AmbitionId`, `PersonAmbition` types; add `ambition: PersonAmbition \| null` to `Person`; update `createPerson()` and `deserializePerson()` |
-| 2 | `src/simulation/population/ambitions.ts` | **New module** — `generateAmbition`, `evaluateAmbition`, `getAmbitionLabel`, `tickAmbitionIntensity` |
-| 3 | `src/simulation/turn/turn-processor.ts` | Wire into `processDawn()`: every 8 turns — `evaluateAmbition` + clear; `generateAmbition` for persons without one; every turn — `tickAmbitionIntensity` for persons with active ambition |
-| 4 | `src/simulation/events/engine.ts` | Add `has_person_with_ambition` to `EventPrerequisite` union |
-| 5 | `src/simulation/events/event-filter.ts` | Evaluate `has_person_with_ambition`; add 5 new events to `ALL_EVENTS` |
-| 6 | `src/simulation/events/definitions/relationships.ts` | Add 5 ambition-driven events (Phase B block, alongside the 3 tension events from Phase A) |
-| 7 | `src/ui/views/PersonDetail.tsx` | Add ambition badge near name/status — amber pill, text from `getAmbitionLabel()`, hidden when `ambition === null` |
+| ✅ 1 | `src/simulation/population/person.ts` | Add `AmbitionId`, `PersonAmbition` types; add `ambition: PersonAmbition \| null` to `Person`; update `createPerson()` and `deserializePerson()` |
+| ✅ 2 | `src/simulation/population/ambitions.ts` | **New module** — `generateAmbition`, `evaluateAmbition`, `getAmbitionLabel`, `tickAmbitionIntensity`, `getAmbitionIntensityClass`, `clearAmbition`, `determineAmbitionType` |
+| ✅ 3 | `src/simulation/turn/turn-processor.ts` | Wire into `processDawn()`: every 8 turns — `evaluateAmbition` + clear; `generateAmbition` for persons without one; every turn — `tickAmbitionIntensity` for persons with active ambition |
+| ✅ 4 | `src/simulation/events/engine.ts` | Add `has_person_with_ambition` to `EventPrerequisite` union |
+| ✅ 5 | `src/simulation/events/event-filter.ts` | Evaluate `has_person_with_ambition`; add 5 new events to `ALL_EVENTS` |
+| ✅ 6 | `src/simulation/events/definitions/relationships.ts` | **New file** — 5 ambition-driven events (alongside opinion-tension events from Phase A) |
+| ✅ 7 | `src/ui/views/PersonDetail.tsx` | Ambition badge below traits — colour-coded by intensity (grey/amber/rose), intensity progress bar, hover shows exact % |
+
+> **Note on `seek_council` threshold:** The design doc originally specified ≥ 55. The final implementation uses **≥ 46** (start of the Very Good rating band) because founding settlers' VG-range leadership scores typically fall in the 46–54 window, making 55 too restrictive for game start.
+>
+> **`AMBITION_FIRING_THRESHOLD = 0.7`** — events can fire at 70% intensity (design text that mentioned 0.5 was superseded during implementation).
 
 ---
 

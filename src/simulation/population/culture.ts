@@ -18,6 +18,8 @@ import type { Person, CultureId, BloodlineEntry, Heritage } from './person';
 import type { ReligionId } from './person';
 import type { SeededRNG } from '../../utils/rng';
 import type { CulturePullModifier } from '../buildings/building-effects';
+import type { ReligiousPolicy } from '../turn/game-state';
+import { clamp } from '../../utils/math';
 
 // ─── Culture Labels ───────────────────────────────────────────────────────────
 
@@ -335,4 +337,114 @@ export function processCulturalDrift(
   }
 
   return result;
+}
+
+// ─── Religious Tension ────────────────────────────────────────────────────────
+
+/**
+ * Computes religious tension (0.0–1.0) from the settlement's current religious
+ * composition.
+ *
+ * Formula:
+ *   rawTension  = 4 × orthodoxFraction × wheelFraction
+ *                 (peaks at 1.0 when 50/50 — same structure as languageTension)
+ *   hiddenDamping = clamp(1 − hiddenFraction × 2, 0, 1)
+ *                 (Hidden Wheel at 50% completely damps tension)
+ *   result = rawTension × hiddenDamping
+ *
+ * Key properties:
+ *   - Pure Orthodox or pure Wheel        → tension = 0
+ *   - 50/50 Orthodox/Wheel split          → tension = 1.0
+ *   - 30/40/30 Orthodox/Wheel/Hidden      → tension ≈ 0.67
+ *   - Equal three-way split               → tension ≈ 0
+ */
+export function computeReligiousTension(religions: Map<ReligionId, number>): number {
+  const orthodox = religions.get('imanian_orthodox') ?? 0;
+  const wheel    = religions.get('sacred_wheel') ?? 0;
+  const hidden   = religions.get('syncretic_hidden_wheel') ?? 0;
+  const rawTension   = 4 * orthodox * wheel;
+  const hiddenDamping = clamp(1 - hidden * 2, 0, 1);
+  return clamp(rawTension * hiddenDamping, 0, 1);
+}
+
+// ─── Hidden Wheel Divergence ──────────────────────────────────────────────────
+
+export interface HiddenWheelDivergenceResult {
+  updatedDivergenceTurns: number;
+  updatedSuppressedTurns: number;
+  shouldFireEvent: boolean;
+}
+
+/**
+ * Advances or resets the Hidden Wheel divergence counter each dawn.
+ *
+ * Rules:
+ *   1. If suppressedTurns > 0 → decrement cooldown; do NOT advance divergence
+ *      counter (suppression freezes the clock).
+ *   2. Else if both Orthodox ≥ 15% AND Wheel ≥ 15% AND policy ≠ 'orthodox_enforced':
+ *      - Increment the counter.
+ *      - When it reaches 20 (5 game-years) → shouldFireEvent = true, reset to 0.
+ *   3. Else → reset divergence counter to 0 (a gap breaks the streak).
+ */
+export function computeHiddenWheelDivergence(
+  divergenceTurns: number,
+  suppressedTurns: number,
+  religions: Map<ReligionId, number>,
+  policy: ReligiousPolicy,
+): HiddenWheelDivergenceResult {
+  if (suppressedTurns > 0) {
+    return {
+      updatedDivergenceTurns: divergenceTurns,
+      updatedSuppressedTurns: suppressedTurns - 1,
+      shouldFireEvent: false,
+    };
+  }
+
+  const orthodox = religions.get('imanian_orthodox') ?? 0;
+  const wheel    = religions.get('sacred_wheel') ?? 0;
+
+  if (orthodox >= 0.15 && wheel >= 0.15 && policy !== 'orthodox_enforced') {
+    const next = divergenceTurns + 1;
+    if (next >= 20) {
+      return { updatedDivergenceTurns: 0, updatedSuppressedTurns: 0, shouldFireEvent: true };
+    }
+    return { updatedDivergenceTurns: next, updatedSuppressedTurns: 0, shouldFireEvent: false };
+  }
+
+  return { updatedDivergenceTurns: 0, updatedSuppressedTurns: 0, shouldFireEvent: false };
+}
+
+// ─── Company Religious Pressure ───────────────────────────────────────────────
+
+/**
+ * Computes the Ansberry Company standing delta caused by the settlement's
+ * religious composition. Applied once per year in Winter processDusk().
+ *
+ * Drain formula (wheel fraction above 0.25):
+ *   base delta = −floor((wheelFraction − 0.25) × 10), capped at −5/yr
+ *
+ * Policy modifiers:
+ *   'orthodox_enforced'      → delta = 0 (Company mandate satisfied)
+ *   'hidden_wheel_recognized' → delta × 2 (Company finds synthesis worse)
+ *
+ * @returns Standing delta (negative number or 0). Caller applies to company.standing.
+ */
+export function computeCompanyReligiousPressure(
+  religions: Map<ReligionId, number>,
+  policy: ReligiousPolicy,
+): number {
+  if (policy === 'orthodox_enforced') return 0;
+
+  const wheel = religions.get('sacred_wheel') ?? 0;
+  const THRESHOLD = 0.25;
+  if (wheel <= THRESHOLD) return 0;
+
+  let delta = -Math.round((wheel - THRESHOLD) * 10);
+  delta = Math.max(delta, -5);
+
+  if (policy === 'hidden_wheel_recognized') {
+    delta = Math.max(delta * 2, -10);
+  }
+
+  return delta;
 }

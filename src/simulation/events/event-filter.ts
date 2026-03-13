@@ -10,9 +10,13 @@
  */
 
 import type { GameEvent, EventPrerequisite, DeferredEventEntry, ActorCriteria } from './engine';
-import type { GameState, ResourceType, BuildingId } from '../turn/game-state';
+import type { GameState, ResourceType, BuildingId, ReligiousPolicy } from '../turn/game-state';
+import type { ReligionId } from '../population/person';
+import { computeReligiousTension } from '../population/culture';
 import type { SeededRNG } from '../../utils/rng';
 import { hasBuilding, lacksBuilding, getOvercrowdingRatio } from '../buildings/building-effects';
+import { AMBITION_FIRING_THRESHOLD } from '../population/ambitions';
+import { getEffectiveOpinion } from '../population/opinions';
 import { canResolveActors, matchesCriteria } from './actor-resolver';
 
 import { ENVIRONMENTAL_EVENTS } from './definitions/environmental';
@@ -23,6 +27,9 @@ import { DIPLOMACY_EVENTS }     from './definitions/diplomacy';
 import { CULTURAL_EVENTS }      from './definitions/cultural';
 import { BUILDING_EVENTS }      from './definitions/building';
 import { HOUSEHOLD_EVENTS }     from './definitions/household';
+import { RELATIONSHIP_EVENTS }  from './definitions/relationships';
+import { RELIGIOUS_EVENTS }     from './definitions/religious';
+import { IDENTITY_EVENTS }      from './definitions/identity';
 
 // ─── Master event deck ────────────────────────────────────────────────────────
 
@@ -36,6 +43,9 @@ export const ALL_EVENTS: GameEvent[] = [
   ...CULTURAL_EVENTS,
   ...BUILDING_EVENTS,
   ...HOUSEHOLD_EVENTS,
+  ...RELATIONSHIP_EVENTS,
+  ...RELIGIOUS_EVENTS,
+  ...IDENTITY_EVENTS,
 ];
 
 // ─── Prerequisite checking ────────────────────────────────────────────────────
@@ -96,6 +106,68 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
     case 'has_ashka_melathi_bond': {
       const households = state.households ?? new Map();
       return Array.from(households.values()).some(h => h.ashkaMelathiBonds.length > 0);
+    }
+    case 'min_opinion_pair': {
+      // True when at least one living person holds an effective opinion of another AT OR ABOVE threshold.
+      // Effective opinion = base (relationships) + active timed modifiers.
+      const threshold = prereq.params.threshold as number;
+      return Array.from(state.people.values()).some(person => {
+        // Gather all targets: base relationships + modifier targets
+        const targetIds = new Set<string>([
+          ...person.relationships.keys(),
+          ...(person.opinionModifiers ?? []).map(m => m.targetId),
+        ]);
+        return Array.from(targetIds).some(targetId => getEffectiveOpinion(person, targetId) >= threshold);
+      });
+    }
+    case 'max_opinion_pair': {
+      // True when at least one living person holds an effective opinion of another AT OR BELOW threshold.
+      const threshold = prereq.params.threshold as number;
+      return Array.from(state.people.values()).some(person => {
+        const targetIds = new Set<string>([
+          ...person.relationships.keys(),
+          ...(person.opinionModifiers ?? []).map(m => m.targetId),
+        ]);
+        return Array.from(targetIds).some(targetId => getEffectiveOpinion(person, targetId) <= threshold);
+      });
+    }
+    case 'has_person_with_ambition': {
+      const ambitionId = prereq.params.ambitionId as string | undefined;
+      return Array.from(state.people.values()).some(person => {
+        if (!person.alive) return false;
+        if (!person.ambition) return false;
+        if (person.ambition.intensity < AMBITION_FIRING_THRESHOLD) return false;
+        if (ambitionId && person.ambition.type !== ambitionId) return false;
+        return true;
+      });
+    }
+    case 'religion_fraction_above': {
+      const religion = prereq.params['religion'] as ReligionId;
+      const threshold = prereq.params['threshold'] as number;
+      return (state.culture.religions.get(religion) ?? 0) >= threshold;
+    }
+    case 'religion_fraction_below': {
+      const religion = prereq.params['religion'] as ReligionId;
+      const threshold = prereq.params['threshold'] as number;
+      return (state.culture.religions.get(religion) ?? 0) <= threshold;
+    }
+    case 'religious_tension_above': {
+      const threshold = prereq.params['threshold'] as number;
+      return computeReligiousTension(state.culture.religions) >= threshold;
+    }
+    case 'religious_policy_is': {
+      const policy = prereq.params['policy'] as ReligiousPolicy;
+      return state.settlement.religiousPolicy === policy;
+    }
+    case 'hidden_wheel_emerged':
+      return state.culture.hiddenWheelEmerged === true;
+    case 'min_company_pressure_turns': {
+      const turns = prereq.params['turns'] as number;
+      return (state.identityPressure?.companyPressureTurns ?? 0) >= turns;
+    }
+    case 'min_tribal_pressure_turns': {
+      const turns = prereq.params['turns'] as number;
+      return (state.identityPressure?.tribalPressureTurns ?? 0) >= turns;
     }
     default:
       return true;

@@ -21,8 +21,9 @@
 
 import type { ActorCriteria, ActorRequirement } from './engine';
 import type { GameState } from '../turn/game-state';
-import type { Person, DerivedSkillId, SkillId, HouseholdRole } from '../population/person';
-import { DERIVED_SKILL_IDS, getPersonSkillScore } from '../population/person';
+import type { Person, HouseholdRole } from '../population/person';
+import { getPersonSkillScore } from '../population/person';
+import { SAUROMATIAN_CULTURE_IDS } from '../population/culture';
 import type { SeededRNG } from '../../utils/rng';
 
 // ─── Criteria matching ────────────────────────────────────────────────────────
@@ -52,6 +53,8 @@ export function matchesCriteria(person: Person, criteria: ActorCriteria): boolea
     const score = getPersonSkillScore(person, criteria.minSkill.skill);
     if (score < criteria.minSkill.value) return false;
   }
+  if (criteria.sauromatianHeritage === true &&
+      !SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture)) return false;
   return true;
 }
 

@@ -145,9 +145,11 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
         onSuccess: [
           { type: 'modify_resource', target: 'food',  value: 7 },
           { type: 'modify_resource', target: 'goods', value: 2 },
+          { type: 'modify_opinion_pair', target: '{lead}', value: 8, params: { slotB: '{partner}', label: 'Joint project' } },
         ],
         onFailure: [
           { type: 'modify_resource', target: 'food', value: 2 },
+          { type: 'modify_opinion_pair', target: '{lead}', value: -4, params: { slotB: '{partner}', label: 'Disagreement' } },
         ],
       },
       {
@@ -393,20 +395,27 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
         id: 'bless_union',
         label: 'Give them your blessing. Let them find their own way.',
         description: 'A small happiness in a hard place. Both will work better for it.',
-        consequences: [],
+        consequences: [
+          { type: 'modify_opinion_pair', target: '{suitor}', value: 8, params: { slotB: '{beloved}', label: 'Blessed union' } },
+        ],
       },
       {
         id: 'forbid',
         label: 'Forbid it. The settlement is not a matchmaking house.',
         description: 'He is chastened. She is confused. Neither is pleased with you.',
-        consequences: [],
+        skipActorBond: true,
+        consequences: [
+          { type: 'modify_opinion_pair', target: '{suitor}', value: -6, params: { slotB: '{beloved}', label: 'Forbidden affection' } },
+        ],
       },
       {
         id: 'arrange_formally',
         label: 'Arrange it formally, with gifts and acknowledgment. (−5 goods)',
         description: 'Doing it properly shows respect for her culture and his commitment. A better outcome for all.',
+        skipActorBond: true,
         consequences: [
           { type: 'modify_resource', target: 'goods', value: -5 },
+          { type: 'modify_opinion_pair', target: '{suitor}', value: 15, params: { slotB: '{beloved}', label: 'Formally acknowledged' } },
         ],
       },
     ],

@@ -27,6 +27,8 @@ import { getSkillRating, getDerivedSkill } from '../../simulation/population/per
 import type { SkillId, DerivedSkillId, SkillRating } from '../../simulation/population/person';
 import type { TraitId } from '../../simulation/personality/traits';
 import { ROLE_LABELS, ROLE_COLORS } from '../shared/role-display';
+import { getAmbitionLabel, getAmbitionIntensityClass } from '../../simulation/population/ambitions';
+import { computeOpinionBreakdown, getEffectiveOpinion } from '../../simulation/population/opinions';
 
 // ─── Bloodline colours ────────────────────────────────────────────────────────
 
@@ -167,6 +169,24 @@ const RATING_TEXT_CLASS: Record<SkillRating, string> = {
   renowned:  'text-purple-400',
   heroic:    'text-amber-400',
 };
+
+const RATING_ABBR: Record<SkillRating, string> = {
+  fair:      'FR',
+  good:      'GD',
+  very_good: 'VG',
+  excellent: 'EX',
+  renowned:  'RN',
+  heroic:    'HR',
+};
+
+const RATING_BORDER_CLASS: Record<SkillRating, string> = {
+  fair:      'border-l-slate-500',
+  good:      'border-l-green-600',
+  very_good: 'border-l-teal-500',
+  excellent: 'border-l-blue-500',
+  renowned:  'border-l-purple-500',
+  heroic:    'border-l-amber-400',
+};
 // ─── Section components ───────────────────────────────────────────────────────
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
@@ -251,7 +271,6 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
     imanian_orthodox:       'Imanian Orthodox',
     sacred_wheel:           'Sacred Wheel',
     syncretic_hidden_wheel: 'Hidden Wheel (syncretic)',
-    irreligious:            'Irreligious',
   };
 
   // ── Culture label ─────────────────────────────────────────────────────────
@@ -260,7 +279,7 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <aside className="w-80 flex-shrink-0 bg-stone-900 border-l border-stone-700 flex flex-col overflow-hidden">
+<aside className="w-full flex-shrink-0 bg-stone-900 border-l border-stone-700 flex flex-col overflow-hidden">
 
       {/* ── Header bar ── */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-stone-700 bg-stone-950">
@@ -421,51 +440,65 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
         ) : (
           <p className="text-stone-500 italic text-xs mb-1">Character not yet known.</p>
         )}
+
+        {/* Ambition badge */}
+        {person.ambition && (
+          <div className="mt-2 mb-1 flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${getAmbitionIntensityClass(person.ambition.intensity)}`}
+              title={`Intensity: ${(person.ambition.intensity * 100).toFixed(0)}%`}
+            >
+              ✦ {getAmbitionLabel(person.ambition)}
+            </span>
+            <div
+              className="flex-1 h-1 bg-stone-800 rounded overflow-hidden"
+              title="Ambition intensity"
+            >
+              <div
+                className="h-full rounded bg-amber-700"
+                style={{ width: `${(person.ambition.intensity * 100).toFixed(0)}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         <Divider />
 
-        {/* Skills */}
+        {/* Skills — compact 3-column chip grid */}
         <SectionHeading>Skills</SectionHeading>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-2 mb-2">
+        <div className="grid grid-cols-3 gap-1 mb-1">
           {BASE_SKILLS.map(({ id, label }) => {
             const value = person.skills[id];
             const rating = getSkillRating(value);
             return (
-              <div key={id}>
-                <div className="flex items-center justify-between text-xs mb-0.5">
-                  <span className="text-stone-300">{label}</span>
-                  <span className={`font-semibold ${RATING_TEXT_CLASS[rating]}`}>
-                    {RATING_LABELS[rating]}
-                  </span>
-                </div>
-                <div className="h-1 bg-stone-700 rounded overflow-hidden">
-                  <div
-                    className={`h-full rounded ${RATING_BAR_CLASS[rating]}`}
-                    style={{ width: `${value}%` }}
-                  />
-                </div>
+              <div
+                key={id}
+                className={`flex items-center justify-between px-2 py-1 rounded bg-stone-800 border-l-4 ${RATING_BORDER_CLASS[rating]}`}
+                title={`${label}: ${RATING_LABELS[rating]} (${value})`}
+              >
+                <span className="text-stone-300 text-[11px] truncate">{label}</span>
+                <span className={`text-[11px] font-bold ml-1 flex-shrink-0 ${RATING_TEXT_CLASS[rating]}`}>
+                  {RATING_ABBR[rating]}
+                </span>
               </div>
             );
           })}
         </div>
-        <p className="text-stone-600 text-[10px] uppercase tracking-wider mb-1.5">Derived</p>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-2 mb-1">
+        <p className="text-stone-600 text-[9px] uppercase tracking-wider mt-1.5 mb-1">Derived</p>
+        <div className="grid grid-cols-3 gap-1 mb-1">
           {DERIVED_SKILLS.map(({ id, label }) => {
             const value = getDerivedSkill(person.skills, id);
             const rating = getSkillRating(value);
             return (
-              <div key={id}>
-                <div className="flex items-center justify-between text-xs mb-0.5">
-                  <span className="text-stone-400">{label}</span>
-                  <span className={`font-semibold ${RATING_TEXT_CLASS[rating]}`}>
-                    {RATING_LABELS[rating]}
-                  </span>
-                </div>
-                <div className="h-1 bg-stone-700 rounded overflow-hidden">
-                  <div
-                    className={`h-full rounded ${RATING_BAR_CLASS[rating]}`}
-                    style={{ width: `${value}%` }}
-                  />
-                </div>
+              <div
+                key={id}
+                className={`flex items-center justify-between px-2 py-1 rounded bg-stone-800/60 border-l-4 ${RATING_BORDER_CLASS[rating]}`}
+                title={`${label}: ${RATING_LABELS[rating]} (${value})`}
+              >
+                <span className="text-stone-400 text-[11px] truncate">{label}</span>
+                <span className={`text-[11px] font-bold ml-1 flex-shrink-0 ${RATING_TEXT_CLASS[rating]}`}>
+                  {RATING_ABBR[rating]}
+                </span>
               </div>
             );
           })}
@@ -525,14 +558,22 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
 
         {/* Key Opinions */}
         {(() => {
-          const entries = Array.from(person.relationships.entries());
-          const positives = entries
-            .filter(([, v]) => v > 0)
-            .sort((a, b) => b[1] - a[1])
+          // Gather all targets from base relationships AND active timed modifiers.
+          const allTargetIds = new Set<string>([
+            ...person.relationships.keys(),
+            ...(person.opinionModifiers ?? []).map(m => m.targetId),
+          ]);
+          const opinionEntries = Array.from(allTargetIds)
+            .map(id => ({ id, score: getEffectiveOpinion(person, id) }))
+            .filter(e => e.score !== 0);
+
+          const positives = opinionEntries
+            .filter(e => e.score > 0)
+            .sort((a, b) => b.score - a.score)
             .slice(0, 3);
-          const negatives = entries
-            .filter(([, v]) => v < 0)
-            .sort((a, b) => a[1] - b[1])
+          const negatives = opinionEntries
+            .filter(e => e.score < 0)
+            .sort((a, b) => a.score - b.score)
             .slice(0, 3);
 
           if (positives.length === 0 && negatives.length === 0) {
@@ -547,16 +588,28 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
                   <div>
                     <span className="text-stone-500 text-xs">Favours:</span>
                     <div className="flex flex-wrap gap-1 mt-0.5">
-                      {positives.map(([id, score]) => (
-                        <button
-                          key={id}
-                          onClick={() => navigateTo(id)}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-950 text-green-300 hover:bg-green-900 underline decoration-dotted"
-                        >
-                          {nameOf(id)}
-                          <span className="text-green-500 font-semibold">+{score}</span>
-                        </button>
-                      ))}
+                      {positives.map(({ id, score }) => {
+                        const target = people?.get(id);
+                        const tooltip = target
+                          ? computeOpinionBreakdown(person, target)
+                              .map(({ label, delta, turnsRemaining }) => {
+                                const suffix = turnsRemaining !== undefined ? ` (${turnsRemaining}t)` : '';
+                                return `${label}: ${delta > 0 ? '+' : ''}${delta}${suffix}`;
+                              })
+                              .join('\n')
+                          : 'Person no longer in settlement';
+                        return (
+                          <button
+                            key={id}
+                            onClick={() => navigateTo(id)}
+                            title={tooltip}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-950 text-green-300 hover:bg-green-900 underline decoration-dotted"
+                          >
+                            {nameOf(id)}
+                            <span className="text-green-500 font-semibold">+{score}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -564,16 +617,28 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
                   <div>
                     <span className="text-stone-500 text-xs">Dislikes:</span>
                     <div className="flex flex-wrap gap-1 mt-0.5">
-                      {negatives.map(([id, score]) => (
-                        <button
-                          key={id}
-                          onClick={() => navigateTo(id)}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-950 text-red-300 hover:bg-red-900 underline decoration-dotted"
-                        >
-                          {nameOf(id)}
-                          <span className="text-red-500 font-semibold">{score}</span>
-                        </button>
-                      ))}
+                      {negatives.map(({ id, score }) => {
+                        const target = people?.get(id);
+                        const tooltip = target
+                          ? computeOpinionBreakdown(person, target)
+                              .map(({ label, delta, turnsRemaining }) => {
+                                const suffix = turnsRemaining !== undefined ? ` (${turnsRemaining}t)` : '';
+                                return `${label}: ${delta > 0 ? '+' : ''}${delta}${suffix}`;
+                              })
+                              .join('\n')
+                          : 'Person no longer in settlement';
+                        return (
+                          <button
+                            key={id}
+                            onClick={() => navigateTo(id)}
+                            title={tooltip}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-950 text-red-300 hover:bg-red-900 underline decoration-dotted"
+                          >
+                            {nameOf(id)}
+                            <span className="text-red-500 font-semibold">{score}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

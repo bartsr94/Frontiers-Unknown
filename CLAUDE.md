@@ -13,6 +13,9 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 | Phase 2 — Genetics Engine | ✅ Complete | All 12 steps done, 139/139 tests pass, zero compile errors |
 | Phase 3 — Living Settlement | ✅ Complete | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ · Skills system ✅ · Skilled event resolution ✅ · Council voice system ✅ · Portrait system ✅ · Settlement buildings ✅ · Event character binding ✅ · Economy system ✅ · Generic task roles ✅ · Tilled Fields building ✅ |
 | Phase 3.5 — Household Depth | ✅ Complete | Household data model ✅ · Utility module ✅ · Marriage auto-forms households ✅ · Thrall status ✅ · Keth-Thara role ✅ · Ashka-Melathi bonds ✅ · Wife-council events ✅ · PersonDetail UI ✅ · Informal Union dialog ✅ · Full test suite ✅ |
+| Phase 3.6 — Opinions & Autonomy | ✅ Complete | Opinion scores ✅ · Trait affinities/clashes ✅ · Per-turn drift & decay ✅ · Marriage opinion gate ✅ · `modify_opinion` consequence ✅ · `computeOpinionBreakdown()` tooltip ✅ · `PersonAmbition` (5 types) ✅ · Autonomous events ✅ · Ambition badge UI ✅ · Key Opinions UI ✅ · Decaying `OpinionModifier` ✅ · `modify_opinion_pair` / `modify_opinion_labeled` ✅ · Auto co-actor bond ✅ |
+| Phase 3.7 — Religion System | ✅ Complete | Three faiths (`imanian_orthodox`, `sacred_wheel`, `syncretic_hidden_wheel`) ✅ · Hidden Wheel divergence counter ✅ · Religious tension formula ✅ · Company religious pressure drain ✅ · `ReligiousPolicy` (4 values) ✅ · 7 religion events ✅ · Priesthood roles (`priest_solar`, `wheel_singer`, `voice_of_wheel`) ✅ · Religion UI panel ✅ · 19 new tests ✅ |
+| Phase 3.8 — Cultural Identity Pressure | ✅ Complete | `IdentityPressure` counters ✅ · Five-zone blend scale ✅ · Passive Company standing + tribe disposition deltas ✅ · 6 identity events ✅ · `modify_cultural_blend` / `modify_all_tribe_dispositions` consequences ✅ · `sauromatianHeritage` actor criterion ✅ · `IdentityScale` UI widget ✅ · 35 new tests ✅ |
 | Phase 4 — Polish | 🔲 Not started | — |
 ---
 
@@ -74,7 +77,7 @@ If the exact age stage has no portraits yet, the resolver tries: `adult` → `yo
 
 ```bash
 npm run dev          # Vite dev server → http://localhost:5173
-npm test             # Run Vitest (713 passing across 23 test files)
+npm test             # Run Vitest (853 passing across 27 test files)
 npx tsc --noEmit     # Type-check without building
 ```
 
@@ -115,8 +118,10 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/events/event-filter.ts` | `ALL_EVENTS`, `filterEligibleEvents()`, `drawEvents()`; `canResolveActors` gate makes `actorRequirements` act as implicit event prerequisites |
 | `src/simulation/events/resolver.ts` | `applyEventChoice(event, choiceId, state, rng?, boundActors?)` returning `ApplyChoiceResult`; `resolveSkillCheck()` helper; `resolveConsequenceTarget()` (maps `{slot}` targets to person IDs); `add_person` consequence handler |
 | `src/simulation/events/actor-resolver.ts` | Actor binding engine: `matchesCriteria`, `canFillSlot`, `canResolveActors`, `selectActor`, `resolveActors`, `interpolateText` — pure TS, zero React, seeded RNG only |
-| `src/simulation/events/definitions/` | 39 events across 8 files; all events with named actors have `actorRequirements` |
+| `src/simulation/events/definitions/` | 57 events across 9 files; all events with named actors have `actorRequirements` |
 | `src/simulation/events/definitions/household.ts` | 6 household/domestic events: `hh_tribal_thrall_offer`, `hh_thrall_elevation`, `hh_wife_council_demands`, `hh_tradition_clash`, `hh_ashka_melathi_deepens`, `hh_keth_thara_service_ends` |
+| `src/simulation/events/definitions/relationships.ts` | 5 autonomous ambition-driven events: `rel_mutual_attraction`, `rel_council_petition`, `rel_seniority_bid`, `rel_keth_thara_selfvow`, `rel_informal_union_proposed` |
+| `src/simulation/events/definitions/identity.ts` | 6 cultural identity pressure events: `ident_company_cultural_concern`, `ident_company_inspector_dispatched`, `ident_company_pleased`, `ident_tribal_leader_invitation`, `ident_tribal_champion_recognised`, `ident_settlers_feel_foreign` |
 | `src/simulation/buildings/building-definitions.ts` | `BuildingId` (13-member union), `BuildingDef`, `BUILDING_CATALOG`, `getBuildingDisplayName(defId, style)` — static catalog of all building types |
 | `src/simulation/buildings/building-effects.ts` | Pure effect getters: `getShelterCapacity`, `getOvercrowdingRatio`, `getBuildingFlatProductionBonus`, `getLanguageDriftMultiplier`, `getBuildingCulturePull`, `getSkillGrowthBonuses`, `hasBuilding`, `lacksBuilding`, etc. |
 | `src/simulation/buildings/construction.ts` | `canBuild` → `CanBuildResult` (`{ ok: true }` / `{ ok: false; reason }`); `startConstruction`, `assignBuilder`, `removeBuilder`, `processConstruction`, `cancelConstruction` |
@@ -124,6 +129,7 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/genetics/traits.ts` | Trait type definitions + `IMANIAN_TRAITS` constant |
 | `src/data/ethnic-distributions.ts` | All 8 ethnic group `TraitDistribution` constants + `ETHNIC_DISTRIBUTIONS` lookup map |
 | `src/simulation/culture/language-acquisition.ts` | `resolveChildLanguages`, `applyLanguageDrift`, `updateSettlementLanguages`, `updateLanguageTension`, `updateLanguageDiversityTurns` |
+| `src/simulation/culture/identity-pressure.ts` | `IDENTITY_THRESHOLDS`, `IdentityPressureResult`, `processIdentityPressure(blend, currentPressure, tribes)` — pure logic; no RNG; no React |
 | `src/simulation/population/culture.ts` | `CULTURE_LABELS`, `SAUROMATIAN_CULTURE_IDS`, `deriveCulture`, `processCulturalDrift`, `buildSettlementCultureDistribution`, `computeCulturalBlend` |
 | `src/simulation/genetics/gender-ratio.ts` | `getSauromatianFraction`, `getImanianFraction`, `resolveGenderRatio`, `determineSex` |
 | `src/simulation/genetics/inheritance.ts` | `resolveInheritance()` pipeline: `averageBloodlines`, `blendTraitDistributions`, `sampleContinuous`, `sampleDiscrete` |
@@ -132,20 +138,23 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/population/naming.ts` | `generateName(sex, culture, motherFamilyName, fatherFamilyName, rng)` — 3 culture pools |
 | `src/simulation/population/marriage.ts` | `canMarry`, `performMarriage`, `getMarriageability`, `formConcubineRelationship`, `InformalUnionStyle` — Sauromatian/Imanian rules; household auto-formation on marriage |
 | `src/simulation/population/household.ts` | `createHousehold`, `addToHousehold`, `removeFromHousehold`, `getHouseholdMembers`, `getHouseholdByPerson`, `getSeniorWife`, `countWives`, `countConcubines`, `dissolveHousehold`, `HOUSEHOLD_ROLE_LABELS`, `HOUSEHOLD_ROLE_COLORS` |
+| `src/simulation/population/opinions.ts` | `computeBaselineOpinion`, `computeTraitOpinion`, `computeOpinionBreakdown`, `initializeBaselineOpinions`, `applyOpinionDrift`, `decayOpinions`, `decayOpinionModifiers`, `getOpinion`, `getEffectiveOpinion`, `setOpinion`, `adjustOpinion`, `addOpinionModifier`, `getModifierSummary`, `applyMarriageOpinionFloor`, `OPINION_TRACK_CAP` |
+| `src/simulation/population/ambitions.ts` | `tickAmbitionIntensity`, `evaluateAmbition`, `determineAmbitionType`, `generateAmbition`, `clearAmbition`, `getAmbitionLabel`, `getAmbitionIntensityClass`, `AMBITION_FIRING_THRESHOLD` |
+| `src/data/trait-affinities.ts` | `TRAIT_CONFLICTS` (8 conflicting pairs with penalties) · `TRAIT_SHARED_BONUS` (7 shared-trait bonuses) |
 | `src/simulation/world/tribes.ts` | `createTribe`, `TRIBE_PRESETS` (16 presets), `updateTribeDisposition` |
 | `src/stores/game-store.ts` | Zustand store — full turn lifecycle, council, `arrangeMarriage`, `arrangeInformalUnion`, `assignKethThara`, tribe init; `households` Map serialised as `[string, Household][]` |
 | `src/ui/layout/LeftNav.tsx` | Left nav with phase-aware End Turn / Confirm Turn button |
 | `src/ui/layout/BottomBar.tsx` | Full-width resource strip (food, cattle, goods, gold, lumber, stone, pop) |
 | `src/simulation/events/council-advice.ts` | Council voice engine: `VoiceArchetype`, `getVoiceArchetype`, `scoreChoiceForPerson`, `hashPersonEvent`, `generateAdvice` — pure logic, deterministic via djb2 hash |
 | `src/ui/components/portrait-resolver.ts` | `PortraitCategory`, `AgeStage`, `PORTRAIT_REGISTRY`, `getAgeStage()`, `getPortraitCategory()`, `resolvePortraitSrc(person)` — category × sex × age stage × variant → `/portraits/…` path; stage fallback: adult → young_adult → senior → child |
+| `src/ui/components/IdentityScale.tsx` | Five-zone cultural blend bar with pressure badges; props `{ culturalBlend, identityPressure }`; mounted inside SettlementView Religion sidebar |
 | `src/ui/components/CouncilPortrait.tsx` | 40×50px portrait `<img>` with skin-tone swatch fallback |
 | `src/ui/components/AdviceBubble.tsx` | Italic speech bubble rendered above the selected adviser seat in CouncilFooter |
 | `src/ui/layout/CouncilFooter.tsx` | 7-seat Expedition Council row; portraits, click-to-select adviser, trait-driven `AdviceBubble` with per-(person × event) advice caching |
-| `src/ui/views/EventView.tsx` | Event card with choices; actor badge strip (portrait + name) above description when slots are bound; `interpolateText` applied to all displayed text; calls `resolveEventChoice` + `nextEvent` |
 | `src/ui/views/PeopleView.tsx` | Settler roster; sort/filter (sex, status, heritage group, **base skill**); click row → PersonDetail panel |
 | `src/ui/views/PersonDetail.tsx` | Full person detail: genetics, heritage, traits, skills (base + derived), languages, family |
 | `src/ui/views/FamilyTree.tsx` | 3-generation ancestor/descendant tree; spouses shown to the side of root node |
-| `src/ui/views/SettlementView.tsx` | 4-panel settlement view: standing buildings + shelter bar (left), construction queue with worker assignment (centre), build menu (right), crafting panel (far right) |
+| `src/ui/views/EventView.tsx` | Event card with choices; actor badge strip (portrait + name) above description when slots are bound; `interpolateText` applied to all displayed text; calls `resolveEventChoice` + `nextEvent` |
 | `src/ui/views/TradeView.tsx` | Trade & Commerce view: Company quota panel, tribe list with dispositions, barter interface with fairness meter; locked without Trading Post |
 | `src/ui/shared/role-display.ts` | `ROLE_LABELS` and `ROLE_COLORS` — exhaustive `Record<WorkRole, string>` for all 11 roles |
 | `src/simulation/economy/company.ts` | `computeYearlyQuota`, `checkQuotaStatus`, `applyQuotaConsequences`, `getCompanySupplyDelivery` — Company quota math and failure escalation |
@@ -363,6 +372,150 @@ idle
 
 ---
 
+## Phase 3.6 — Opinions & Autonomy Notes
+
+### Opinion System
+
+- **`OPINION_TRACK_CAP = 150`** — below this population, all pairs are tracked; above it, only established entries are updated
+- **Baseline sources** (computed once when two people first meet):
+  - Same `primaryCulture`: **+10** · Same `religion`: **+8**
+  - No shared conversational language (fluency ≥ 0.30): **−15** · Tradetalk-only bridge: **−5**
+  - Trait conflicts (8 pairs): −10 to −20 · Shared-trait bonuses (7 traits): +8 to +12
+  - Clamped to **[−80, +80]** to leave room for events and family bonds
+- **Per-turn drift** (in `applyOpinionDrift`): same-culture pairs **+1**, no-shared-language pairs **−1**
+- **Decay** (`decayOpinions`): all entries move **1 toward 0** per turn; entry deleted when it reaches 0
+- **Marriage floor**: `applyMarriageOpinionFloor` raises each spouse's opinion of the other to at least **+40** immediately on marriage
+- **Marriage gate**: `canMarry` / `formConcubineRelationship` both hard-block if either party's opinion < **−30**
+- **`modify_opinion` consequence**: broadcasts a delta to *every* living person's opinion of the named target — models public acts
+- **`computeOpinionBreakdown(a, b)`**: returns `Array<{ label: string; delta: number }>` for UI tooltips — culture, religion, language, each trait conflict/bonus, residual event delta
+- **Seeded at game start**: `initializeBaselineOpinions` runs in `createInitialState` so Key Opinions are visible immediately on a new game
+
+### Ambition System
+
+- **`PersonAmbition`** on every `Person`: `{ type, intensity, targetPersonId, formedTurn }` or `null`
+- **5 ambition types**: `seek_spouse` · `seek_council` · `seek_seniority` · `seek_cultural_duty` · `seek_informal_union`
+- **Intensity**: starts at 0.10 on formation; grows **+0.05/turn** (via `tickAmbitionIntensity`); capped at 1.0; `content` trait blocks growth
+- **`AMBITION_FIRING_THRESHOLD = 0.7`**: event eligibility gate — ambitions only drive events at ≥ 70% intensity
+- **Generation** (`generateAmbition`): evaluated every 8 turns in `processDawn`; priority order: spouse → council → seniority → cultural duty → informal union
+  - `seek_council` threshold: leadership OR diplomacy **≥ 46** (Very Good tier)
+- **Evaluation** (`evaluateAmbition`): checked each dawn — `'fulfilled'` / `'failed'` / `'ongoing'`; stale after **40 turns** regardless
+- **Seeded at game start**: `generateAmbition` runs for each founder in `createInitialState`; applicable founders show the badge immediately
+- **UI**: ambition badge in PersonDetail beneath traits — colour-coded by intensity (dim grey → amber → rose); intensity progress bar; `title` shows exact percentage
+- **5 autonomous events** in `definitions/relationships.ts` (all gate on `has_person_with_ambition`):
+  - `rel_mutual_attraction` · `rel_council_petition` · `rel_seniority_bid` · `rel_keth_thara_selfvow` · `rel_informal_union_proposed`
+
+### Key Opinions UI
+
+- **PersonDetail** "Key Opinions" section: top-3 positive (green chips) + top-3 negative (red chips)
+- Each chip is clickable (navigates to that person's detail panel)
+- Hover tooltip shows `computeOpinionBreakdown` results: e.g. `"Same culture: +10\nTradetalk only: −5\nShared trait (brave): +8"`
+- Deceased persons whose opinions are still stored show `†` suffix (looked up via graveyard)
+- `remove_person` event consequence now adds a `GraveyardEntry` with `deathCause: 'departed'` before deletion so `nameOf()` resolves correctly
+- Timed modifier entries show a `(Nt)` countdown suffix, e.g. `"Joint project: +8 (8t)"`
+
+### Opinion Modifier System (Event-Driven Decaying Modifiers)
+
+Two-tier opinion architecture:
+- **Permanent `relationships` Map** (existing): big public acts via `modify_opinion` — never decay
+- **Timed `opinionModifiers: OpinionModifier[]`** (new): event experiences that fade over time
+
+**`OpinionModifier` interface** (on `Person`):
+```typescript
+interface OpinionModifier {
+  id: string;        // deduplication key; same event refiring replaces stale modifier
+  targetId: string;
+  label: string;     // "Joint project", "Bitter quarrel"
+  value: number;     // abs(value) = turns remaining; positive/negative = favour/disfavour
+  eventId: string;
+}
+```
+
+**Decay semantics**: `abs(value)` decrements by 1 per turn; modifier deleted when value reaches 0. A `+8` modifier lasts 8 turns; a `−6` lasts 6 turns.
+
+**`getEffectiveOpinion(person, targetId)`**: base `relationships` value + sum of active modifier values, clamped [−100, +100]. Used everywhere a decision is made (marriage gate, ambitions, event filters, UI).
+
+**Key functions in `opinions.ts`**:
+- `addOpinionModifier(person, mod)` — deduplicates by `id`, returns new Person (immutable)
+- `getModifierSummary(person, targetId)` — returns all active modifiers for a given target
+- `decayOpinionModifiers(people)` — returns Map of changed persons only; called each dawn after `decayOpinions`
+
+**Co-actor auto-bond**: When an event resolves with multiple bound actors, a `+2 "Shared: {event.title}"` modifier is automatically applied between every pair of actors unless `choice.skipActorBond === true`.
+
+**New consequence types in `engine.ts`**:
+- `modify_opinion_pair` — bidirectional timed modifier between two named actor slots
+- `modify_opinion_labeled` — broadcast timed modifier from a named actor to all observers
+
+**Modifier ID formats**:
+- Auto-bond: `{eventId}:auto:{idA}:{idB}`
+- Pair: `{eventId}:pair:{personAId}:{personBId}`
+- Labeled broadcast: `{eventId}:labeled:{targetId}`
+
+**Events retrofitted** (5 events, 4 files): `dom_settler_initiative`, `dom_lonely_settler`, `bld_bitter_quarrel`, `cul_religious_tension_peaks`, `dip_upriver_emissary_return`
+
+---
+
+## Phase 3.7 — Religion System Notes
+
+- **Three faiths**: `imanian_orthodox` (Founding / Company), `sacred_wheel` (Sauromatian women), `syncretic_hidden_wheel` (emergent; never imported, only spread through events)
+- **`irreligious` removed** from `ReligionId` — was never assigned to any person
+- **`ReligiousPolicy`**: `'tolerant' | 'orthodox_enforced' | 'wheel_permitted' | 'hidden_wheel_recognized'`
+- **`religiousPolicy`** lives on `Settlement`; initialised as `'tolerant'`
+- **Three new `SettlementCulture` fields**: `hiddenWheelDivergenceTurns`, `hiddenWheelSuppressedTurns`, `hiddenWheelEmerged`
+- **Tension formula** (`computeReligiousTension`): `rawTension = 4 × orthodoxFrac × wheelFrac`; damped by `clamp(1 − hiddenFrac×2, 0, 1)` — pure splits → 0, 50/50 Orthodox/Wheel → 1.0
+- **Hidden Wheel divergence** (`computeHiddenWheelDivergence`): counter advances 1/turn when both Orthodox ≥ 15% AND Wheel ≥ 15% AND policy ≠ `orthodox_enforced`; fires `rel_hidden_wheel_emerges` when it hits 20 (= 5 in-game years); suppression freezes the clock
+- **Company pressure** (`computeCompanyReligiousPressure`): annual standing drain when Wheel > 25%; formula `−Math.round((wheel − 0.25) × 10)`, capped at −5/yr; ×2 under `hidden_wheel_recognized`; 0 under `orthodox_enforced`
+- **`rel_hidden_wheel_emerges`** and **`rel_company_concern_letter`** have `isDeferredOutcome: true` — injected programmatically by the store, never drawn normally
+- **Hidden Wheel emergence injection**: `startTurn()` checks `dawnResult.shouldFireHiddenWheelEvent` and unshifts `rel_hidden_wheel_emerges` into the pending event queue
+- **Company concern letter injection**: `endTurn()` checks `duskResult.shouldFireCompanyReligionEvent` and enqueues `rel_company_concern_letter` for next turn
+- **`setReligiousPolicy(policy)`** action on the store: sets `settlement.religiousPolicy`; also sets `culture.hiddenWheelEmerged = true` if policy is `hidden_wheel_recognized`
+- **Priesthood roles** (`priest_solar`, `wheel_singer`, `voice_of_wheel`) added to `WorkRole`; labels/colours in `role-display.ts`
+- **`ReligionPanel`** in `SettlementView.tsx`: faith distribution bars, tension indicator, Hidden Wheel progress counter, policy dropdown (policy dropdown disabled outside management phase)
+- **Serialisation**: all new fields are scalars (no Map handling needed); `deserializeGameState` provides `?? 0` / `?? false` / `?? 'tolerant'` fallbacks for old saves
+- **`decayOpinionModifiers`** now returns only *changed* entries (delta map, same contract as `decayOpinions`) — prior behaviour (full-copy return) was a pre-existing bug caught and fixed during this phase
+
+### Religion Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/simulation/events/definitions/religious.ts` | 7 religion events: 2 programmatic-injection, 3 conversion, 1 tension-eruption, 1 chaplain |
+| `src/simulation/population/culture.ts` | `computeReligiousTension`, `computeHiddenWheelDivergence`, `computeCompanyReligiousPressure` |
+| `tests/culture/religion.test.ts` | 19 religion tests across all 3 new functions |
+
+---
+
+## Phase 3.8 — Cultural Identity Pressure Notes
+
+- **`IdentityPressure` interface**: `{ companyPressureTurns: number; tribalPressureTurns: number }` — tracks how many consecutive seasons the blend has been outside the safe zone in each direction
+- **Five blend zones**:
+  | Zone | Blend range | Company Δ/season | Tribe multiplier table |
+  |------|------------|------------------|------------------------|
+  | Extreme Imanian | < 0.10 | +0.5 | `TRAIT_MULTIPLIERS_IMANIAN` |
+  | Soft Imanian | 0.10–0.25 | +0.25 | `TRAIT_MULTIPLIERS_IMANIAN` |
+  | Safe | 0.25–0.65 | 0 | none |
+  | Soft Native | 0.65–0.80 | −0.5 | `TRAIT_MULTIPLIERS_NATIVE` |
+  | Extreme Native | > 0.80 | −1.5 | `TRAIT_MULTIPLIERS_NATIVE` |
+- **Counter semantics**: `companyPressureTurns` increments when blend is in a native zone; resets to 0 when blend returns to safe zone. `tribalPressureTurns` mirrors this for the Imanian zone.
+- **Tribe disposition deltas**: base delta × average of all the tribe's trait multipliers; isolationist tribes receive reduced pressure (×0.3); warlike tribes receive amplified pressure (×1.8 Imanian / ×1.3 native)
+- **`processIdentityPressure(blend, currentPressure, tribes)`**: deterministic, no RNG; applied in `processDawn()` after cultural blend computation; result carried in `DawnResult.identityPressureResult`
+- **`modify_cultural_blend` consequence**: `value` = fractional delta (e.g. `−0.03`); applied as `clamp(blend + delta, 0, 1)`
+- **`modify_all_tribe_dispositions` consequence**: `value` = integer delta broadcast to every tribe in `state.tribes`
+- **`sauromatianHeritage` actor criterion**: `matchesCriteria` checks `SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture)`
+- **`min_company_pressure_turns` / `min_tribal_pressure_turns` prerequisites**: read from `state.identityPressure?.companyPressureTurns` with `?? 0` fallback for old saves
+- **`IdentityScale` widget**: named export in `IdentityScale.tsx`; props `{ culturalBlend, identityPressure }`; five-zone colour bar (red–orange–green–orange–red) with white tick at blend position; "Ansberite" / "Native" end labels; amber badge for company concern when in native zone; stone badge for tribal restlessness when in Imanian zone; italic "No cultural pressure" note in safe zone
+- **Mounted in `SettlementView.tsx`**: placed above `<ReligionPanel>` inside the Religion sidebar (sidebar widened to `w-56`)
+- **Serialisation**: both counter fields are plain numbers — no Map handling needed; `deserializeGameState` provides `?? { companyPressureTurns: 0, tribalPressureTurns: 0 }` fallback
+
+### Identity Pressure Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/simulation/culture/identity-pressure.ts` | `IDENTITY_THRESHOLDS`, `IdentityPressureResult`, `processIdentityPressure()`, `TRAIT_MULTIPLIERS_IMANIAN/NATIVE` |
+| `src/simulation/events/definitions/identity.ts` | 6 identity events with integer weights |
+| `src/ui/components/IdentityScale.tsx` | Five-zone blend bar UI widget |
+| `tests/culture/identity-pressure.test.ts` | 35 tests covering all zones, boundaries, trait multipliers, multi-tribe |
+
+---
+
 ## Ethnic Group Reference (Phase 2 genetics input)
 
 | Group | Skin (0–1) | Undertone | Hair | Eyes | Build / Height |
@@ -425,22 +578,26 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/genetics/gender-ratio.test.ts` — 26/26 passing
 - `tests/genetics/fertility.test.ts` — 31/31 passing
 - `tests/events/event-filter.test.ts` — 56/56 passing (includes 3 new: `weightBoosts` multiplier, no-boost no-op, unknown boost key)
-- `tests/events/resolver.test.ts` — 42/42 passing
+- `tests/events/resolver.test.ts` — 46/46 passing
 - `tests/events/event-queue.test.ts` — 9/9 passing (nextEvent transitions, follow-up insertion, resolveEventChoice/pendingEvents isolation, **3 new: away role restoration via startTurn**)
 - `tests/events/council-advice.test.ts` — 95/95 passing (archetype mapping, choice scoring, hash determinism, advice generation, template coverage)
-- `tests/events/actor-resolver.test.ts` — 38/38 passing (matchesCriteria per-field, canFillSlot, canResolveActors mutual exclusion, selectActor RNG determinism, resolveActors multi-slot exclusion + optional slots, **away role exclusion**)
+- `tests/events/actor-resolver.test.ts` — 45/45 passing (matchesCriteria per-field, canFillSlot, canResolveActors mutual exclusion, selectActor RNG determinism, resolveActors multi-slot exclusion + optional slots, **away role exclusion**, `sauromatianHeritage` criterion)
 - `tests/events/interpolation.test.ts` — 25/25 passing (all `{slot.*}` token variants, both sexes, capitalised pronouns, unknown slot/suffix passthrough, multi-slot strings)
-- `tests/economy/resources.test.ts` — 42/42 passing (farmers without/with Fields, traders, cattle, seasonal mods, gather_food/stone/lumber skill tiers, guard=0)
+- `tests/economy/resources.test.ts` — 46/46 passing (farmers without/with Fields, traders, cattle, seasonal mods, gather_food/stone/lumber skill tiers, guard=0)
 - `tests/economy/company.test.ts` — 35/35 passing (quota formula, escalation, request availability, support delivery)
 - `tests/economy/trade.test.ts` — 28/28 passing (price calculation, fairness, disposition deltas, Trading Post bonuses)
 - `tests/economy/spoilage.test.ts` — 18/18 passing (per-resource rates, season modifiers, building mitigation)
-- `tests/economy/crafting.test.ts` — 36/36 passing (recipe availability gating, apply/validate logic)
+- `tests/economy/crafting.test.ts` — 32/32 passing (recipe availability gating, apply/validate logic)
 - `tests/population/demographics.test.ts` — 16/16 passing (includes 4 child-culture blending tests)
-- `tests/population/marriage.test.ts` — 12/12 passing
+- `tests/population/marriage.test.ts` — 20/20 passing
 - `tests/population/household.test.ts` — 29/29 passing (createHousehold, addTo/removeFrom, getSeniorWife, countWives/Concubines, dissolveHousehold, getHouseholdMembers, getHouseholdByPerson)
 - `tests/population/culture.test.ts` — 21/21 passing (deriveCulture, processCulturalDrift, buildSettlementCultureDistribution, computeCulturalBlend)
 - `tests/culture/language-acquisition.test.ts` — 34/34 passing
 - `tests/population/skills.test.ts` — 36/36 passing (getSkillRating, getDerivedSkill, generatePersonSkills, createPerson integration)
 - `tests/buildings/construction.test.ts` — 19/19 passing (canBuild, startConstruction, assignBuilder/removeBuilder, processConstruction, cancelConstruction)
 - `tests/buildings/building-effects.test.ts` — 23/23 passing (shelterCapacity, productionBonus, childMortalityModifier, overcrowding, hasBuilding, etc.)
-- **Total: 713/713 passing**
+- `tests/population/opinions.test.ts` — 56/56 passing (getOpinion, setOpinion, adjustOpinion, computeTraitOpinion, computeBaselineOpinion, initializeBaselineOpinions, applyOpinionDrift, decayOpinions, marriage floor, **addOpinionModifier, getEffectiveOpinion, getModifierSummary, decayOpinionModifiers, computeOpinionBreakdown with modifiers**)
+- `tests/population/ambitions.test.ts` — 30/30 passing (tickAmbitionIntensity, evaluateAmbition, determineAmbitionType, generateAmbition, clearAmbition, label/intensity helpers, AMBITION_FIRING_THRESHOLD)
+- `tests/culture/religion.test.ts` — 19/19 passing (`computeReligiousTension` variants, `computeCompanyReligiousPressure` variants + policy modifiers, `computeHiddenWheelDivergence` variants including 20-turn emergence and suppression)
+- `tests/culture/identity-pressure.test.ts` — 35/35 passing (counter increment/reset per zone, company standing delta all 5 zones, boundary values, safe-zone produces no tribe deltas, single-trait and multi-trait tribe deltas, multiple tribes independent deltas)
+- **Total: 853/853 passing**

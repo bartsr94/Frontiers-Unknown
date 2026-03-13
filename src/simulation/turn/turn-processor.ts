@@ -35,6 +35,9 @@ import {
   processCulturalDrift,
   computeCulturalBlend,
   computeReligionDistribution,
+  computeReligiousTension,
+  computeHiddenWheelDivergence,
+  computeCompanyReligiousPressure,
 } from '../population/culture';
 import { processConstruction } from '../buildings/construction';
 import {
@@ -52,6 +55,15 @@ import {
   getQuotaEventId,
   applyQuotaResult,
 } from '../economy/company';
+import { applyOpinionDrift, decayOpinions, decayOpinionModifiers, initializeBaselineOpinions } from '../population/opinions';
+import {
+  tickAmbitionIntensity,
+  evaluateAmbition,
+  generateAmbition,
+  clearAmbition,
+} from '../population/ambitions';
+import { processIdentityPressure } from '../culture/identity-pressure';
+import type { IdentityPressureResult } from '../culture/identity-pressure';
 
 // ─── Result Types ─────────────────────────────────────────────────────────────
 
@@ -128,6 +140,16 @@ export interface DawnResult {
   updatedHouseholds: Map<string, Household>;
   /** New Ashka-Melathi bonds formed this dawn: [householdId, personAId, personBId]. */
   newAshkaMelathiBonds: Array<[string, string, string]>;
+  /** Updated religious tension (0.0–1.0) recomputed from the new religion distribution. */
+  updatedReligiousTension: number;
+  /** Updated hidden wheel divergence counter after this dawn's check. */
+  updatedHiddenWheelDivergenceTurns: number;
+  /** Updated hidden wheel suppressed turns counter after this dawn's check. */
+  updatedHiddenWheelSuppressedTurns: number;
+  /** When true, the store should inject the rel_hidden_wheel_emerges event into pendingEvents. */
+  shouldFireHiddenWheelEvent: boolean;
+  /** Result of cultural identity pressure computation for this dawn. */
+  identityPressureResult: IdentityPressureResult;
 }
 
 /** Data returned by processDusk(). The store applies these to GameState. */
@@ -154,6 +176,13 @@ export interface DuskResult {
    * out of Winter — i.e., the window was already closed).
    */
   resetQuotaContributions: boolean;
+  /**
+   * Company standing delta from religious composition (negative or 0).
+   * Non-zero only in Winter when Sacred Wheel fraction exceeds 25%.
+   */
+  winterReligiousStandingDelta: number;
+  /** When true, the store should inject rel_company_concern_letter into pendingEvents. */
+  shouldFireCompanyReligionEvent: boolean;
 }
 
 // ─── Mortality Helpers ─────────────────────────────────────────────────────────
@@ -531,9 +560,71 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     if (changed) updatedHouseholds.set(household.id, updatedHousehold);
   }
 
+  // 8.8. Opinions — per-turn cultural/language drift, then decay toward neutral;
+  // initialize new pairs every 8 turns (O(n²), guarded by OPINION_TRACK_CAP).
+  const opinionsDrifted = applyOpinionDrift(updatedPeople);
+  for (const [id, person] of opinionsDrifted) {
+    updatedPeople.set(id, person);
+  }
+  const opinionsDecayed = decayOpinions(updatedPeople);
+  for (const [id, person] of opinionsDecayed) {
+    updatedPeople.set(id, person);
+  }
+  const modifiersDecayed = decayOpinionModifiers(updatedPeople);
+  for (const [id, person] of modifiersDecayed) {
+    updatedPeople.set(id, person);
+  }
+
+  const OPINION_INIT_INTERVAL = 8;
+  if (state.turnNumber % OPINION_INIT_INTERVAL === 0) {
+    const opinionsInitialized = initializeBaselineOpinions(updatedPeople);
+    for (const [id, person] of opinionsInitialized) {
+      updatedPeople.set(id, person);
+    }
+  }
+
+  // 8.9. Ambitions — tick intensity; evaluate fulfillment; generate new ones every 8 turns.
+  for (const [id, person] of updatedPeople) {
+    let p = tickAmbitionIntensity(person);
+
+    if (p.ambition) {
+      const outcome = evaluateAmbition(p, { ...state, people: updatedPeople });
+      if (outcome !== 'ongoing') {
+        p = clearAmbition(p);
+      }
+    }
+
+    if (!p.ambition && state.turnNumber % OPINION_INIT_INTERVAL === 0) {
+      const newAmbition = generateAmbition(p, { ...state, people: updatedPeople }, rng);
+      if (newAmbition) {
+        p = { ...p, ambition: newAmbition };
+      }
+    }
+
+    if (p !== person) {
+      updatedPeople.set(id, p);
+    }
+  }
+
   // 9. Recalculate cultural blend and religion distribution from the updated population.
-  const updatedCultureBlend = computeCulturalBlend(updatedPeople);
-  const updatedReligions = computeReligionDistribution(updatedPeople);
+  const updatedCultureBlend = computeCulturalBlend(updatedPeople);  const updatedReligions = computeReligionDistribution(updatedPeople);
+
+  // 9.5. Religious tension and Hidden Wheel divergence tracking.
+  const updatedReligiousTension = computeReligiousTension(updatedReligions);
+  const divergenceResult = computeHiddenWheelDivergence(
+    state.culture.hiddenWheelDivergenceTurns,
+    state.culture.hiddenWheelSuppressedTurns,
+    updatedReligions,
+    state.settlement.religiousPolicy,
+  );
+
+  // 9.6. Cultural identity pressure — passive standing/disposition deltas and
+  //      pressure counter updates that gate identity events.
+  const identityPressureResult = processIdentityPressure(
+    updatedCultureBlend,
+    state.identityPressure ?? { companyPressureTurns: 0, tribalPressureTurns: 0 },
+    state.tribes,
+  );
 
   // Check if creole just emerged (first turn where diversity threshold was reached
   // and the counter crosses 20). The store uses this flag to fire a one-time notice.
@@ -565,6 +656,11 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     ),
     updatedHouseholds,
     newAshkaMelathiBonds,
+    updatedReligiousTension,
+    updatedHiddenWheelDivergenceTurns: divergenceResult.updatedDivergenceTurns,
+    updatedHiddenWheelSuppressedTurns: divergenceResult.updatedSuppressedTurns,
+    shouldFireHiddenWheelEvent: divergenceResult.shouldFireEvent,
+    identityPressureResult,
   };
 }
 
@@ -610,17 +706,26 @@ export function processDusk(state: GameState, _season: Season): DuskResult {
       quotaStatus: qStatus,
       quotaEventId: qEventId,
       resetQuotaContributions: false,
+      winterReligiousStandingDelta: 0,
+      shouldFireCompanyReligionEvent: false,
     };
   }
 
   // Winter→Spring transition: reset annual quota contribution window.
+  // Also apply once-per-year Company religious pressure from Sacred Wheel fraction.
   if (nextSeason === 'spring') {
+    const religiousDelta = computeCompanyReligiousPressure(
+      state.culture.religions,
+      state.settlement.religiousPolicy,
+    );
     return {
       nextSeason,
       nextYear,
       quotaStatus: null,
       quotaEventId: null,
       resetQuotaContributions: true,
+      winterReligiousStandingDelta: religiousDelta,
+      shouldFireCompanyReligionEvent: religiousDelta < 0,
     };
   }
 
@@ -630,5 +735,7 @@ export function processDusk(state: GameState, _season: Season): DuskResult {
     quotaStatus: null,
     quotaEventId: null,
     resetQuotaContributions: false,
+    winterReligiousStandingDelta: 0,
+    shouldFireCompanyReligionEvent: false,
   };
 }

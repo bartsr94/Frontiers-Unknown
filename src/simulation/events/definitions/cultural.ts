@@ -277,7 +277,10 @@ export const CULTURAL_EVENTS: GameEvent[] = [
         description:
           'Deflation through humour. Works tonight. Does not solve the ' +
           'underlying friction.',
-        consequences: [],
+        skipActorBond: true,
+        consequences: [
+          { type: 'modify_opinion_pair', target: '{objector}', value: -5, params: { slotB: '{woman}', label: 'Religious clash' } },
+        ],
       },
       {
         id: 'side_with_woman',
@@ -285,9 +288,11 @@ export const CULTURAL_EVENTS: GameEvent[] = [
         description:
           'She has earned a measure of respect. The men are not pleased, ' +
           'but they know you are right.',
+        skipActorBond: true,
         consequences: [
           { type: 'modify_opinion', target: 'sauromatian_women', value: 4 },
           { type: 'modify_opinion', target: 'traditional_imanians', value: -3 },
+          { type: 'modify_opinion_pair', target: '{objector}', value: -8, params: { slotB: '{woman}', label: 'Public rebuke' } },
         ],
       },
       {
@@ -308,9 +313,11 @@ export const CULTURAL_EVENTS: GameEvent[] = [
         onSuccess: [
           { type: 'modify_opinion', target: 'sauromatian_women',    value: 4 },
           { type: 'modify_opinion', target: 'traditional_imanians', value: 2 },
+          { type: 'modify_opinion_pair', target: '{objector}', value: 3, params: { slotB: '{woman}', label: 'Mediated peace' } },
         ],
         onFailure: [
           { type: 'modify_opinion', target: 'sauromatian_women', value: -2 },
+          { type: 'modify_opinion_pair', target: '{objector}', value: -6, params: { slotB: '{woman}', label: 'Unresolved tension' } },
         ],
       },
     ],

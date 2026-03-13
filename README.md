@@ -39,15 +39,24 @@ npx tsc --noEmit   # Type-check
 | 2 | Genetics Engine — Children of Two Worlds | ✅ Complete |
 | 3 | Living Settlement — A Place Called Home | ✅ Complete |
 | 3.5 | Household Depth — The Ashkaran | ✅ Complete |
+| 3.6 | Opinions & Autonomy — Characters of Will | ✅ Complete |
+| 3.7 | Religion System — Faiths of the Ashmark | ✅ Complete |
+| 3.8 | Cultural Identity Pressure | ✅ Complete |
 | 4 | Polish — The Ashmark Remembers | 🔲 Planned |
 
 **Phase 3 progress:** Language acquisition engine ✅ · Cultural identity & drift system ✅ · Founder character variety ✅ · Skills & experience tracking ✅ · Council voice system ✅ · Character portrait system ✅ · Event `add_person` consequence ✅ · Settlement buildings & construction system ✅ · Event character binding (named actors, `{slot}` interpolation, portrait strip) ✅ · Economy system (Company quota, tribe trade, spoilage, crafting) ✅ · Generic task roles (Forager, Quarrier, Lumberjack) ✅ · Tilled Fields building ✅ · Clickable role assignment ✅
 
 **Phase 3.5 progress:** Household data model & serialisation ✅ · `household.ts` utility module ✅ · Marriage auto-forms households ✅ · Thrall social status with freedom pathway ✅ · Keth-Thara work role ✅ · Ashka-Melathi bond formation (per-turn dawn step) ✅ · Wife-council events ✅ · PersonDetail household section ✅ · Informal Union tab in MarriageDialog ✅ · Full household test suite (29 tests) ✅
 
----
+**Phase 3.6 progress:** Opinion scores (baseline: culture, religion, language, trait affinities/clashes) ✅ · Per-turn opinion drift & decay ✅ · Marriage opinion gate (< −30 = hard block) ✅ · `modify_opinion` event consequence (broadcast to all observers) ✅ · `computeOpinionBreakdown()` for UI tooltips ✅ · `PersonAmbition` model (5 ambition types) ✅ · Ambition generation, intensity ticking, fulfillment/failure evaluation ✅ · 5 autonomous ambition-driven events in `relationships.ts` ✅ · Ambition badge + Key Opinions section in PersonDetail ✅ · Opinion + ambition seeded at game start ✅ · 67 new tests (37 opinions + 30 ambitions) ✅ · Event-driven decaying opinion modifiers (`OpinionModifier`, `modify_opinion_pair`, `modify_opinion_labeled`) ✅ · Auto-bond between co-actors (`skipActorBond` opt-out) ✅ · 5 event definitions retrofitted with pair/labeled modifiers ✅ · `getEffectiveOpinion()` used across all decision gates ✅ · Modifier tooltip in PersonDetail shows `(Nt)` countdown ✅ · 38 new modifier tests across `addOpinionModifier`, `getEffectiveOpinion`, `getModifierSummary`, `decayOpinionModifiers` ✅
 
-## Documentation
+**Phase 3.7 progress:** Three faiths (`imanian_orthodox`, `sacred_wheel`, `syncretic_hidden_wheel`) ✅ · `ReligiousPolicy` (4 values: tolerant, orthodox_enforced, wheel_permitted, hidden_wheel_recognized) ✅ · Hidden Wheel divergence counter (20-turn / 5-year emergence mechanic) ✅ · Religious tension formula (damped by Hidden Wheel spread) ✅ · Company religious pressure drain (annual standing penalty scaled by Wheel fraction) ✅ · 7 religion events (2 programmatic-injection, 5 player-facing) ✅ · Priesthood roles (`priest_solar`, `wheel_singer`, `voice_of_wheel`) ✅ · `ReligionPanel` in SettlementView (faith bars, tension indicator, Hidden Wheel progress, policy dropdown) ✅ · 19 new tests ✅
+
+**Phase 3.8 progress:** Five-zone cultural blend identity scale (Extreme/Soft Imanian → Safe → Soft/Extreme Native) ✅ · `IdentityPressure` counters (`companyPressureTurns` / `tribalPressureTurns`) ✅ · `processIdentityPressure()` pure logic — company standing delta per zone, tribe trait-weighted disposition deltas ✅ · 6 identity events (`ident_company_cultural_concern`, `ident_company_inspector_dispatched`, `ident_company_pleased`, `ident_tribal_leader_invitation`, `ident_tribal_champion_recognised`, `ident_settlers_feel_foreign`) ✅ · `modify_cultural_blend` and `modify_all_tribe_dispositions` consequences ✅ · `sauromatianHeritage` actor criterion ✅ · `IdentityScale` widget (five-zone bar, tick mark, pressure badges) mounted in SettlementView Religion sidebar ✅ · 35 new tests ✅
+
+**853/853 tests across 27 test files — zero compile errors.**
+
+---
 
 - [CLAUDE.md](CLAUDE.md) — Developer context, current state, hard rules, quick-reference file table
 - [plans/PORTRAIT_SYSTEM.md](plans/PORTRAIT_SYSTEM.md) — Portrait system design (categories, age stages, file naming, registry)
@@ -58,3 +67,7 @@ npx tsc --noEmit   # Type-check
 - [plans/EVENT_CHARACTER_BINDING.md](plans/EVENT_CHARACTER_BINDING.md) — Event character binding system (actor slots, text interpolation, portrait strip)
 - [plans/ECONOMY_SYSTEM.md](plans/ECONOMY_SYSTEM.md) — Economy system design (Company quota, tribe trade, spoilage, crafting)
 - [plans/HOUSEHOLD_DEPTH.md](plans/HOUSEHOLD_DEPTH.md) — Household system design (ashkarans, Keth-Thara, thralls, Ashka-Melathi bonds, wife-council)
+- [plans/OPINIONS_SYSTEM.md](plans/OPINIONS_SYSTEM.md) — Opinion score system (baseline, drift, decay, marriage gate, trait affinities)
+- [plans/AUTONOMY_SYSTEM.md](plans/AUTONOMY_SYSTEM.md) — Character autonomy system (ambitions, intensity, 5 ambition-driven events)
+- [plans/RELIGION_SYSTEM.md](plans/RELIGION_SYSTEM.md) — Religion system design (three faiths, Hidden Wheel emergence, religious policy, Company pressure)
+- [plans/CULTURAL_IDENTITY_PRESSURE.md](plans/CULTURAL_IDENTITY_PRESSURE.md) — Cultural identity pressure design (five-zone blend scale, passive Company/tribe deltas, 6 identity events)

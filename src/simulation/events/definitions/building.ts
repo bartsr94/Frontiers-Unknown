@@ -94,6 +94,7 @@ export const BUILDING_EVENTS: GameEvent[] = [
         id: 'intervene_firmly',
         label: 'Intervene and separate them. No more sharing quarters.',
         description: 'Distance is not harmony, but it is a start.',
+        skipActorBond: true,
         consequences: [
           { type: 'modify_resource', target: 'goods', value: -1 },
         ],
@@ -103,26 +104,33 @@ export const BUILDING_EVENTS: GameEvent[] = [
           actorSelection: 'best_council',
           attemptLabel: 'Assert authority',
         },
-        onSuccess: [],
+        onSuccess: [
+          { type: 'modify_opinion_pair', target: '{settler}', value: -6, params: { slotB: '{rival}', label: 'Forced distance' } },
+        ],
         onFailure: [
           { type: 'modify_standing', target: 'company', value: -2 },
+          { type: 'modify_opinion_pair', target: '{settler}', value: -10, params: { slotB: '{rival}', label: 'Bitter quarrel' } },
         ],
       },
       {
         id: 'let_them_settle_it',
         label: 'Stay out of it. This is beneath your authority.',
         description: 'People have always resolved such things without their leaders stepping in.',
+        skipActorBond: true,
         consequences: [
           { type: 'wound_person', target: 'random_adult', value: 10 },
+          { type: 'modify_opinion_pair', target: '{settler}', value: -10, params: { slotB: '{rival}', label: 'Physical fight' } },
         ],
       },
       {
         id: 'build_something',
         label: 'Acknowledge the problem publicly and announce a solution: build more.',
         description: 'Channel the anger into labour. The people know what overcrowding means — show them you do too.',
+        skipActorBond: true,
         consequences: [
           { type: 'modify_resource', target: 'goods', value: 2 },
           { type: 'modify_standing', target: 'company', value: 1 },
+          { type: 'modify_opinion_pair', target: '{settler}', value: -6, params: { slotB: '{rival}', label: 'Underlying tension' } },
         ],
       },
     ],

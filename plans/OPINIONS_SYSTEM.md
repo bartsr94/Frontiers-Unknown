@@ -2,7 +2,7 @@
 
 **Feature:** §6.2 — Inter-person opinion scores  
 **Phase:** Phase A of the Autonomous Character Agency System  
-**Status:** Planned  
+**Status:** ✅ Implemented (Phase 3.6)  
 **Companion doc:** `AUTONOMY_SYSTEM.md` (ambitions, autonomous events — Phase B)
 
 ---

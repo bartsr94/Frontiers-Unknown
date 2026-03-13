@@ -15,6 +15,9 @@ export const ROLE_LABELS: Record<WorkRole, string> = {
   gather_food:    'Forager',
   gather_stone:   'Quarrier',
   gather_lumber:  'Lumberjack',
+  priest_solar:   'Solar Priest',
+  wheel_singer:   'Wheel Singer',
+  voice_of_wheel: 'Voice of the Wheel',
   unassigned:     'Unassigned',
 };
 
@@ -30,5 +33,8 @@ export const ROLE_COLORS: Record<WorkRole, string> = {
   gather_food:    'bg-lime-900 text-lime-200',
   gather_stone:   'bg-slate-700 text-slate-200',
   gather_lumber:  'bg-yellow-900 text-yellow-200',
+  priest_solar:   'bg-yellow-700 text-yellow-100',
+  wheel_singer:   'bg-teal-900 text-teal-200',
+  voice_of_wheel: 'bg-indigo-900 text-indigo-200',
   unassigned:     'bg-stone-800 text-stone-400',
 };
