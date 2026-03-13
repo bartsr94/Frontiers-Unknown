@@ -9,11 +9,11 @@
  *   genetics/traits → population/person → turn/game-state  ← you are here
  */
 
-import type { Person, Heritage, EthnicGroup, ReligionId, LanguageId } from '../population/person';
+import type { Person, Heritage, EthnicGroup, ReligionId, LanguageId, HouseholdRole, HouseholdTradition } from '../population/person';
 import type { GameEvent, SkillCheckResult, DeferredEventEntry, BoundEvent } from '../events/engine';
 
 // Re-export shared identity types so consumers only need one import path.
-export type { EthnicGroup, ReligionId, LanguageId, CultureId } from '../population/person';
+export type { EthnicGroup, ReligionId, LanguageId, CultureId, HouseholdRole, HouseholdTradition } from '../population/person';
 export type { SkillCheckResult, DeferredEventEntry, BoundEvent } from '../events/engine';
 
 // ─── Economy ───────────────────────────────────────────────────────────────────
@@ -154,6 +154,29 @@ export interface ExternalTribe {
   tradeDesires: ResourceType[];
   /** Resources this tribe has available to sell. */
   tradeOfferings: ResourceType[];
+}
+
+// ─── Households ─────────────────────────────────────────────────────────────
+
+/**
+ * A household (_ashkaran_) — the fundamental social and reproductive unit.
+ * Households form automatically when marriages are arranged and persist until dissolved.
+ * HouseholdRole and HouseholdTradition are defined in population/person.ts.
+ */
+export interface Household {
+  id: string;
+  /** Display name, e.g. "House Orsthal" — player-renameable. */
+  name: string;
+  tradition: HouseholdTradition;
+  /** The husband / male head. Null for widow-led households. */
+  headId: string | null;
+  /** Explicitly designated senior wife. Null = derive from age in household utilities. */
+  seniorWifeId: string | null;
+  /** All members in declaration order (head first). */
+  memberIds: string[];
+  /** Pairs of person IDs who share an Ashka-Melathi intimate bond. */
+  ashkaMelathiBonds: [string, string][];
+  foundedTurn: number;
 }
 
 // ─── Settlement Culture ────────────────────────────────────────────────────────
@@ -473,6 +496,9 @@ export interface GameState {
    * Plain array — JSON-safe, no Map serialisation needed.
    */
   deferredEvents: DeferredEventEntry[];
+
+  /** All households in the settlement, keyed by their ID. */
+  households: Map<string, Household>;
 
   /** Immutable configuration from game start. */
   config: GameConfig;

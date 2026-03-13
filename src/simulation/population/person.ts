@@ -244,6 +244,7 @@ export type WorkRole =
   | 'healer'
   | 'builder'        // Temporarily assigned to a construction project
   | 'away'           // Dispatched on an external mission; unavailable until return
+  | 'keth_thara'     // Young man fulfilling Sauromatian cultural duty; unavailable for all other events
   | 'gather_food'    // Foraging, fishing, small game — no building required
   | 'gather_stone'   // Quarrying and collecting stone from the surrounding terrain
   | 'gather_lumber'  // Felling and preparing timber
@@ -255,7 +256,26 @@ export type SocialStatus =
   | 'settler'
   | 'newcomer'
   | 'elder'
-  | 'outcast';
+  | 'outcast'
+  | 'thrall';   // Acquired status; freed by bearing a son or by player choice; not inherited
+
+/**
+ * A person's functional role within their household.
+ * Distinct from WorkRole (which governs settlement-level production assignments).
+ */
+export type HouseholdRole =
+  | 'head'              // Nominal patriarch — typically the husband
+  | 'senior_wife'       // Eldest or highest-standing wife; leads the wife-council
+  | 'wife'              // Full formal wife (blood-wife or formally elevated foreign wife)
+  | 'concubine'         // Informal but acknowledged — widow-concubines from Keth-Thara
+  | 'hearth_companion'  // Ansberite formalisation between wife and concubine; contractual rights
+  | 'child'             // Dependent minor member (under 16)
+  | 'thrall';           // Captive; free from birth for their own children; freed if they bear a son
+
+export type HouseholdTradition =
+  | 'sauromatian'  // Wife-council authority; husband is spiritual centre but not decision-maker
+  | 'imanian'      // Patriarch nominally leads; women manage internally but perform deference
+  | 'ansberite';   // Colonial hybrid; hearth-companions permitted; tradition contested
 
 // ─── Skills ──────────────────────────────────────────────────────────────────
 
@@ -449,6 +469,15 @@ export interface Person {
    * the registry grows after a save was made.
    */
   portraitVariant: number;
+
+  // ─── Household ──────────────────────────────────────────────────────────────
+
+  /** ID of the household this person belongs to. Null if unattached. */
+  householdId: string | null;
+  /** This person's role within their household. Null if unattached. */
+  householdRole: HouseholdRole | null;
+  /** IDs of co-wives with whom this person shares an Ashka-Melathi bond. */
+  ashkaMelathiPartnerIds: string[];
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
@@ -551,5 +580,9 @@ export function createPerson(options: CreatePersonOptions = {}, rng?: SeededRNG)
 
     skills: resolvedSkills,
     portraitVariant: resolvedPortraitVariant,
+
+    householdId: options.householdId ?? null,
+    householdRole: options.householdRole ?? null,
+    ashkaMelathiPartnerIds: options.ashkaMelathiPartnerIds ?? [],
   };
 }

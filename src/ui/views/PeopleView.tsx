@@ -268,11 +268,15 @@ export default function PeopleView() {
 
                     {/* Role — clickable dropdown for assignable roles */}
                     <td className="px-2 py-2">
-                      {person.role === 'away' || person.role === 'builder' ? (
-                        // Locked roles: managed by mission/construction systems
+                      {person.role === 'away' || person.role === 'builder' || person.role === 'keth_thara' ? (
+                        // Locked roles: managed by mission/construction/keth-thara systems
                         <span
                           className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${ROLE_COLORS[person.role]}`}
-                          title={person.role === 'away' ? 'Away on mission — cannot reassign' : 'Assigned to construction — use Settlement to unassign'}
+                          title={
+                            person.role === 'away'        ? 'Away on mission — cannot reassign' :
+                            person.role === 'keth_thara'  ? 'On Keth-Thara service — returns automatically' :
+                            'Assigned to construction — use Settlement to unassign'
+                          }
                         >
                           {ROLE_LABELS[person.role]}
                         </span>

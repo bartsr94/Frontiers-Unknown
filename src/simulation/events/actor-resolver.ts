@@ -21,7 +21,7 @@
 
 import type { ActorCriteria, ActorRequirement } from './engine';
 import type { GameState } from '../turn/game-state';
-import type { Person, DerivedSkillId, SkillId } from '../population/person';
+import type { Person, DerivedSkillId, SkillId, HouseholdRole } from '../population/person';
 import { getDerivedSkill } from '../population/person';
 import type { SeededRNG } from '../../utils/rng';
 
@@ -45,8 +45,8 @@ function getSkillScore(person: Person, skill: SkillId | DerivedSkillId): number 
  * Use this for both eligibility gates (no RNG) and search loops.
  */
 export function matchesCriteria(person: Person, criteria: ActorCriteria): boolean {
-  // Away persons are off-site and cannot be selected for any event slot.
-  if (person.role === 'away') return false;
+  // Away and keth_thara persons are off-site and cannot be selected for any event slot.
+  if (person.role === 'away' || person.role === 'keth_thara') return false;
   if (criteria.sex !== undefined && person.sex !== criteria.sex) return false;
   if (criteria.religion !== undefined && person.religion !== criteria.religion) return false;
   if (criteria.culturalIdentity !== undefined && person.heritage.primaryCulture !== criteria.culturalIdentity) return false;
@@ -59,6 +59,7 @@ export function matchesCriteria(person: Person, criteria: ActorCriteria): boolea
   }
   if (criteria.role !== undefined && person.role !== criteria.role) return false;
   if (criteria.socialStatus !== undefined && person.socialStatus !== criteria.socialStatus) return false;
+  if (criteria.householdRole !== undefined && person.householdRole !== (criteria.householdRole as HouseholdRole)) return false;
   if (criteria.hasTrait !== undefined && !person.traits.includes(criteria.hasTrait)) return false;
   if (criteria.minSkill !== undefined) {
     const score = getSkillScore(person, criteria.minSkill.skill);

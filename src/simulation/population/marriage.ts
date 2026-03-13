@@ -15,11 +15,12 @@
  */
 
 import type { Person } from './person';
-import type { GameState, EventRecord } from '../turn/game-state';
+import type { GameState, EventRecord, Household, HouseholdRole, HouseholdTradition } from '../turn/game-state';
 import type { CultureId } from '../turn/game-state';
 import type { TraitId } from '../personality/traits';
 import { CONVERSATIONAL_THRESHOLD } from '../culture/language-acquisition';
 import { SAUROMATIAN_CULTURE_IDS } from './culture';
+import { createHousehold, addToHousehold, countWives } from './household';
 
 // ─── Marriage Types ───────────────────────────────────────────────────────────
 
@@ -38,6 +39,8 @@ export interface MarriageRules {
   maxWives: number;
   /** Maximum concubines permitted beyond wives (Imanian only). */
   maxConcubines: number;
+  /** Whether hearth-companions (Ansberite blended tradition) are permitted. */
+  allowsHearthCompanion: boolean;
 }
 
 /**
@@ -64,6 +67,7 @@ export interface MarriageInfo {
  *   1. Replace personA and personB in `GameState.people` with their updated versions.
  *   2. Apply each opinionChange by updating `people.get(observerId).relationships`.
  *   3. Append `eventRecord` to `GameState.eventHistory`.
+ *   4. Set `state.households.set(household.id, household)` to persist the household.
  */
 export interface MarriageResult {
   /** Updated copy of personA with the new spouse added to spouseIds. */
@@ -77,6 +81,10 @@ export interface MarriageResult {
   opinionChanges: Array<{ observerId: string; targetId: string; delta: number }>;
   /** Event record logging this marriage for history and event-chain queries. */
   eventRecord: EventRecord;
+  /** The resulting household (created or updated). Caller must persist to state.households. */
+  household: Household;
+  /** True if this marriage created a brand-new household; false if bride joined existing. */
+  householdCreated: boolean;
 }
 
 // ─── Language Compatibility ──────────────────────────────────────────────────
@@ -137,10 +145,10 @@ export function getLanguageCompatibility(a: Person, b: Person): LanguageCompatib
  */
 export function getMarriageRules(primaryCulture: CultureId): MarriageRules {
   if (SAUROMATIAN_CULTURE_IDS.has(primaryCulture) || primaryCulture === 'settlement_native') {
-    return { tradition: 'sauromatian', maxWives: 6, maxConcubines: 0 };
+    return { tradition: 'sauromatian', maxWives: 6, maxConcubines: 0, allowsHearthCompanion: false };
   }
   // Imanian (imanian_homeland, ansberite) and townborn default
-  return { tradition: 'imanian', maxWives: 1, maxConcubines: 2 };
+  return { tradition: 'imanian', maxWives: 1, maxConcubines: 2, allowsHearthCompanion: false };
 }
 
 // ─── Eligibility ──────────────────────────────────────────────────────────────
@@ -191,10 +199,6 @@ export function canMarry(
     }
   }
 
-  // Suppress unused-variable warning for state — future checks will use it
-  // (e.g., checking for extended-family relations or culture-dependent bans).
-  void state;
-
   // 4. Identify the man and woman, then apply spouse-slot limits
   const man = personA.sex === 'male' ? personA : personB;
   const woman = personA.sex === 'female' ? personA : personB;
@@ -209,6 +213,14 @@ export function canMarry(
   const manMaxSpouses = rules.maxWives + rules.maxConcubines;
   if (man.spouseIds.length >= manMaxSpouses) {
     return { allowed: false, reason: 'man_at_spouse_limit' };
+  }
+
+  // Household wife-capacity check (if a household already exists)
+  if (man.householdId) {
+    const household = state.households.get(man.householdId);
+    if (household && countWives(household, state) >= rules.maxWives) {
+      return { allowed: false, reason: 'household_at_wife_capacity' };
+    }
   }
 
   return { allowed: true };
@@ -238,17 +250,67 @@ export function performMarriage(
   personB: Person,
   state: GameState,
 ): MarriageResult {
+  const man = personA.sex === 'male' ? personA : personB;
+  const woman = personA.sex === 'female' ? personA : personB;
+
+  // Determine household tradition: Sauromatian bride → sauromatian tradition
+  const womanIsSauromatian =
+    SAUROMATIAN_CULTURE_IDS.has(woman.heritage.primaryCulture) ||
+    woman.heritage.primaryCulture === 'settlement_native';
+  const tradition: HouseholdTradition = womanIsSauromatian ? 'sauromatian' : 'imanian';
+
+  // Build or update the household
+  let household: Household;
+  let householdCreated: boolean;
+  const existingHousehold = man.householdId
+    ? (state.households.get(man.householdId) ?? null)
+    : null;
+
+  if (existingHousehold) {
+    // Man already has a household — add the bride to it
+    let updated = addToHousehold(existingHousehold, woman.id);
+    // If no senior wife is designated yet, she becomes it
+    if (updated.seniorWifeId === null) {
+      updated = { ...updated, seniorWifeId: woman.id };
+    }
+    household = updated;
+    householdCreated = false;
+  } else {
+    // Create a new household; man is head, woman is first (senior) wife
+    const householdName =
+      tradition === 'sauromatian'
+        ? `${woman.familyName ?? woman.givenName} Ashkaran`
+        : `House of ${man.familyName ?? man.givenName}`;
+    const created = createHousehold({
+      name: householdName,
+      tradition,
+      headId: man.id,
+      seniorWifeId: woman.id,
+      foundedTurn: state.turnNumber,
+    });
+    household = addToHousehold(addToHousehold(created, man.id), woman.id);
+    householdCreated = true;
+  }
+
+  // Determine each person's household role
+  const womanRole: HouseholdRole =
+    household.seniorWifeId === woman.id ? 'senior_wife' : 'wife';
+
+  // Apply spouse links and household membership to both persons
   const updatedPersonA: Person = {
     ...personA,
     spouseIds: [...personA.spouseIds, personB.id],
+    householdId: household.id,
+    householdRole: personA.sex === 'male' ? 'head' : womanRole,
   };
   const updatedPersonB: Person = {
     ...personB,
     spouseIds: [...personB.spouseIds, personA.id],
+    householdId: household.id,
+    householdRole: personB.sex === 'male' ? 'head' : womanRole,
   };
 
   const isCrossCultural = personA.heritage.primaryCulture !== personB.heritage.primaryCulture;
-  const man = personA.sex === 'male' ? personA : personB;
 
   const opinionChanges: MarriageResult['opinionChanges'] = [];
 
@@ -275,7 +337,7 @@ export function performMarriage(
     involvedPersonIds: [personA.id, personB.id],
   };
 
-  return { updatedPersonA, updatedPersonB, opinionChanges, eventRecord };
+  return { updatedPersonA, updatedPersonB, opinionChanges, eventRecord, household, householdCreated };
 }
 
 // ─── Marriageability Query ────────────────────────────────────────────────────
@@ -290,6 +352,87 @@ export function performMarriage(
  * @param _state - Current game state (reserved for future relation-graph queries).
  * @returns A MarriageInfo summary.
  */
+// ─── Informal Unions ─────────────────────────────────────────────────────────
+
+/**
+ * The relationship style for a woman entering a household as an informal partner.
+ *
+ * concubine        — Sauromatian or Imanian tradition; recognised but below wife rank.
+ * hearth_companion — Ansberite blended tradition; a woman with her own economic standing.
+ */
+export type InformalUnionStyle = 'concubine' | 'hearth_companion';
+
+/** The outcome of forming a concubine / hearth-companion relationship. */
+export interface InformalUnionResult {
+  updatedMan: Person;
+  updatedWoman: Person;
+  household: Household;
+  householdCreated: boolean;
+}
+
+/**
+ * Forms a concubine or hearth-companion relationship between a man and a woman.
+ *
+ * Unlike formal marriage this does NOT add spouseIds.
+ * If the man has no household one is created with him as head.
+ *
+ * @param man   - The household head (must be male).
+ * @param woman - The woman entering the household.
+ * @param style - Union style ('concubine' or 'hearth_companion').
+ * @param state - Current game state (for household lookup).
+ * @returns An InformalUnionResult; caller must persist household and updated persons.
+ */
+export function formConcubineRelationship(
+  man: Person,
+  woman: Person,
+  style: InformalUnionStyle,
+  state: GameState,
+): InformalUnionResult {
+  let household: Household;
+  let householdCreated: boolean;
+  const existingHousehold = man.householdId
+    ? (state.households.get(man.householdId) ?? null)
+    : null;
+
+  if (existingHousehold) {
+    household = addToHousehold(existingHousehold, woman.id);
+    householdCreated = false;
+  } else {
+    const womanIsSauromatian =
+      SAUROMATIAN_CULTURE_IDS.has(woman.heritage.primaryCulture) ||
+      woman.heritage.primaryCulture === 'settlement_native';
+    const tradition: HouseholdTradition = womanIsSauromatian ? 'sauromatian' : 'imanian';
+    const householdName =
+      tradition === 'sauromatian'
+        ? `${woman.familyName ?? woman.givenName} Ashkaran`
+        : `House of ${man.familyName ?? man.givenName}`;
+    const created = createHousehold({
+      name: householdName,
+      tradition,
+      headId: man.id,
+      seniorWifeId: null,
+      foundedTurn: state.turnNumber,
+    });
+    household = addToHousehold(addToHousehold(created, man.id), woman.id);
+    householdCreated = true;
+  }
+
+  const updatedMan: Person = {
+    ...man,
+    householdId: household.id,
+    householdRole: man.householdRole ?? 'head',
+  };
+  const updatedWoman: Person = {
+    ...woman,
+    householdId: household.id,
+    householdRole: style,
+  };
+
+  return { updatedMan, updatedWoman, household, householdCreated };
+}
+
+// ─── Marriageability Query ────────────────────────────────────────────────────
+
 export function getMarriageability(person: Person, _state: GameState): MarriageInfo {
   const currentSpouseCount = person.spouseIds.length;
   const culturalContext = person.heritage.primaryCulture;

@@ -30,7 +30,8 @@ import type {
   DeferredEventEntry,
 } from './engine';
 import type { GameState, ResourceType, EventRecord } from '../turn/game-state';
-import type { Person, EthnicGroup, ReligionId, SocialStatus, CultureId, WorkRole } from '../population/person';
+import type { Person, EthnicGroup, ReligionId, SocialStatus, CultureId, WorkRole, HouseholdRole } from '../population/person';
+import type { HouseholdTradition } from '../turn/game-state';
 import {
   getDerivedSkill,
   createPerson,
@@ -305,6 +306,62 @@ function applyConsequence(
         boundActors: boundActors ?? {},
       };
       return { ...state, deferredEvents: [...state.deferredEvents, entry] };
+    }
+
+    case 'set_social_status': {
+      const resolvedId = resolveConsequenceTarget(consequence.target, boundActors);
+      const person = resolvedId ? state.people.get(resolvedId) : undefined;
+      if (!person) return state;
+      const newStatus = consequence.value as SocialStatus;
+      const updatedPeople = new Map(state.people);
+      updatedPeople.set(person.id, { ...person, socialStatus: newStatus });
+      return { ...state, people: updatedPeople };
+    }
+
+    case 'set_household_role': {
+      const resolvedId = resolveConsequenceTarget(consequence.target, boundActors);
+      const person = resolvedId ? state.people.get(resolvedId) : undefined;
+      if (!person) return state;
+      const newRole = consequence.value as HouseholdRole;
+      const updatedPeople = new Map(state.people);
+      updatedPeople.set(person.id, { ...person, householdRole: newRole });
+      return { ...state, people: updatedPeople };
+    }
+
+    case 'clear_household': {
+      const resolvedId = resolveConsequenceTarget(consequence.target, boundActors);
+      const person = resolvedId ? state.people.get(resolvedId) : undefined;
+      if (!person || !person.householdId) return state;
+      const household = state.households.get(person.householdId);
+      if (!household) return state;
+      const updatedHousehold = {
+        ...household,
+        memberIds: household.memberIds.filter(id => id !== person.id),
+        ashkaMelathiBonds: household.ashkaMelathiBonds.filter(
+          ([a, b]) => a !== person.id && b !== person.id,
+        ),
+        headId: household.headId === person.id ? null : household.headId,
+        seniorWifeId: household.seniorWifeId === person.id ? null : household.seniorWifeId,
+      };
+      const updatedPeople = new Map(state.people);
+      updatedPeople.set(person.id, { ...person, householdId: null, householdRole: null });
+      const updatedHouseholds = new Map(state.households);
+      updatedHouseholds.set(household.id, updatedHousehold);
+      return { ...state, people: updatedPeople, households: updatedHouseholds };
+    }
+
+    case 'set_household_tradition': {
+      // target is a personId (the household head) or a slot token resolving to one.
+      const resolvedId = resolveConsequenceTarget(consequence.target, boundActors);
+      const person = resolvedId ? state.people.get(resolvedId) : undefined;
+      const householdId = person?.householdId;
+      if (!householdId) return state;
+      const household = state.households.get(householdId);
+      if (!household) return state;
+      const newTradition = consequence.value as HouseholdTradition;
+      const updatedHouseholds = new Map(state.households);
+      updatedHouseholds.set(householdId, { ...household, tradition: newTradition });
+      return { ...state, households: updatedHouseholds };
     }
 
     default:

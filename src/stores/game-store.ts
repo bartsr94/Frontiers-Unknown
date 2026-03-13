@@ -26,7 +26,8 @@ import { applyEventChoice } from '../simulation/events/resolver';
 import type { ApplyChoiceResult } from '../simulation/events/resolver';
 import { createRNG } from '../utils/rng';
 import { createTribe, TRIBE_PRESETS } from '../simulation/world/tribes';
-import { canMarry, performMarriage } from '../simulation/population/marriage';
+import { canMarry, performMarriage, formConcubineRelationship } from '../simulation/population/marriage';
+import type { InformalUnionStyle } from '../simulation/population/marriage';
 import { createFertilityProfile } from '../simulation/genetics/fertility';
 import { ETHNIC_DISTRIBUTIONS } from '../data/ethnic-distributions';
 import {
@@ -111,6 +112,13 @@ export interface GameStore {
   // ── Management phase ──────────────────────────────────────────────────────
   assignRole: (personId: string, role: WorkRole) => void;
   arrangeMarriage: (personAId: string, personBId: string) => void;
+  arrangeInformalUnion: (manId: string, womanId: string, style: InformalUnionStyle) => void;
+  /**
+   * Sends an unmarried young man (age 16–24) on Keth-Thara service for 4 turns.
+   * Sets role to 'keth_thara'; queues hh_keth_thara_service_ends deferred event.
+   * No-op if the person is ineligible.
+   */
+  assignKethThara: (personId: string) => void;
   /** Execute a barter trade with an external tribe (management phase only). */
   executeTrade: (tribeId: string, offer: TradeOffer, requested: TradeOffer) => void;
   sendDiplomaticAction: (tribeId: string, action: DiplomaticAction) => void;
@@ -157,10 +165,11 @@ interface SerialPerson extends Omit<Person, 'heritage' | 'relationships'> {
 interface SerialGameState
   extends Omit<
     GameState,
-    'people' | 'tribes' | 'culture' | 'eventCooldowns'
+    'people' | 'tribes' | 'culture' | 'eventCooldowns' | 'households'
   > {
   people: [string, SerialPerson][];
   tribes: [string, GameState['tribes'] extends Map<string, infer V> ? V : never][];
+  households: [string, import('../simulation/turn/game-state').Household][];
   culture: Omit<SettlementCulture, 'languages' | 'religions'> & {
     languages: [string, number][];
     religions: [string, number][];
@@ -189,6 +198,10 @@ function deserializePerson(s: SerialPerson): Person {
     relationships: new Map(s.relationships),
     // Old saves pre-dating the portrait system won't have this field; default to 1.
     portraitVariant: s.portraitVariant ?? 1,
+    // Old saves pre-dating the household system default to unattached.
+    householdId: s.householdId ?? null,
+    householdRole: s.householdRole ?? null,
+    ashkaMelathiPartnerIds: s.ashkaMelathiPartnerIds ?? [],
   };
 }
 
@@ -199,6 +212,7 @@ function serializeGameState(state: GameState): string {
       ([id, p]) => [id, serializePerson(p)] as [string, SerialPerson],
     ),
     tribes: Array.from(state.tribes.entries()) as SerialGameState['tribes'],
+    households: Array.from(state.households.entries()),
     culture: {
       ...state.culture,
       languages: Array.from(state.culture.languages.entries()),
@@ -242,6 +256,7 @@ function deserializeGameState(json: string): GameState {
       religions: new Map(s.culture.religions as [import('../simulation/population/person').ReligionId, number][]),
     },
     eventCooldowns: new Map(s.eventCooldowns),
+    households: new Map(s.households ?? []),
     deferredEvents: s.deferredEvents ?? [],
     flags: (s as GameState).flags ?? { creoleEmergedNotified: false },
   };
@@ -515,6 +530,7 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
     pendingEvents: [],
     councilMemberIds: seedCouncil(people),
     deferredEvents: [],
+    households: new Map(),
     config,
     flags: { creoleEmergedNotified: false },
   };
@@ -595,6 +611,14 @@ export const useGameStore = create<GameStore>((set, get) => {
         ...gameState,
         people: dawnResult.updatedPeople,
         graveyard: [...gameState.graveyard, ...dawnResult.newGraveyardEntries],
+        households: (() => {
+          if (dawnResult.updatedHouseholds.size === 0) return gameState.households;
+          const merged = new Map(gameState.households);
+          for (const [id, h] of dawnResult.updatedHouseholds) {
+            merged.set(id, h);
+          }
+          return merged;
+        })(),
         settlement: {
           ...gameState.settlement,
           populationCount: dawnResult.populationCount,
@@ -651,7 +675,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         const prevRole = entry.context['prevRole'] as WorkRole | undefined;
         if (missionActorId && prevRole) {
           const p = restoredPeople.get(missionActorId);
-          if (p && p.role === 'away') {
+          if (p && (p.role === 'away' || p.role === 'keth_thara')) {
             restoredPeople.set(missionActorId, { ...p, role: prevRole });
           }
         }
@@ -850,6 +874,24 @@ export const useGameStore = create<GameStore>((set, get) => {
       set({ gameState: { ...gameState, people: updatedPeople } });
     },
 
+    arrangeInformalUnion(manId, womanId, style) {
+      const { gameState } = get();
+      if (!gameState) return;
+      const man   = gameState.people.get(manId);
+      const woman = gameState.people.get(womanId);
+      if (!man || !woman) return;
+      const result = formConcubineRelationship(man, woman, style, gameState);
+      const updatedPeople = new Map(gameState.people);
+      updatedPeople.set(result.updatedMan.id,   result.updatedMan);
+      updatedPeople.set(result.updatedWoman.id, result.updatedWoman);
+      const updatedHouseholds = new Map(gameState.households);
+      updatedHouseholds.set(result.household.id, result.household);
+      const updatedState: GameState = { ...gameState, people: updatedPeople, households: updatedHouseholds };
+      const json = serializeGameState(updatedState);
+      localStorage.setItem(SAVE_KEY, json);
+      set({ gameState: updatedState });
+    },
+
     arrangeMarriage(personAId, personBId) {
       const { gameState } = get();
       if (!gameState) return;
@@ -881,12 +923,49 @@ export const useGameStore = create<GameStore>((set, get) => {
         updatedPeople.set(observer.id, { ...observer, relationships: updatedRelationships });
       }
 
+      // Apply household changes.
+      const updatedHouseholds = new Map(gameState.households);
+      updatedHouseholds.set(result.household.id, result.household);
+
       const updatedState: GameState = {
         ...gameState,
         people: updatedPeople,
+        households: updatedHouseholds,
         eventHistory: [...gameState.eventHistory, result.eventRecord],
       };
 
+      const json = serializeGameState(updatedState);
+      localStorage.setItem(SAVE_KEY, json);
+      set({ gameState: updatedState });
+    },
+
+    assignKethThara(personId) {
+      const { gameState } = get();
+      if (!gameState) return;
+      const person = gameState.people.get(personId);
+      if (!person) return;
+      // Eligibility: unmarried male, age 16–24, not already away or keth_thara
+      if (person.sex !== 'male') return;
+      if (person.age < 16 || person.age > 24) return;
+      if (person.spouseIds.length > 0) return;
+      if (person.role === 'away' || person.role === 'keth_thara') return;
+
+      const prevRole = person.role;
+      const updatedPeople = new Map(gameState.people);
+      updatedPeople.set(personId, { ...person, role: 'keth_thara' });
+
+      const deferredEntry = {
+        eventId: 'hh_keth_thara_service_ends',
+        scheduledTurn: gameState.turnNumber + 4,
+        context: { missionActorId: personId, prevRole },
+        boundActors: { youth: personId },
+      };
+
+      const updatedState: GameState = {
+        ...gameState,
+        people: updatedPeople,
+        deferredEvents: [...gameState.deferredEvents, deferredEntry],
+      };
       const json = serializeGameState(updatedState);
       localStorage.setItem(SAVE_KEY, json);
       set({ gameState: updatedState });

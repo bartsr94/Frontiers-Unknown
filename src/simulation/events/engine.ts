@@ -7,7 +7,7 @@
  * `src/simulation/events/definitions/`.
  */
 
-import type { SkillId, DerivedSkillId, TraitId, CultureId, ReligionId, SocialStatus, WorkRole } from '../population/person';
+import type { SkillId, DerivedSkillId, TraitId, CultureId, ReligionId, SocialStatus, WorkRole, HouseholdRole } from '../population/person';
 
 // ─── Consequence Types ───────────────────────────────────────────────────────
 
@@ -29,7 +29,15 @@ export type ConsequenceType =
   /** Immediately queues another named event to fire next. */
   | 'trigger_event'
   /** Schedules a deferred follow-up event to fire after N turns. `target` = eventId, `value` = turns to wait. */
-  | 'queue_deferred_event';
+  | 'queue_deferred_event'
+  /** Changes a person's socialStatus. `target` = personId or slot token. `value` = new SocialStatus string. */
+  | 'set_social_status'
+  /** Changes a person's householdRole. `target` = personId or slot token. `value` = new HouseholdRole string. */
+  | 'set_household_role'
+  /** Removes a person from their household (clears householdId and householdRole). `target` = personId or slot token. */
+  | 'clear_household'
+  /** Changes a household's tradition. `target` = householdId or '{head}' slot. `value` = new HouseholdTradition string. */
+  | 'set_household_tradition';
 
 // ─── Event Category ──────────────────────────────────────────────────────────
 
@@ -78,7 +86,11 @@ export type PrerequisiteType =
   /** True when at least one construction project is in the queue. */
   | 'construction_active'
   /** True when settlement population exceeds shelter capacity. */
-  | 'overcrowded';
+  | 'overcrowded'
+  /** True when at least one household has two or more wives. */
+  | 'has_multi_wife_household'
+  /** True when at least one Ashka-Melathi bond exists in any household. */
+  | 'has_ashka_melathi_bond';
 
 // ─── Prerequisite & Requirement Interfaces ────────────────────────────────────
 
@@ -119,6 +131,8 @@ export interface ActorCriteria {
   maritalStatus?: 'married' | 'unmarried';
   role?: WorkRole;
   socialStatus?: SocialStatus;
+  /** Person must be in this household role (e.g., 'senior_wife', 'wife', 'thrall'). */
+  householdRole?: HouseholdRole;
   /** Person must have this trait in their traits array. */
   hasTrait?: TraitId;
   /** Person must have at least this score in the given skill. */

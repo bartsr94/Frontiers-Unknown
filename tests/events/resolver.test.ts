@@ -828,3 +828,134 @@ describe('applyEventChoice — missionActorSlot', () => {
     expect(entry.context['missionActorId']).toBeUndefined();
   });
 });
+
+// ─── Household consequence types ──────────────────────────────────────────────
+
+describe("applyEventChoice — 'set_social_status' consequence", () => {
+  it('updates socialStatus on the targeted bound actor', () => {
+    const thrall = {
+      id: 'thrall-1',
+      firstName: 'Asta',
+      familyName: '',
+      sex: 'female',
+      age: 20,
+      isAlive: true,
+      socialStatus: 'thrall',
+      role: 'unassigned',
+      spouseIds: [],
+      parentIds: [null, null],
+      childrenIds: [],
+      householdId: null,
+      householdRole: null,
+      ashkaMelathiPartnerIds: [],
+      languages: [],
+      heritage: { bloodline: [], primaryCulture: 'settlement_native', cultureWeights: {} },
+      genetics: { visibleTraits: { skinTone: 0.5, hairColor: 'black', hairTexture: 'straight', eyeColor: 'brown', build: 'medium', heightModifier: 0 }, extendedFertility: false, genderRatioModifier: 0 },
+      traits: [], skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+      relationships: new Map(), portraitVariant: 1,
+    } as unknown as Person;
+
+    const state: GameState = { ...makeState(), people: new Map([['thrall-1', thrall]]) } as unknown as GameState;
+    const event = makeEvent([{ type: 'set_social_status', target: '{person}', value: 'newcomer' }]);
+    const boundActors = { person: 'thrall-1' };
+    const result = applyEventChoice(event, 'choice_a', state, undefined, boundActors);
+    expect(result.state.people.get('thrall-1')?.socialStatus).toBe('newcomer');
+  });
+});
+
+describe("applyEventChoice — 'set_household_role' consequence", () => {
+  it('updates householdRole on the targeted bound actor', () => {
+    const wife = {
+      id: 'wife-1',
+      firstName: 'Kira',
+      familyName: 'Tal',
+      sex: 'female',
+      age: 28,
+      isAlive: true,
+      socialStatus: 'free',
+      role: 'unassigned',
+      spouseIds: [],
+      parentIds: [null, null],
+      childrenIds: [],
+      householdId: 'hh-1',
+      householdRole: 'wife',
+      ashkaMelathiPartnerIds: [],
+      languages: [],
+      heritage: { bloodline: [], primaryCulture: 'settlement_native', cultureWeights: {} },
+      genetics: { visibleTraits: { skinTone: 0.4, hairColor: 'brown', hairTexture: 'straight', eyeColor: 'grey', build: 'medium', heightModifier: 0 }, extendedFertility: false, genderRatioModifier: 0 },
+      traits: [], skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+      relationships: new Map(), portraitVariant: 1,
+    } as unknown as Person;
+
+    const state: GameState = { ...makeState(), people: new Map([['wife-1', wife]]) } as unknown as GameState;
+    const event = makeEvent([{ type: 'set_household_role', target: '{wife}', value: 'senior_wife' }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { wife: 'wife-1' });
+    expect(result.state.people.get('wife-1')?.householdRole).toBe('senior_wife');
+  });
+});
+
+describe("applyEventChoice — 'clear_household' consequence", () => {
+  it('clears householdId and householdRole on the targeted person', () => {
+    const person = {
+      id: 'p-1',
+      firstName: 'Tal',
+      familyName: 'Mor',
+      sex: 'female',
+      age: 22,
+      isAlive: true,
+      socialStatus: 'free',
+      role: 'unassigned',
+      spouseIds: [],
+      parentIds: [null, null],
+      childrenIds: [],
+      householdId: 'hh-2',
+      householdRole: 'concubine',
+      ashkaMelathiPartnerIds: [],
+      languages: [],
+      heritage: { bloodline: [], primaryCulture: 'settlement_native', cultureWeights: {} },
+      genetics: { visibleTraits: { skinTone: 0.6, hairColor: 'dark_brown', hairTexture: 'curly', eyeColor: 'brown', build: 'medium', heightModifier: 0 }, extendedFertility: false, genderRatioModifier: 0 },
+      traits: [], skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+      relationships: new Map(), portraitVariant: 1,
+    } as unknown as Person;
+
+    const hhMap = new Map([['hh-2', { id: 'hh-2', name: 'T', tradition: 'sauromatian', headId: null, seniorWifeId: null, memberIds: ['p-1'], ashkaMelathiBonds: [], foundedTurn: 1 }]]);
+    const state: GameState = { ...makeState(), people: new Map([['p-1', person]]), households: hhMap } as unknown as GameState;
+    const event = makeEvent([{ type: 'clear_household', target: '{member}' }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { member: 'p-1' });
+    const updated = result.state.people.get('p-1')!;
+    expect(updated.householdId).toBeNull();
+    expect(updated.householdRole).toBeNull();
+  });
+});
+
+describe("applyEventChoice — 'set_household_tradition' consequence", () => {
+  it("updates the household's tradition field via the targeted person's householdId", () => {
+    const head = {
+      id: 'head-1',
+      firstName: 'Arko',
+      familyName: 'Bel',
+      sex: 'male',
+      age: 35,
+      isAlive: true,
+      socialStatus: 'free',
+      role: 'unassigned',
+      spouseIds: [],
+      parentIds: [null, null],
+      childrenIds: [],
+      householdId: 'hh-3',
+      householdRole: 'head',
+      ashkaMelathiPartnerIds: [],
+      languages: [],
+      heritage: { bloodline: [], primaryCulture: 'settlement_native', cultureWeights: {} },
+      genetics: { visibleTraits: { skinTone: 0.3, hairColor: 'blonde', hairTexture: 'straight', eyeColor: 'blue', build: 'medium', heightModifier: 0 }, extendedFertility: false, genderRatioModifier: 0 },
+      traits: [], skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+      relationships: new Map(), portraitVariant: 1,
+    } as unknown as Person;
+
+    const hhMap = new Map([['hh-3', { id: 'hh-3', name: 'Bel Ashkaran', tradition: 'sauromatian', headId: 'head-1', seniorWifeId: null, memberIds: ['head-1'], ashkaMelathiBonds: [], foundedTurn: 1 }]]);
+    const state: GameState = { ...makeState(), people: new Map([['head-1', head]]), households: hhMap } as unknown as GameState;
+    const event = makeEvent([{ type: 'set_household_tradition', target: '{head}', value: 'ansberite' }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { head: 'head-1' });
+    expect(result.state.households?.get('hh-3')?.tradition).toBe('ansberite');
+  });
+});

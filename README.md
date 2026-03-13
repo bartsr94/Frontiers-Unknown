@@ -37,10 +37,13 @@ npx tsc --noEmit   # Type-check
 |-------|------|--------|
 | 1 | Foundation — Ten Men in the Wilderness | ✅ Complete |
 | 2 | Genetics Engine — Children of Two Worlds | ✅ Complete |
-| 3 | Living Settlement — A Place Called Home | 🔄 In Progress |
+| 3 | Living Settlement — A Place Called Home | ✅ Complete |
+| 3.5 | Household Depth — The Ashkaran | ✅ Complete |
 | 4 | Polish — The Ashmark Remembers | 🔲 Planned |
 
-**Phase 3 progress:** Language acquisition engine ✅ · Cultural identity & drift system ✅ · Founder character variety ✅ · Skills & experience tracking ✅ · Council voice system ✅ · Character portrait system ✅ · Event `add_person` consequence (people-joining events now populate the settlement) ✅ · Settlement buildings & construction system ✅ · Event character binding (named actors in every event, `{slot}` interpolation, portrait strip) ✅ · Economy system (Company quota, tribe trade, spoilage, crafting) ✅ · Generic task roles (Forager, Quarrier, Lumberjack) ✅ · Tilled Fields building gates farmer productivity ✅ · Clickable role assignment in Settlers view ✅
+**Phase 3 progress:** Language acquisition engine ✅ · Cultural identity & drift system ✅ · Founder character variety ✅ · Skills & experience tracking ✅ · Council voice system ✅ · Character portrait system ✅ · Event `add_person` consequence ✅ · Settlement buildings & construction system ✅ · Event character binding (named actors, `{slot}` interpolation, portrait strip) ✅ · Economy system (Company quota, tribe trade, spoilage, crafting) ✅ · Generic task roles (Forager, Quarrier, Lumberjack) ✅ · Tilled Fields building ✅ · Clickable role assignment ✅
+
+**Phase 3.5 progress:** Household data model & serialisation ✅ · `household.ts` utility module ✅ · Marriage auto-forms households ✅ · Thrall social status with freedom pathway ✅ · Keth-Thara work role ✅ · Ashka-Melathi bond formation (per-turn dawn step) ✅ · Wife-council events ✅ · PersonDetail household section ✅ · Informal Union tab in MarriageDialog ✅ · Full household test suite (29 tests) ✅
 
 ---
 
@@ -54,3 +57,4 @@ npx tsc --noEmit   # Type-check
 - [plans/PALUSTERIA_GAME_DESIGN.md](plans/PALUSTERIA_GAME_DESIGN.md) — Game design document (what and why)
 - [plans/EVENT_CHARACTER_BINDING.md](plans/EVENT_CHARACTER_BINDING.md) — Event character binding system (actor slots, text interpolation, portrait strip)
 - [plans/ECONOMY_SYSTEM.md](plans/ECONOMY_SYSTEM.md) — Economy system design (Company quota, tribe trade, spoilage, crafting)
+- [plans/HOUSEHOLD_DEPTH.md](plans/HOUSEHOLD_DEPTH.md) — Household system design (ashkarans, Keth-Thara, thralls, Ashka-Melathi bonds, wife-council)

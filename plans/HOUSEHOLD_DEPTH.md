@@ -1,7 +1,7 @@
 # Household Depth System — Design Document
 
 **Phase:** 3.5 — "Household Depth" (between Phase 3 and Phase 4)
-**Status:** Design approved, ready to implement
+**Status:** ✅ Complete — implemented Phase 3.5 (all 10 steps; 713/713 tests)
 **Companion Documents:** `PALUSTERIA_ARCHITECTURE.md`, `PALUSTERIA_GAME_DESIGN.md`, `CLAUDE.md`
 **Lore Sources:** *Sauromatian Household Composition*, *Ansberite Household Formation and Structure*
 
@@ -958,3 +958,38 @@ The following are acknowledged but explicitly deferred to Phase 4:
 - **Household economics** — shared resource pools, compound-level production bonuses — interesting but architecturally significant; deferred
 - **Multiple households merging** — when a man with a household takes a second wife from another household; the simpler rule is that the second wife joins his household
 - **Household dissolution events** — death of the head, mass departure, irreconcilable rifts; the `dissolveHousehold` utility is ready for these but no event chains are defined yet
+
+---
+
+## 19. Implementation Notes (Phase 3.5 — Complete)
+
+### What was built vs. the design
+
+All 10 milestones shipped as designed. Notable divergences from the spec:
+
+**Step 3.5a — Data Model:**  
+`Household`, `HouseholdRole`, `HouseholdTradition` added to `game-state.ts`. `householdId`, `householdRole`, `ashkaMelathiPartnerIds` added to `Person`. `'thrall'` added to `SocialStatus`. `'keth_thara'` added to `WorkRole` (placed between `'away'` and `'gather_food'`; total WorkRole union now 12 values). Full `deserializePerson` fallbacks for old saves. `households: new Map()` in `createInitialState`.
+
+**Step 3.5b — `household.ts`:**  
+Pure TypeScript utility module. All 9 functions implemented: `createHousehold`, `addToHousehold`, `removeFromHousehold`, `getHouseholdMembers`, `getHouseholdByPerson`, `getSeniorWife`, `countWives`, `countConcubines`, `dissolveHousehold`. `HOUSEHOLD_ROLE_LABELS` and `HOUSEHOLD_ROLE_COLORS` exported for UI use.
+
+**Step 3.5c — `marriage.ts`:**  
+`performMarriage` creates or joins a household on every formal marriage; tradition derived from the bride's primary culture first. `canMarry` checks wife-capacity via `countWives`. `formConcubineRelationship(manId, womanId, style, state)` supports `'concubine'` and `'hearth_companion'` styles. `InformalUnionStyle`, `InformalUnionResult` types exported.
+
+**Step 3.5d — Thrall System:**  
+`set_social_status`, `set_household_role`, `clear_household` consequence types in `engine.ts` and handled in `resolver.ts`. Events `hh_tribal_thrall_offer` and `hh_thrall_elevation` in `definitions/household.ts`. The `thrallBornSonIds` fertility signal (spec §6.2) was simplified — the elevation event is triggered directly from `hh_tribal_thrall_offer`'s event chain rather than from `processPregnancies`, keeping the dawn step clean.
+
+**Step 3.5e — Keth-Thara:**  
+`keth_thara` blocked in `matchesCriteria` (same pattern as `away`). `assignKethThara(personId)` action in `game-store.ts`. Role restoration in `startTurn` extended to cover `keth_thara` alongside `away`. Event `hh_keth_thara_service_ends` deferred 4–6 turns.
+
+**Step 3.5f — Ashka-Melathi bonds:**  
+Step 8.75 in `processDawn`; 15% chance per unbonded co-wife pair per season. `DawnResult` extended with `updatedHouseholds` and `newAshkaMelathiBonds`. Applied in `game-store.ts` `postDawnState`.
+
+**Step 3.5g — Wife-council events:**  
+`set_household_tradition` consequence type. `has_multi_wife_household` and `has_ashka_melathi_bond` prerequisite types. Three events: `hh_wife_council_demands`, `hh_tradition_clash`, `hh_ashka_melathi_deepens`. `householdRole` criterion added to `ActorCriteria`.
+
+**Step 3.5h — UI:**  
+PersonDetail household section: role badge, member list (clickable to navigate), Ashka-Melathi bond display, Keth-Thara assignment button (gated to management phase + correct age + male + unassigned). MarriageDialog renamed "Arrange Union" with Formal Marriage / Informal Union tab bar; Informal Union tab shows Concubine/Hearth Companion style selector and two person columns. PeopleView: `keth_thara` added to locked-role set (tooltip: "On Keth-Thara service — returns automatically").
+
+**Step 3.5i — Tests:**  
+29 new tests in `tests/population/household.test.ts`. 8 new tests in `tests/population/marriage.test.ts`. 7 new tests in `tests/events/actor-resolver.test.ts`. 4 new tests in `tests/events/resolver.test.ts`. **Final count: 713/713 passing across 23 test files.**

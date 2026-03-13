@@ -1,6 +1,6 @@
 # Palusteria: Children of the Ashmark — Game Design Document
 
-**Version:** 1.0  
+**Version:** 1.1 (updated after Phase 3.5 — Household Depth)  
 **Document Type:** Game Design (What & Why)  
 **Companion Document:** `PALUSTERIA_ARCHITECTURE.md` (How)  
 **Setting:** The Ashmark region of Palusteria
@@ -93,6 +93,38 @@ The game must remain playable from 10 people to 500+. The UI adapts through four
 **Settlement (200+):** Demographic dashboard with policy-level decisions. Notable individuals still surface through events.
 
 All views remain available at all sizes — the game defaults to the appropriate level and surfaces the most relevant information.
+
+### 4.4 Household System
+
+Households are tracked objects — named social units that form when marriages are arranged and persist as the settlement's basic domestic structure. Each household has a tradition type, a head, a senior wife, a set of members with specific roles, and optional Ashka-Melathi bonds between co-wives.
+
+**Two irreconcilable models coexist in the founding generation.**
+
+The *Sauromatian model* (_ashkaran_): a multi-wife compound where the wife-council holds real authority. The husband is the household's spiritual and legal face, but practical decisions are made by the women collectively. The senior wife speaks for the council. A husband who ignores his wife-council courts open conflict.
+
+The *Imanian model*: a patriarch nominally leads and his word is law. Secondary wives (concubines) are quietly acknowledged, without formal standing. Women manage the household internally but perform public deference to male authority.
+
+A third model emerges from the colonial experience: the *Ansberite hybrid*, in which a hearth-companion relationship (neither wife nor concubine) grants contractual rights to a secondary woman, and tradition itself is explicitly considered contested. Ansberite households are rare in the founding generation but become the settlement's default as the generations pass.
+
+**Household roles:**
+
+| Role | Description |
+|------|-------------|
+| `head` | The nominal patriarch — typically the husband |
+| `senior_wife` | Eldest or highest-standing wife; leads the wife-council |
+| `wife` | Full formal wife (blood-wife or formally elevated) |
+| `concubine` | Informal but acknowledged; no spouseIds entry |
+| `hearth_companion` | Ansberite formalisation — contractual rights without full wife standing |
+| `child` | Dependent minor member (under 16) |
+| `thrall` | Captive with restricted status; freed by bearing a son or by player choice |
+
+**Thralls** are an acquired social status — never inherited. A thrall woman who bears a son triggers a wife-council event that forces the player to choose her future: elevate her as a wife, free her as a concubine of the household, or free her to make her own way. Her son is born free regardless.
+
+**Keth-Thara duty** is a young man's cultural obligation, observed across all Sauromatian groups. A man between 17 and 30 may be assigned to Keth-Thara service by the player. He is unavailable for other work, events, or actor slots during his service. When his service ends, the event fires and he returns — spiritually fulfilled, culturally legitimate, and somewhat changed. Men who complete Keth-Thara gain social standing with Sauromatian spouses and wives.
+
+**Ashka-Melathi bonds** form automatically between female household members who have been co-residents long enough for genuine closeness to develop. Each season there is a small chance (15%) that any unbonded pair of adult women in the same household forms an Ashka-Melathi bond. These bonds are the emotional centre of the Sauromatian household — they enable wife-council events, create new event prerequisites, and surface in the PersonDetail view.
+
+**Wife-council events** fire when household conditions create tension between the expedition council's authority and the wife-council's practical power. Examples: the wife-council collectively demands the husband give them a formal voice in settlement decisions; two wives clash over the household's cultural tradition; a wife confronts her husband over his refusal to acknowledge an Ashka-Melathi bond as legitimate. These events represent the Sauromatian model pushing back against Imanian norms, and the player's choices gradually establish precedent.
 
 ---
 

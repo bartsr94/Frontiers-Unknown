@@ -14,7 +14,7 @@
  *   DUSK   → seasonal effects, quota check (autumn), tribe updates
  */
 
-import type { GameState, Season, ResourceStock, GraveyardEntry, BuiltBuilding, ConstructionProject, QuotaStatus } from './game-state';
+import type { GameState, Season, ResourceStock, GraveyardEntry, BuiltBuilding, ConstructionProject, QuotaStatus, Household } from './game-state';
 import type { Person } from '../population/person';
 import type { SeededRNG } from '../../utils/rng';
 import { clamp } from '../../utils/math';
@@ -124,6 +124,10 @@ export interface DawnResult {
    * Each value is the amount lost (positive number). Zero-valued resources are omitted.
    */
   spoilageThisTurn: Partial<ResourceStock>;
+  /** Households updated this dawn (Ashka-Melathi bonds added). Empty map if no changes. */
+  updatedHouseholds: Map<string, Household>;
+  /** New Ashka-Melathi bonds formed this dawn: [householdId, personAId, personBId]. */
+  newAshkaMelathiBonds: Array<[string, string, string]>;
 }
 
 /** Data returned by processDusk(). The store applies these to GameState. */
@@ -474,6 +478,59 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     }
   }
 
+  // 8.75. Form Ashka-Melathi bonds between co-wives sharing a household.
+  const updatedHouseholds = new Map<string, Household>();
+  const newAshkaMelathiBonds: Array<[string, string, string]> = [];
+
+  for (const household of (state.households ?? new Map<string, Household>()).values()) {
+    const wives = household.memberIds
+      .map(id => updatedPeople.get(id))
+      .filter(
+        (p): p is Person =>
+          p !== undefined &&
+          (p.householdRole === 'senior_wife' || p.householdRole === 'wife'),
+      );
+
+    if (wives.length < 2) continue;
+
+    let updatedHousehold = { ...household, ashkaMelathiBonds: [...household.ashkaMelathiBonds] };
+    let changed = false;
+
+    for (let i = 0; i < wives.length; i++) {
+      for (let j = i + 1; j < wives.length; j++) {
+        const wA = wives[i]!;
+        const wB = wives[j]!;
+        const alreadyBonded = updatedHousehold.ashkaMelathiBonds.some(
+          ([a, b]) => (a === wA.id && b === wB.id) || (a === wB.id && b === wA.id),
+        );
+        if (alreadyBonded) continue;
+        // ~15% per season chance for co-wives to form an Ashka-Melathi bond.
+        if (rng.next() < 0.15) {
+          updatedHousehold.ashkaMelathiBonds.push([wA.id, wB.id]);
+          newAshkaMelathiBonds.push([household.id, wA.id, wB.id]);
+          changed = true;
+          // Mirror on each person's ashkaMelathiPartnerIds.
+          const pA = updatedPeople.get(wA.id);
+          const pB = updatedPeople.get(wB.id);
+          if (pA && !pA.ashkaMelathiPartnerIds.includes(wB.id)) {
+            updatedPeople.set(wA.id, {
+              ...pA,
+              ashkaMelathiPartnerIds: [...pA.ashkaMelathiPartnerIds, wB.id],
+            });
+          }
+          if (pB && !pB.ashkaMelathiPartnerIds.includes(wA.id)) {
+            updatedPeople.set(wB.id, {
+              ...pB,
+              ashkaMelathiPartnerIds: [...pB.ashkaMelathiPartnerIds, wA.id],
+            });
+          }
+        }
+      }
+    }
+
+    if (changed) updatedHouseholds.set(household.id, updatedHousehold);
+  }
+
   // 9. Recalculate cultural blend and religion distribution from the updated population.
   const updatedCultureBlend = computeCulturalBlend(updatedPeople);
   const updatedReligions = computeReligionDistribution(updatedPeople);
@@ -506,6 +563,8 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
       state.currentSeason,
       currentBuildings,
     ),
+    updatedHouseholds,
+    newAshkaMelathiBonds,
   };
 }
 

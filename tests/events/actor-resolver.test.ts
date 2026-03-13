@@ -403,3 +403,52 @@ describe('matchesCriteria — away role', () => {
     expect(canResolveActors(reqs, state)).toBe(false);
   });
 });
+
+// ─── Keth-Thara status ────────────────────────────────────────────────────────
+
+describe('matchesCriteria — keth_thara role', () => {
+  it('returns false for a person on keth_thara service', () => {
+    const p = makePerson({ role: 'keth_thara' });
+    expect(matchesCriteria(p, {})).toBe(false);
+  });
+
+  it('canFillSlot returns false when the only matching person is on keth_thara', () => {
+    const p = makePerson({ sex: 'male', role: 'keth_thara' });
+    const state = makeState(new Map([[p.id, p]]));
+    expect(canFillSlot({ sex: 'male' }, state)).toBe(false);
+  });
+
+  it('canResolveActors returns false when the only qualifying actor is on keth_thara', () => {
+    const p = makePerson({ sex: 'male', role: 'keth_thara' });
+    const state = makeState(new Map([[p.id, p]]));
+    const reqs: ActorRequirement[] = [{ slot: 'youth', criteria: { sex: 'male' } }];
+    expect(canResolveActors(reqs, state)).toBe(false);
+  });
+
+  it('returns true for an available person when a keth_thara peer also exists', () => {
+    const busy  = makePerson({ role: 'keth_thara' });
+    const avail = makePerson({ role: 'unassigned' });
+    const state = makeState(new Map([[busy.id, busy], [avail.id, avail]]));
+    const reqs: ActorRequirement[] = [{ slot: 'youth', criteria: {} }];
+    expect(canResolveActors(reqs, state)).toBe(true);
+  });
+});
+
+// ─── householdRole criteria ───────────────────────────────────────────────────
+
+describe('matchesCriteria — householdRole', () => {
+  it('matches a person with the exact householdRole', () => {
+    const p = makePerson({ householdRole: 'senior_wife' });
+    expect(matchesCriteria(p, { householdRole: 'senior_wife' })).toBe(true);
+  });
+
+  it('does not match a person with a different householdRole', () => {
+    const p = makePerson({ householdRole: 'wife' });
+    expect(matchesCriteria(p, { householdRole: 'senior_wife' })).toBe(false);
+  });
+
+  it('does not match a person with no householdRole', () => {
+    const p = makePerson({ householdRole: null });
+    expect(matchesCriteria(p, { householdRole: 'head' })).toBe(false);
+  });
+});

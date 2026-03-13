@@ -22,6 +22,7 @@ import { COMPANY_EVENTS }       from './definitions/company';
 import { DIPLOMACY_EVENTS }     from './definitions/diplomacy';
 import { CULTURAL_EVENTS }      from './definitions/cultural';
 import { BUILDING_EVENTS }      from './definitions/building';
+import { HOUSEHOLD_EVENTS }     from './definitions/household';
 
 // ─── Master event deck ────────────────────────────────────────────────────────
 
@@ -34,6 +35,7 @@ export const ALL_EVENTS: GameEvent[] = [
   ...DIPLOMACY_EVENTS,
   ...CULTURAL_EVENTS,
   ...BUILDING_EVENTS,
+  ...HOUSEHOLD_EVENTS,
 ];
 
 // ─── Prerequisite checking ────────────────────────────────────────────────────
@@ -55,7 +57,7 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
     }
     case 'has_person_matching': {
       // Checks that at least one living person satisfies all supplied criteria.
-      // Supported criteria keys: sex, religion, culturalIdentity, minAge, maxAge.
+      // Supported criteria keys: sex, religion, culturalIdentity, minAge, maxAge, socialStatus, role.
       const criteria = prereq.params as Record<string, unknown>;
       return Array.from(state.people.values()).some(person => {
         if (criteria['sex']             !== undefined && person.sex                          !== criteria['sex'])             return false;
@@ -63,6 +65,8 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
         if (criteria['culturalIdentity']!== undefined && person.heritage.primaryCulture     !== criteria['culturalIdentity']) return false;
         if (criteria['minAge']          !== undefined && person.age                          <  (criteria['minAge'] as number))  return false;
         if (criteria['maxAge']          !== undefined && person.age                          >  (criteria['maxAge'] as number))  return false;
+        if (criteria['socialStatus']    !== undefined && person.socialStatus                 !== criteria['socialStatus'])    return false;
+        if (criteria['role']            !== undefined && person.role                         !== criteria['role'])            return false;
         return true;
       });
     }
@@ -87,6 +91,20 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
     case 'overcrowded': {
       const ratio = getOvercrowdingRatio(state.settlement.populationCount, state.settlement.buildings);
       return ratio > 1.0;
+    }
+    case 'has_multi_wife_household': {
+      const households = state.households ?? new Map();
+      return Array.from(households.values()).some(h => {
+        const wives = h.memberIds.filter(id => {
+          const p = state.people.get(id);
+          return p && (p.householdRole === 'senior_wife' || p.householdRole === 'wife');
+        });
+        return wives.length >= 2;
+      });
+    }
+    case 'has_ashka_melathi_bond': {
+      const households = state.households ?? new Map();
+      return Array.from(households.values()).some(h => h.ashkaMelathiBonds.length > 0);
     }
     default:
       return true;

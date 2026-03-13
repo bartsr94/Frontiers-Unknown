@@ -15,6 +15,7 @@ import { useGameStore } from '../../stores/game-store';
 import { skinToneColor } from '../components/Portrait';
 import { heritageAbbr } from '../components/heritage-helpers';
 import { canMarry, getMarriageability, getLanguageCompatibility } from '../../simulation/population/marriage';
+import type { InformalUnionStyle } from '../../simulation/population/marriage';
 import { averageBloodlines, blendTraitDistributions } from '../../simulation/genetics/inheritance';
 import { resolveGenderRatio } from '../../simulation/genetics/gender-ratio';
 import type { Person } from '../../simulation/population/person';
@@ -88,9 +89,12 @@ interface MarriageDialogProps {
 export default function MarriageDialog({ onClose }: MarriageDialogProps) {
   const [selectedMaleId,   setSelectedMaleId]   = useState<string | null>(null);
   const [selectedFemaleId, setSelectedFemaleId] = useState<string | null>(null);
+  const [tab, setTab] = useState<'marriage' | 'informal'>('marriage');
+  const [informalStyle, setInformalStyle] = useState<InformalUnionStyle>('concubine');
 
   const gameState      = useGameStore(s => s.gameState);
   const arrangeMarriage = useGameStore(s => s.arrangeMarriage);
+  const arrangeInformalUnion = useGameStore(s => s.arrangeInformalUnion);
 
   if (!gameState) return null;
 
@@ -177,6 +181,10 @@ export default function MarriageDialog({ onClose }: MarriageDialogProps) {
 
   const canConfirm = !!compatibility?.allowed && !!selectedMale && !!selectedFemale;
 
+  // Informal union eligibility
+  const informalMales   = allPeople.filter(p => p.sex === 'male'   && p.age >= 16);
+  const informalFemales = allPeople.filter(p => p.sex === 'female' && p.age >= 16 && !p.householdId);
+
   function handleConfirm() {
     if (!canConfirm || !selectedMaleId || !selectedFemaleId) return;
     arrangeMarriage(selectedMaleId, selectedFemaleId);
@@ -192,7 +200,24 @@ export default function MarriageDialog({ onClose }: MarriageDialogProps) {
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-stone-700 bg-stone-950">
-          <h2 className="text-amber-300 font-bold text-base">Arrange Marriage</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-amber-300 font-bold text-base">Arrange Union</h2>
+            <div className="flex gap-1">
+              {(['marriage', 'informal'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => { setTab(t); setSelectedMaleId(null); setSelectedFemaleId(null); }}
+                  className={`px-2.5 py-0.5 rounded text-xs font-medium border transition-colors ${
+                    tab === t
+                      ? 'bg-amber-800 text-amber-100 border-amber-600'
+                      : 'bg-stone-800 text-stone-400 border-stone-600 hover:text-stone-200'
+                  }`}
+                >
+                  {t === 'marriage' ? 'Formal Marriage' : 'Informal Union'}
+                </button>
+              ))}
+            </div>
+          </div>
           <button
             onClick={onClose}
             className="text-stone-500 hover:text-stone-200 text-xl leading-none"
@@ -204,7 +229,96 @@ export default function MarriageDialog({ onClose }: MarriageDialogProps) {
 
         <div className="p-5 space-y-5">
 
-          {/* Two columns */}
+          {tab === 'informal' ? (
+            <>
+              {/* Informal union: style selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-stone-400 text-xs">Union type:</span>
+                {(['concubine', 'hearth_companion'] as const).map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setInformalStyle(s)}
+                    className={`px-2.5 py-0.5 rounded text-xs border transition-colors ${
+                      informalStyle === s
+                        ? 'bg-violet-900 text-violet-200 border-violet-600'
+                        : 'bg-stone-800 text-stone-400 border-stone-600 hover:text-stone-200'
+                    }`}
+                  >
+                    {s === 'concubine' ? 'Concubine' : 'Hearth Companion'}
+                  </button>
+                ))}
+              </div>
+              <p className="text-stone-500 text-xs">
+                {informalStyle === 'concubine'
+                  ? 'A concubine is a recognised household member without full wife status.'
+                  : 'A hearth companion holds independent economic standing within the household.'}
+              </p>
+
+              {/* Two columns */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h3 className="text-sky-400 font-semibold text-xs uppercase tracking-wider mb-2">
+                    ♂ Men ({informalMales.length})
+                  </h3>
+                  <div className="flex flex-col gap-1 max-h-52 overflow-y-auto pr-1">
+                    {informalMales.map(p => (
+                      <PersonColumnCard
+                        key={p.id}
+                        person={p}
+                        selected={selectedMaleId === p.id}
+                        onSelect={() => setSelectedMaleId(id => id === p.id ? null : p.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-rose-400 font-semibold text-xs uppercase tracking-wider mb-2">
+                    ♀ Unattached Women ({informalFemales.length})
+                  </h3>
+                  <div className="flex flex-col gap-1 max-h-52 overflow-y-auto pr-1">
+                    {informalFemales.length === 0 && (
+                      <p className="text-stone-500 italic text-xs">No unattached women available.</p>
+                    )}
+                    {informalFemales.map(p => (
+                      <PersonColumnCard
+                        key={p.id}
+                        person={p}
+                        selected={selectedFemaleId === p.id}
+                        onSelect={() => setSelectedFemaleId(id => id === p.id ? null : p.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex justify-end gap-3 pt-1">
+                <button
+                  onClick={onClose}
+                  className="px-4 py-1.5 rounded text-sm text-stone-300 hover:text-stone-100 border border-stone-600 hover:border-stone-400 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={!selectedMaleId || !selectedFemaleId}
+                  onClick={() => {
+                    if (!selectedMaleId || !selectedFemaleId) return;
+                    arrangeInformalUnion(selectedMaleId, selectedFemaleId, informalStyle);
+                    onClose();
+                  }}
+                  className={[
+                    'px-5 py-1.5 rounded text-sm font-semibold border transition-colors',
+                    (selectedMaleId && selectedFemaleId)
+                      ? 'bg-violet-800 hover:bg-violet-700 text-violet-100 border-violet-600'
+                      : 'bg-stone-800 text-stone-600 border-stone-700 cursor-not-allowed',
+                  ].join(' ')}
+                >
+                  Form Union
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
           <div className="grid grid-cols-2 gap-4">
 
             {/* Males */}
@@ -358,6 +472,8 @@ export default function MarriageDialog({ onClose }: MarriageDialogProps) {
               Confirm Marriage
             </button>
           </div>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -11,7 +11,8 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 |-------|--------|-------|
 | Phase 1 — Foundation | ✅ Complete | 13/13 steps done, 13/13 tests pass, zero compile errors |
 | Phase 2 — Genetics Engine | ✅ Complete | All 12 steps done, 139/139 tests pass, zero compile errors |
-| Phase 3 — Living Settlement | 🔄 In Progress | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ · Skills system ✅ · Skilled event resolution ✅ · Council voice system ✅ · Portrait system ✅ · Settlement buildings ✅ · Event character binding ✅ · Economy system ✅ · Generic task roles ✅ · Tilled Fields building ✅ |
+| Phase 3 — Living Settlement | ✅ Complete | Language acquisition ✅ · Cultural identity & drift ✅ · Founder variety ✅ · Skills system ✅ · Skilled event resolution ✅ · Council voice system ✅ · Portrait system ✅ · Settlement buildings ✅ · Event character binding ✅ · Economy system ✅ · Generic task roles ✅ · Tilled Fields building ✅ |
+| Phase 3.5 — Household Depth | ✅ Complete | Household data model ✅ · Utility module ✅ · Marriage auto-forms households ✅ · Thrall status ✅ · Keth-Thara role ✅ · Ashka-Melathi bonds ✅ · Wife-council events ✅ · PersonDetail UI ✅ · Informal Union dialog ✅ · Full test suite ✅ |
 | Phase 4 — Polish | 🔲 Not started | — |
 ---
 
@@ -73,7 +74,7 @@ If the exact age stage has no portraits yet, the resolver tries: `adult` → `yo
 
 ```bash
 npm run dev          # Vite dev server → http://localhost:5173
-npm test             # Run Vitest (665 passing across 22 test files)
+npm test             # Run Vitest (713 passing across 23 test files)
 npx tsc --noEmit     # Type-check without building
 ```
 
@@ -114,7 +115,8 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/events/event-filter.ts` | `ALL_EVENTS`, `filterEligibleEvents()`, `drawEvents()`; `canResolveActors` gate makes `actorRequirements` act as implicit event prerequisites |
 | `src/simulation/events/resolver.ts` | `applyEventChoice(event, choiceId, state, rng?, boundActors?)` returning `ApplyChoiceResult`; `resolveSkillCheck()` helper; `resolveConsequenceTarget()` (maps `{slot}` targets to person IDs); `add_person` consequence handler |
 | `src/simulation/events/actor-resolver.ts` | Actor binding engine: `matchesCriteria`, `canFillSlot`, `canResolveActors`, `selectActor`, `resolveActors`, `interpolateText` — pure TS, zero React, seeded RNG only |
-| `src/simulation/events/definitions/` | 33 events: company, diplomacy, domestic, economic, environmental + 18 cultural + 5 building |
+| `src/simulation/events/definitions/` | 39 events across 8 files; all events with named actors have `actorRequirements` |
+| `src/simulation/events/definitions/household.ts` | 6 household/domestic events: `hh_tribal_thrall_offer`, `hh_thrall_elevation`, `hh_wife_council_demands`, `hh_tradition_clash`, `hh_ashka_melathi_deepens`, `hh_keth_thara_service_ends` |
 | `src/simulation/buildings/building-definitions.ts` | `BuildingId` (13-member union), `BuildingDef`, `BUILDING_CATALOG`, `getBuildingDisplayName(defId, style)` — static catalog of all building types |
 | `src/simulation/buildings/building-effects.ts` | Pure effect getters: `getShelterCapacity`, `getOvercrowdingRatio`, `getBuildingFlatProductionBonus`, `getLanguageDriftMultiplier`, `getBuildingCulturePull`, `getSkillGrowthBonuses`, `hasBuilding`, `lacksBuilding`, etc. |
 | `src/simulation/buildings/construction.ts` | `canBuild` → `CanBuildResult` (`{ ok: true }` / `{ ok: false; reason }`); `startConstruction`, `assignBuilder`, `removeBuilder`, `processConstruction`, `cancelConstruction` |
@@ -128,9 +130,10 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/genetics/fertility.ts` | `BirthResult`, `createFertilityProfile`, `getFertilityChance`, `attemptConception`, `processPregnancies` |
 | `src/simulation/population/person.ts` | `Person` interface + `createPerson(options, rng?)` factory; heritage/bloodline types; `SkillId`, `PersonSkills`, `getSkillRating()`, `getDerivedSkill()`, `generatePersonSkills()` |
 | `src/simulation/population/naming.ts` | `generateName(sex, culture, motherFamilyName, fatherFamilyName, rng)` — 3 culture pools |
-| `src/simulation/population/marriage.ts` | `canMarry`, `performMarriage`, `getMarriageability` — Sauromatian/Imanian rules |
+| `src/simulation/population/marriage.ts` | `canMarry`, `performMarriage`, `getMarriageability`, `formConcubineRelationship`, `InformalUnionStyle` — Sauromatian/Imanian rules; household auto-formation on marriage |
+| `src/simulation/population/household.ts` | `createHousehold`, `addToHousehold`, `removeFromHousehold`, `getHouseholdMembers`, `getHouseholdByPerson`, `getSeniorWife`, `countWives`, `countConcubines`, `dissolveHousehold`, `HOUSEHOLD_ROLE_LABELS`, `HOUSEHOLD_ROLE_COLORS` |
 | `src/simulation/world/tribes.ts` | `createTribe`, `TRIBE_PRESETS` (16 presets), `updateTribeDisposition` |
-| `src/stores/game-store.ts` | Zustand store — full turn lifecycle, council, `arrangeMarriage`, tribe init |
+| `src/stores/game-store.ts` | Zustand store — full turn lifecycle, council, `arrangeMarriage`, `arrangeInformalUnion`, `assignKethThara`, tribe init; `households` Map serialised as `[string, Household][]` |
 | `src/ui/layout/LeftNav.tsx` | Left nav with phase-aware End Turn / Confirm Turn button |
 | `src/ui/layout/BottomBar.tsx` | Full-width resource strip (food, cattle, goods, gold, lumber, stone, pop) |
 | `src/simulation/events/council-advice.ts` | Council voice engine: `VoiceArchetype`, `getVoiceArchetype`, `scoreChoiceForPerson`, `hashPersonEvent`, `generateAdvice` — pure logic, deterministic via djb2 hash |
@@ -349,7 +352,7 @@ idle
 
 ### Generic Task Roles Notes
 
-- **3 new `WorkRole` values**: `gather_food` · `gather_stone` · `gather_lumber` (total WorkRole union: 11 values)
+- **3 new `WorkRole` values**: `gather_food` · `gather_stone` · `gather_lumber` (total WorkRole union: **12 values**, including `keth_thara` added in Phase 3.5)
 - **`gatherYield(skill)`** helper in `resources.ts`: base 1; +1 if skill ≥ 26 (Good); +1 if skill ≥ 63 (Excellent) → 1–3 range
 - **Skill mappings**: `gather_food` uses `plants`; `gather_stone` and `gather_lumber` use `custom`
 - **Seasonal scaling**: `gather_food` accumulates into `personFood` → gets the food seasonal multiplier like farmers; stone and lumber are written directly to `delta.stone` / `delta.lumber` — **no seasonal scaling**
@@ -434,9 +437,10 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/economy/crafting.test.ts` — 36/36 passing (recipe availability gating, apply/validate logic)
 - `tests/population/demographics.test.ts` — 16/16 passing (includes 4 child-culture blending tests)
 - `tests/population/marriage.test.ts` — 12/12 passing
+- `tests/population/household.test.ts` — 29/29 passing (createHousehold, addTo/removeFrom, getSeniorWife, countWives/Concubines, dissolveHousehold, getHouseholdMembers, getHouseholdByPerson)
 - `tests/population/culture.test.ts` — 21/21 passing (deriveCulture, processCulturalDrift, buildSettlementCultureDistribution, computeCulturalBlend)
 - `tests/culture/language-acquisition.test.ts` — 34/34 passing
 - `tests/population/skills.test.ts` — 36/36 passing (getSkillRating, getDerivedSkill, generatePersonSkills, createPerson integration)
 - `tests/buildings/construction.test.ts` — 19/19 passing (canBuild, startConstruction, assignBuilder/removeBuilder, processConstruction, cancelConstruction)
 - `tests/buildings/building-effects.test.ts` — 23/23 passing (shelterCapacity, productionBonus, childMortalityModifier, overcrowding, hasBuilding, etc.)
-- **Total: 665/665 passing**
+- **Total: 713/713 passing**

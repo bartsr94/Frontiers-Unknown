@@ -1,6 +1,6 @@
 # Palusteria: Children of the Ashmark — Architecture & Implementation Guide
 
-**Version:** 1.2 (updated after Phase 3 partial completion)  
+**Version:** 1.3 (updated after Phase 3.5 — Household Depth)  
 **Document Type:** Technical Architecture (How)  
 **Companion Document:** `PALUSTERIA_GAME_DESIGN.md` (What & Why)  
 **Stack:** React 19 + TypeScript (strict) + Vite + Zustand + Tailwind CSS
@@ -49,7 +49,8 @@ palusteria-game/
 │   │   ├── population/
 │   │   │   ├── person.ts               # Person interface, createPerson() factory, skills ✅
 │   │   │   ├── culture.ts              # CultureId, processCulturalDrift, deriveCulture ✅
-│   │   │   ├── marriage.ts             # Marriage matching, polygamy rules ✅
+│   │   │   ├── marriage.ts             # Marriage matching, polygamy rules, formConcubineRelationship ✅
+│   │   │   ├── household.ts            # createHousehold, addToHousehold, removeFromHousehold, dissolveHousehold ✅
 │   │   │   ├── naming.ts               # Culturally appropriate name generation ✅
 │   │   │   └── relationships.ts        # Opinion system, social bond calculations
 │   │   │
@@ -80,14 +81,15 @@ palusteria-game/
 │   │   │   ├── resolver.ts             # applyEventChoice(…, boundActors?), resolveSkillCheck(), resolveConsequenceTarget(), add_person handler ✅
 │   │   │   ├── actor-resolver.ts       # matchesCriteria, canFillSlot, canResolveActors, selectActor, resolveActors, interpolateText ✅
 │   │   │   ├── council-advice.ts       # VoiceArchetype, generateAdvice() — pure logic ✅
-│   │   │   └── definitions/            # 33 events across 7 files; all events with named actors have actorRequirements ✅
+│   │   │   └── definitions/            # 39 events across 8 files; all events with named actors have actorRequirements ✅
 │   │   │       ├── company.ts          # Company Supply Delivery, Letter from the Company ✅
 │   │   │       ├── diplomacy.ts        # Watchers at the River (Riverfolk first contact) ✅
 │   │   │       ├── domestic.ts         # Game Tracks, Weight of Distance, Men at Work ✅
 │   │   │       ├── economic.ts         # Traveling Merchant, Good Timber Nearby ✅
 │   │   │       ├── environmental.ts    # Bountiful Season, Sudden Storm, Cold Bites Deep ✅
-│   │   │       ├── cultural.ts         # 18 cultural/domestic events ✅
-│   │   │       └── building.ts         # 5 settlement events (overcrowding, construction) ✅
+│   │   │       ├── cultural.ts         # 13 cultural/domestic events ✅
+│   │   │       ├── building.ts         # 5 settlement events (overcrowding, construction) ✅
+│   │   │       └── household.ts        # 6 household events (thralls, Keth-Thara, wife-council, Ashka-Melathi) ✅
 │   │   │
 │   │   ├── buildings/
 │   │   │   ├── building-definitions.ts # BuildingId (13 types), BuildingDef, BUILDING_CATALOG ✅
@@ -129,7 +131,7 @@ palusteria-game/
 │   │   │   └── PopulationChart.tsx     # Demographics visualization
 │   │   │
 │   │   └── overlays/
-│   │       ├── MarriageDialog.tsx      # Arrange marriage interface
+│   │       ├── MarriageDialog.tsx      # Arrange Union: Formal Marriage and Informal Union tabs ✅
 │   │       ├── RoleAssignment.tsx      # Work role assignment
 │   │       └── GameSetup.tsx           # New game configuration screen
 │   │
@@ -174,7 +176,8 @@ palusteria-game/
     │   └── fertility.test.ts           # Fertility window edge cases ✅
     ├── population/
     │   ├── demographics.test.ts        # Population simulation sanity checks ✅
-    │   ├── marriage.test.ts            # Marriage rule correctness ✅
+    │   ├── marriage.test.ts            # Marriage rule correctness, household formation ✅
+    │   ├── household.test.ts           # createHousehold, addTo/removeFrom, getSeniorWife, dissolve ✅
     │   ├── culture.test.ts             # Cultural drift and blending ✅
     │   └── skills.test.ts              # Skill rating, derived formulas, generation ✅
     ├── economy/

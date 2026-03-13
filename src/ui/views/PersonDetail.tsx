@@ -22,7 +22,7 @@ import { useGameStore } from '../../stores/game-store';
 import Portrait from '../components/Portrait';
 import FamilyTree from './FamilyTree';
 import { CULTURE_LABELS } from '../../simulation/population/culture';
-import type { EthnicGroup } from '../../simulation/population/person';
+import type { EthnicGroup, HouseholdRole } from '../../simulation/population/person';
 import { getSkillRating, getDerivedSkill } from '../../simulation/population/person';
 import type { SkillId, DerivedSkillId, SkillRating } from '../../simulation/population/person';
 import type { TraitId } from '../../simulation/personality/traits';
@@ -196,6 +196,9 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
   const person = useGameStore(s => s.gameState?.people.get(personId));
   const graveyard = useGameStore(s => s.gameState?.graveyard ?? []);
   const people    = useGameStore(s => s.gameState?.people);
+  const households = useGameStore(s => s.gameState?.households);
+  const currentPhase = useGameStore(s => s.currentPhase);
+  const assignKethThara = useGameStore(s => s.assignKethThara);
 
   if (!person) {
     return (
@@ -647,6 +650,123 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
         </div>
 
         <Divider />
+
+        <Divider />
+
+        {/* Household & Keth-Thara */}
+        {(() => {
+          const HOUSEHOLD_ROLE_LABELS: Record<HouseholdRole, string> = {
+            head:              'Household Head',
+            senior_wife:       'Senior Wife',
+            wife:              'Wife',
+            concubine:         'Concubine',
+            hearth_companion:  'Hearth Companion',
+            child:             'Child',
+            thrall:            'Thrall',
+          };
+          const HOUSEHOLD_ROLE_COLORS: Record<HouseholdRole, string> = {
+            head:              'text-amber-300',
+            senior_wife:       'text-rose-300',
+            wife:              'text-pink-300',
+            concubine:         'text-purple-300',
+            hearth_companion:  'text-violet-300',
+            child:             'text-sky-300',
+            thrall:            'text-stone-400',
+          };
+
+          const household = person.householdId ? households?.get(person.householdId) : null;
+
+          const eligibleForKethThara =
+            person.sex === 'male' &&
+            person.age >= 16 &&
+            person.age <= 24 &&
+            person.spouseIds.length === 0 &&
+            person.role !== 'away' &&
+            person.role !== 'keth_thara';
+
+          return (
+            <>
+              {household ? (
+                <>
+                  <SectionHeading>Household</SectionHeading>
+                  <div className="flex flex-col gap-1 text-xs mb-2">
+                    <div className="flex gap-2">
+                      <span className="text-stone-500">Name</span>
+                      <span className="text-amber-300 font-medium">{household.name}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="text-stone-500">Tradition</span>
+                      <span className="text-stone-300 capitalize">{household.tradition}</span>
+                    </div>
+                    {person.householdRole && (
+                      <div className="flex gap-2">
+                        <span className="text-stone-500">Role</span>
+                        <span className={`font-medium ${HOUSEHOLD_ROLE_COLORS[person.householdRole]}`}>
+                          {HOUSEHOLD_ROLE_LABELS[person.householdRole]}
+                        </span>
+                      </div>
+                    )}
+                    {/* Co-members (not self) */}
+                    {household.memberIds.filter(id => id !== personId).length > 0 && (
+                      <div>
+                        <span className="text-stone-500">Members: </span>
+                        {household.memberIds
+                          .filter(id => id !== personId)
+                          .map(id => {
+                            const m = people?.get(id);
+                            if (!m) return null;
+                            return (
+                              <button
+                                key={id}
+                                onClick={() => navigateTo(id)}
+                                className="mr-2 text-stone-300 hover:text-stone-100 underline decoration-dotted"
+                              >
+                                {m.firstName}
+                                {m.householdRole && (
+                                  <span className={`ml-0.5 text-[10px] ${HOUSEHOLD_ROLE_COLORS[m.householdRole]}`}>
+                                    ({HOUSEHOLD_ROLE_LABELS[m.householdRole]})
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                      </div>
+                    )}
+                    {/* Ashka-Melathi bonds */}
+                    {person.ashkaMelathiPartnerIds.length > 0 && (
+                      <div>
+                        <span className="text-rose-400">Ashka-Melathi with: </span>
+                        {person.ashkaMelathiPartnerIds.map(id => (
+                          <button
+                            key={id}
+                            onClick={() => navigateTo(id)}
+                            className="mr-2 text-rose-300 hover:text-rose-100 underline decoration-dotted"
+                          >
+                            {nameOf(id)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : eligibleForKethThara && currentPhase === 'management' ? (
+                <>
+                  <SectionHeading>Keth-Thara</SectionHeading>
+                  <p className="text-stone-400 text-xs mb-2">
+                    {person.firstName} is eligible for the traditional season of service — wandering labour
+                    that shapes Sauromatian young men before they may claim a hearth.
+                  </p>
+                  <button
+                    onClick={() => assignKethThara(personId)}
+                    className="w-full py-1 rounded text-xs bg-violet-900 text-violet-200 hover:bg-violet-800 font-medium"
+                  >
+                    Send on Keth-Thara Service
+                  </button>
+                </>
+              ) : null}
+            </>
+          );
+        })()}
 
         {/* Family tree toggle */}
         <button
