@@ -9,17 +9,21 @@
 
 import type { ResourceType } from '../../simulation/turn/game-state';
 
-/** Emoji icon for each resource. Use for compact resource labels throughout the UI. */
+/**
+ * Period-style Unicode glyphs for each resource.
+ * Prefer these over emoji — they render consistently as plain text across OSes
+ * and read as typeset/carved rather than digitally modern.
+ */
 export const RESOURCE_EMOJI: Partial<Record<ResourceType, string>> = {
-  food:     '🌾',
-  cattle:   '🐄',
-  goods:    '📦',
-  gold:     '💰',
-  lumber:   '🪵',
-  stone:    '🪨',
-  medicine: '💊',
-  steel:    '⚙️',
-  horses:   '🐎',
+  food:     '✦',
+  cattle:   '⁂',
+  goods:    '◈',
+  gold:     '◆',
+  lumber:   '⌘',
+  stone:    '◼',
+  medicine: '✚',
+  steel:    '⚔',
+  horses:   '⋈',
 };
 
 /** Full display label for each resource. */
@@ -35,15 +39,15 @@ export const RESOURCE_LABEL: Record<ResourceType, string> = {
   horses:   'Horses',
 };
 
-/** All nine resources in canonical display order (emoji + label bundled for convenience). */
+/** All nine resources in canonical display order (glyph + label bundled for convenience). */
 export const ALL_RESOURCES: ReadonlyArray<{ key: ResourceType; emoji: string; label: string }> = [
-  { key: 'food',     emoji: '🌾', label: 'Food'     },
-  { key: 'cattle',   emoji: '🐄', label: 'Cattle'   },
-  { key: 'goods',    emoji: '📦', label: 'Goods'    },
-  { key: 'gold',     emoji: '💰', label: 'Gold'     },
-  { key: 'lumber',   emoji: '🪵', label: 'Lumber'   },
-  { key: 'stone',    emoji: '🪨', label: 'Stone'    },
-  { key: 'medicine', emoji: '💊', label: 'Medicine' },
-  { key: 'steel',    emoji: '⚙️', label: 'Steel'    },
-  { key: 'horses',   emoji: '🐎', label: 'Horses'   },
+  { key: 'food',     emoji: '✦',  label: 'Food'     },
+  { key: 'cattle',   emoji: '⁂',  label: 'Cattle'   },
+  { key: 'goods',    emoji: '◈',  label: 'Goods'    },
+  { key: 'gold',     emoji: '◆',  label: 'Gold'     },
+  { key: 'lumber',   emoji: '⌘',  label: 'Lumber'   },
+  { key: 'stone',    emoji: '◼',  label: 'Stone'    },
+  { key: 'medicine', emoji: '✚',  label: 'Medicine' },
+  { key: 'steel',    emoji: '⚔',  label: 'Steel'    },
+  { key: 'horses',   emoji: '⋈',  label: 'Horses'   },
 ];

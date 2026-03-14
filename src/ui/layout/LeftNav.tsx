@@ -9,6 +9,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { useEffect } from 'react';
 import { useGameStore } from '../../stores/game-store';
+import { toRoman } from '../../utils/math';
 
 export type View =
   | 'settlers'
@@ -43,6 +44,13 @@ const SEASON_COLORS: Record<string, string> = {
   winter: 'text-blue-300',
 };
 
+const SEASON_GLYPHS: Record<string, string> = {
+  spring: '✿',
+  summer: '☀',
+  autumn: '❧',
+  winter: '❄',
+};
+
 interface Props {
   activeView: View;
   setActiveView: Dispatch<SetStateAction<View>>;
@@ -63,10 +71,10 @@ export default function LeftNav({ activeView, setActiveView }: Props) {
   const isEventPhase = currentPhase === 'event';
   const isDisabled  = isBusy || isEventPhase;
   const buttonLabel =
-    isBusy        ? 'Processing…' :
-    isEventPhase  ? 'Resolve Events' :
-    currentPhase === 'management' ? 'Confirm Turn' :
-    'End Turn';
+    isBusy        ? 'The season turns…' :
+    isEventPhase  ? 'Events Pending' :
+    currentPhase === 'management' ? 'Close the Season' :
+    'Begin the Season';
 
   const season = gameState?.currentSeason ?? 'spring';
   const year   = gameState?.currentYear   ?? 1;
@@ -88,19 +96,20 @@ export default function LeftNav({ activeView, setActiveView }: Props) {
   }
 
   return (
-    <aside className="w-44 bg-amber-950 border-r border-amber-900 flex flex-col shrink-0">
+    <aside className="w-44 bg-amber-950 border-r-2 border-amber-900 flex flex-col shrink-0">
 
       {/* Settlement identity */}
       <div className="px-3 pt-3 pb-2 border-b border-amber-900">
-        <p className="text-amber-100 font-bold text-sm truncate" title={name}>
+        <p className="font-display text-amber-100 font-bold text-sm truncate" title={name}>
           {name}
         </p>
-        <p className="text-stone-400 text-xs mt-0.5">
+        <hr className="border-stone-600/50 my-1.5" />
+        <p className="text-stone-400 text-xs">
           <span className={`font-medium capitalize ${SEASON_COLORS[season] ?? 'text-amber-300'}`}>
-            {season}
+            {SEASON_GLYPHS[season] ?? ''} {season}
           </span>
-          {' · '}
-          <span>Year {year}</span>
+          {' · Year '}
+          <span>{toRoman(year)}</span>
         </p>
       </div>
 
@@ -113,10 +122,10 @@ export default function LeftNav({ activeView, setActiveView }: Props) {
               key={item.id}
               onClick={() => setActiveView(item.id)}
               disabled={item.stub}
-              title={item.stub ? 'Coming soon' : undefined}
+              title={item.stub ? 'Not yet charted' : undefined}
               className={`w-full text-left px-2 py-1.5 rounded text-sm font-medium flex items-center gap-2 transition-colors
                           ${isActive
-                            ? 'bg-amber-800 text-amber-100'
+                            ? 'bg-amber-900 text-amber-200 border-l-2 border-amber-500'
                             : item.stub
                               ? 'text-stone-600 cursor-not-allowed'
                               : 'text-amber-300 hover:bg-amber-900 hover:text-amber-100'

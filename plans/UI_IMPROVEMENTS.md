@@ -1,232 +1,354 @@
 # UI Improvements Plan — Palusteria: Children of the Ashmark
 
-Derived from the UI/UX review of the Settlers view (March 2026).  
-Scope: quality-of-life polish across PeopleView, PersonDetail, LeftNav, BottomBar, and CouncilFooter.  
-No gameplay logic changes — pure presentation and ergonomics.
+Second-pass review, March 2026.  
+The original plan (Pass 1) is **entirely implemented** — all 14 items are live. This document captures what to do next, with a focused theme: make the game *feel* medieval/renaissance, not just function well.
+
+The core problem is that the game currently reads like a capable Tailwind data app.  The stone/amber palette is a good foundation, but the copy, iconography, and typography all undermine the atmosphere. A player sees `"End Turn"`, `"Arrange Marriage"`, `🌾 59 +12 Food"`, and `"Coming soon"` — all of which could belong to any modern web product. The fixes below are mostly copy and low-cost Tailwind tweaks; the biggest bang is the font import.
 
 ---
 
-## Priority 1 — Quick wins (Small effort, clear impact)
+## Priority 1 — Atmosphere (highest impact per hour)
 
-### 1.1 Fix cryptic table column headers
+### 1.1 Import a period-appropriate display typeface
 
-**File:** `src/ui/views/PeopleView.tsx`
+**Files:** `index.html`, `src/index.css`, `tailwind.config.js`
 
-- Rename the "Wed" column header to "Married" (or use `◎` as the header with `title="Marital status"`).
-- Add a "Council" text header (or a `👑` with `title="Expedition Council (max 7)"`) for the `⭐` column.
-- Highlight the entire row with a subtle gold left-border or ring when `onCouncil` is true.
+**This is the single change with the largest visual impact.**
 
+The game currently uses the browser system sans-serif stack throughout. Adding a display font for headings immediately signals "this is a historical game" before the player reads a single word.
+
+**Recommended font:** [Cinzel](https://fonts.google.com/specimen/Cinzel) — a Roman inscription-inspired uppercase serif. Free on Google Fonts. Pairs well with the existing stone/amber palette without requiring any colour changes.
+
+Runner-up: [IM Fell English](https://fonts.google.com/specimen/IM+Fell+English) — more rough, hand-set feel; better if the game leans into manuscripts over monuments.
+
+```html
+<!-- index.html <head> -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
 ```
-Before:  <th>Wed</th>   <th>⭐</th>
-After:   <th title="Marital status">Married</th>   <th title="Expedition Council (max 7)">Council</th>
+
+```js
+// tailwind.config.js
+theme: {
+  extend: {
+    fontFamily: {
+      display: ['Cinzel', 'Georgia', 'serif'],
+    },
+  },
+},
 ```
 
+Apply `font-display` class to:
+- `GameSetup` title ("Palusteria")
+- `LeftNav` settlement name
+- All view `<h2>` titles ("Settlers", "Settlement", "Trade")
+- `CouncilFooter` "Expedition Council" heading
+- `PersonDetail` person name at top of panel
+- `EventView` event title
+
+**Do not apply** to body text, labels, skill names, or filter buttons — the contrast between display and sans-serif is intentional.
+
 ---
 
-### 1.2 Elevate the "Arrange Marriage" button
+### 1.2 Replace modern copy with in-world language
 
-**File:** `src/ui/views/PeopleView.tsx`
+**Files:** multiple
 
-- Change colour from `bg-amber-800 text-amber-100` (same as active sort buttons) to a distinct primary-action style:
-  `bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold shadow`
-- This makes it visually distinct from the filter/sort toggle group.
+The game has excellent in-world lore (Imanian, Sauromatian, Hidden Wheel, The Company) but the UI ignores all of it. Strings like `"End Turn"` and `"Coming soon"` read as game scaffolding, not a living world.
+
+| Current string | Replacement | File |
+|---|---|---|
+| `"End Turn"` | `"Begin the Season"` | `LeftNav.tsx` |
+| `"Confirm Turn"` | `"Close the Season"` | `LeftNav.tsx` |
+| `"Resolve Events"` | `"Events Pending"` | `LeftNav.tsx` — disabled state label |
+| `"Processing…"` | `"The season turns…"` | `LeftNav.tsx` — busy state |
+| `"Arrange Marriage"` | `"Arrange a Match"` | `PeopleView.tsx` |
+| `"Coming soon"` (tooltip) | `"Not yet charted"` | `LeftNav.tsx` — stub items |
+| `"No settlers match the current filter."` | `"No records match."` | `PeopleView.tsx` |
+| `"Settlers ({n})"` view heading | `"Company Rolls — {n} souls"` | `PeopleView.tsx` |
+| `"Settlement"` view heading | keep as-is (it works) | — |
+| `"Key Opinions"` section in PersonDetail | `"Standing Among Kin"` | `PersonDetail.tsx` |
+| `"Character not yet known"` (no-traits empty state) | `"No account kept"` | `PersonDetail.tsx` |
+| `"Settle"` / `"Build"` CTA in SettlementView | `"Commission"` | `SettlementView.tsx` |
+| `"{name} — coming soon"` StubView | `"{name} — records forthcoming"` | `GameScreen.tsx` |
+
+Implementation: all pure string changes, no logic touched.
 
 ---
 
-### 1.3 Add tooltips to stub nav items
+### 1.3 Replace emoji resource icons with Unicode period symbols
+
+**File:** `src/ui/shared/resource-display.ts`
+
+Emoji render inconsistently across OSes and look digitally modern. Unicode has a rich set of symbols from the BMP that render as plain text and feel more typeset/carved.
+
+| Resource | Current | Proposed Unicode glyph |
+|---|---|---|
+| Food | 🌾 | `✦` (or `⊕` — a "grain" asterisk feel) |
+| Cattle | 🐄 | `⁂` (or just bold **C**) |
+| Goods | 📦 | `◈` |
+| Gold | 💰 | `◆` |
+| Lumber | 🪵 | `⌘` (cross/beam feel) or `╪` |
+| Stone | 🪨 | `◼` |
+| Medicine | 💊 | `✚` |
+| Steel | ⚙️ | `⚔` |
+| Horses | 🐎 | `⋈` (or just `H` italic) |
+| Population | 👥 | `⊛` |
+
+**Alternative approach** (lower risk): keep the emoji but wrap them in a `<span aria-hidden>` with `text-[0.85em] not-italic` — they'll look slightly smaller and less obtrusive. The Unicode route is preferred for atmosphere.
+
+**Note:** If Unicode glyphs feel too abstract for readability, a good middle ground is to drop the emoji entirely and rely only on the text label (`Food`, `Gold`, etc.) with a coloured accent `●` dot — see the bloodline bar style already used in PersonDetail.
+
+---
+
+### 1.4 Year display as Roman numerals
 
 **File:** `src/ui/layout/LeftNav.tsx`
 
-- Add `title="Coming soon"` to every `<button>` where `item.stub === true`.
-- Optionally append a `⏳` or `🔒` micro-icon at `text-[10px] text-stone-700` after the label.
+`Year 3` is functional; `Year III` is immersive. This is a 10-line utility addition.
+
+```ts
+// src/utils/math.ts  (add to existing file)
+export function toRoman(n: number): string {
+  const vals = [1000,900,500,400,100,90,50,40,10,9,5,4,1];
+  const syms = ['M','CM','D','CD','C','XC','L','XL','X','IX','V','IV','I'];
+  let result = '';
+  for (let i = 0; i < vals.length; i++) {
+    while (n >= vals[i]) { result += syms[i]; n -= vals[i]; }
+  }
+  return result;
+}
+```
+
+```tsx
+// LeftNav.tsx
+import { toRoman } from '../../utils/math';
+// ...
+<span>Year {toRoman(year)}</span>
+```
+
+Cap at 3999 to avoid error state. For Year 1–50 (the realistic game range) this looks exactly right.
 
 ---
 
-### 1.4 Subdue PersonDetail section headings
+### 1.5 Season display — icon glyph instead of bare word
 
-**File:** `src/ui/views/PersonDetail.tsx` — `SectionHeading` component
+**File:** `src/ui/layout/LeftNav.tsx`
 
-- Change from `text-amber-500` to `text-stone-400`.
-- Amber should be reserved for interactive elements and CTAs; section labels are structural not actionable.
+Add a small Unicode seasonal glyph alongside the season name in the settlement header:
 
 ```tsx
-// Before
-<h3 className="text-amber-500 font-semibold text-xs uppercase tracking-wider mb-2">
+const SEASON_GLYPHS: Record<string, string> = {
+  spring: '✿',   // flower
+  summer: '☀',   // sun
+  autumn: '❧',   // leaf/flourish (hedera)
+  winter: '❄',   // snowflake
+};
 
-// After
-<h3 className="text-stone-400 font-semibold text-[11px] uppercase tracking-wide mb-2">
+// In the settlement header:
+<p className="text-stone-400 text-xs mt-0.5">
+  <span className={`font-medium capitalize ${SEASON_COLORS[season]}`}>
+    {SEASON_GLYPHS[season]} {season}
+  </span>
+  {' · Year '}
+  <span>{toRoman(year)}</span>
+</p>
 ```
 
 ---
 
-### 1.5 Fix skill column layout shift
+## Priority 2 — Structural polish
 
-**File:** `src/ui/views/PeopleView.tsx`
+### 2.1 EventView — ornamental choice presentation
 
-- Always render the skill column in `<thead>` and `<tbody>`, even when `activeSkill` is null.
-- When no skill is active, render an empty `<td>` with a fixed narrow width (`w-10`).
-- This prevents the table header/body from re-flowing when a skill sort is selected.
-- The header cell should show the active skill name (e.g. "Combat") or empty when none active.
+**File:** `src/ui/views/EventView.tsx`
+
+**Problem:** Event choices render as standard rounded pill buttons. They look like a React form, not a manuscript decision. KoDP's charm comes from presenting choices as *options in a scroll*, not a poll widget.
+
+**Design:** Replace the button border style with something closer to a numbered leaf entry:
+
+```tsx
+// Before (approximate):
+<button className="w-full text-left px-4 py-3 rounded-lg border border-stone-600 …">
+  {choice.text}
+</button>
+
+// After:
+<button className="w-full text-left px-4 py-3 border-l-2 border-amber-700 bg-stone-800/50
+                   hover:bg-stone-700/60 hover:border-amber-500 transition-colors group">
+  <span className="text-amber-600 font-bold mr-2 group-hover:text-amber-400">
+    {romanIndex}.
+  </span>
+  <span className="text-stone-200">{choice.text}</span>
+</button>
+```
+
+Where `romanIndex` is the choice index rendered as `I.`, `II.`, `III.`. No rounded corners — left-border-only styling suggests a list entry in a ledger or codex.
+
+Add a thin `border-b border-stone-700/50` between choices and a top-level `<div className="space-y-1">` container.
 
 ---
 
-### 1.6 "No traits." — improve empty state
+### 2.2 PersonDetail — section heading treatment
 
 **File:** `src/ui/views/PersonDetail.tsx`
 
-- Replace `No traits.` with `Character not yet known` styled as `text-stone-500 italic text-xs`.
-- Alternatively, ensure Sauromatian founding women each receive at least one trait during game init in `src/stores/game-store.ts`.
+Section headings currently use `text-stone-400 font-semibold text-[11px] uppercase tracking-wide`. Elevate to match a period register/ledger style: add a hairline rule beneath each heading.
+
+```tsx
+function SectionHeading({ title }: { title: string }) {
+  return (
+    <div className="flex items-center gap-2 mb-2 mt-4 first:mt-0">
+      <h3 className="text-stone-500 font-semibold text-[10px] uppercase tracking-widest shrink-0">
+        {title}
+      </h3>
+      <div className="flex-1 h-px bg-stone-700" />
+    </div>
+  );
+}
+```
+
+The extending `h-px` line gives each section a clean ledger-rule feel. This is used already for horizontal rules in many documents apps — very low risk, very effective.
 
 ---
 
-### 1.7 Enlarge skin-tone dot and remove border
+### 2.3 LeftNav — parchment sidebar feel
+
+**File:** `src/ui/layout/LeftNav.tsx`
+
+The nav currently reads `bg-amber-950 border-r border-amber-900`. Two small changes deepen the parchment feel:
+
+1. **Darken the border:** `border-r-2 border-amber-900/80` — slightly wider rule, slightly more visible.
+2. **Settlement name treatment:** Wrap the settlement name in `font-display` (from item 1.1) and separate the season line with a ruled `<hr className="border-stone-600/50 my-1.5" />` between the name and the season.
+3. **Nav item active state:** Change the active item from `bg-amber-800 text-amber-100` to `bg-amber-900 text-amber-200 border-l-2 border-amber-500` — a left-sidebar "active tab" marker feels more like a bookmark than a filled chip.
+
+---
+
+### 2.4 PeopleView — thematic filter labels
 
 **File:** `src/ui/views/PeopleView.tsx`
 
-- Change `w-2.5 h-2.5` → `w-3 h-3`.
-- Remove `border border-stone-600` — the border reads as a radio-button affordance on a dark background.
+Minor copy refinements to the toolbar that match the game's register:
+
+| Current label | Proposed | Rationale |
+|---|---|---|
+| `"Sort"` | `"Order by"` | Period ledger language |
+| `"Status"` | `"Bond"` | Marital status phrasing from the era |
+| `○ Single` | `○ Unbound` | Consistent with the "Bond" group label |
+| `◎ Married` | `◎ Bound` | Ditto |
+| `"Sex"` | `"Sex"` | keep — clear enough |
+| `"Heritage"` | `"Heritage"` | keep — already in-world |
+| `"Skills"` (row 1 group) | `"Faculty"` | More archaic; optional |
 
 ---
 
-## Priority 2 — Medium effort, significant quality improvement
+### 2.5 BottomBar — glyph resource labels
 
-### 2.1 Restructure the filter/sort toolbar
+**File:** `src/ui/layout/BottomBar.tsx`
 
-**File:** `src/ui/views/PeopleView.tsx`
+Tie into resource-display.ts changes from item 1.3. Additionally:
 
-**Problem:** All 26 controls (sort keys + 3 filter groups) live in one `flex-wrap` row with `|` pipe separators. The control groups are indistinguishable.
-
-**Design:**
-
-Separate into two logical rows inside the toolbar container:
-
-```
-Row 1 (Sort):     [Name] [Age] [Heritage] [Role]  ·  [Animals] [Bargaining] [Combat] [Custom] [Leadership] [Plants]
-Row 2 (Filter):   Sex: [All] [♀] [♂]  ·  Status: [All] [Single] [Married]  ·  Heritage: [All] [IMA] [KIS] [HAN] [MIX]
-```
-
-Implementation notes:
-- Wrap row 1 and row 2 in separate `<div className="flex items-center gap-2 flex-wrap">` elements.
-- Label each group with a sticky `<span className="text-stone-500 text-xs font-medium">` prefix inside the row.
-- Replace `|` separators with `<span className="w-px h-3 bg-stone-600 self-center mx-1" />` visual dividers.
-- Consider adding a `bg-stone-750` (or `bg-stone-800/50`) row alternation to visually separate the two rows.
+- Remove the `hidden sm:inline` text label when there's a glyph to carry meaning — the glyph + number is enough in the bottom strip.
+- Add `title="Food: 59 (+12/season)"` tooltips to each pill so the full context is one hover away.
+- Add a subtle `border-t-2 border-stone-700` (could use `border-amber-900` for warmth) to the bar — the current single pixel border is easy to miss.
 
 ---
 
-### 2.2 BottomBar — add net-per-turn delta indicators
+### 2.6 CouncilFooter — council seat typography
 
-**File:** `src/ui/layout/BottomBar.tsx`  
-**Supporting files:** `src/simulation/economy/resources.ts`, `src/simulation/turn/season.ts`
+**File:** `src/ui/layout/CouncilFooter.tsx`
 
-**Problem:** Resources show only a static snapshot with no trend information.
+The council footer heading currently reads `EXPEDITION COUNCIL` in `text-amber-600 text-xs font-semibold uppercase tracking-wide`. Apply `font-display` (1.1) to this heading when the font is available. At `text-xs` Cinzel is very readable and gives the council heading an appropriate gravitas.
 
-**Design:**
-- Compute `netDelta` per resource per turn using `computeProduction` / `computeConsumption` from `resources.ts`.
-- Display alongside each resource value:
-  - `+12` in `text-green-400` when net positive
-  - `-3` in `text-red-400` when net negative
-  - omit (or show `±0` in `text-stone-600`) when zero
-- Tooltip on hover: `"Net production this season: +12/turn"`
+Additionally, swap the collapsed summary from `"5/7 seats"` → `"5 of 7 councillors"` for slightly more register consistency.
+
+---
+
+## Priority 3 — Surface refinements
+
+### 3.1 GameSetup — title treatment
+
+**File:** `src/ui/overlays/GameSetup.tsx`
+
+The title card `"Palusteria / Children of the Ashmark"` is the first thing a new player sees. Two changes:
+
+1. Apply `font-display` to "Palusteria" (will look exceptional with Cinzel — the font was designed for this exact use case).
+2. Add `letter-spacing: 0.15em` (Tailwind: `tracking-[0.15em]`) to the subtitle "Children of the Ashmark".
+3. Replace the single-colour `bg-amber-900` header bar with a subtle gradient: `bg-gradient-to-b from-amber-900 to-amber-950` — adds depth to the header strip without any other change.
+
+---
+
+### 3.2 Trait badges — heraldic palette
+
+**File:** `src/ui/views/PersonDetail.tsx`
+
+The existing trait colour map mixes arbitrary Tailwind colours. Consolidate to a heraldic palette — only five tinctures:
+
+| Category | Heraldic | Tailwind mapping |
+|---|---|---|
+| Positive personality | Or (gold) | `bg-amber-900/70 text-amber-200` |
+| Negative personality | Gules (red) | `bg-red-950/70 text-red-300` |
+| Aptitude | Azure (blue) | `bg-blue-950/70 text-blue-300` |
+| Cultural/background | Sable (black/stone) | `bg-stone-700/80 text-stone-300` |
+| Earned/circumstantial | Vert (green) | `bg-emerald-950/70 text-emerald-300` |
+| Purpure (ambition-driven) | Purpure | `bg-purple-950/70 text-purple-300` |
+
+This reduces the current ~20-colour scatter to 5–6 predictable groupings. Players quickly learn "red = bad trait, gold = good trait" — a natural medieval heraldry read.
+
+---
+
+### 3.3 EventView — image panel atmospheric overlay
+
+**File:** `src/ui/views/EventView.tsx`
+
+The event image panel (`w-[60%]`) currently uses `object-cover object-top` with no treatment. Add a subtle vignette overlay so text on the right panel doesn't compete visually with bright photo areas at the edge:
 
 ```tsx
-// Example pill layout
-<span>🌾 59 <span className="text-green-400 text-xs">+12</span> <span className="text-stone-500 text-xs">Food</span></span>
-```
-
-**Note:** Deltas only need to be computed once per render cycle. The `currentSeason` from `gameState` is already available in the store.
-
----
-
-### 2.3 PersonDetail as slide-over drawer on narrow viewports
-
-**File:** `src/ui/views/PeopleView.tsx`, `src/ui/views/PersonDetail.tsx`
-
-**Problem:** PersonDetail renders inline beside the roster. On viewports below ~1200px the table Name column gets clipped.
-
-**Design:**
-- Detect viewport width via a `useEffect` or a CSS breakpoint approach.
-- Below `1200px` (Tailwind `xl`): render PersonDetail as an absolutely-positioned right-side drawer with `z-10 shadow-2xl`, overlaying the table.
-- Above `1200px`: keep the current side-by-side flex layout.
-- Add a dim overlay (`bg-stone-950/50`) behind the drawer on narrow viewports to indicate focus.
-- The existing `onClose` handler already handles dismissal.
-
-Implementation:
-```tsx
-// In PeopleView.tsx, wrap PersonDetail with:
-<div className={`
-  xl:relative xl:flex-none xl:w-80
-  max-xl:fixed max-xl:inset-y-0 max-xl:right-0 max-xl:w-80 max-xl:z-20
-  overflow-y-auto bg-stone-900 border-l border-stone-700
-`}>
-  <PersonDetail … />
+<div className="w-[60%] flex-shrink-0 overflow-hidden relative">
+  <img … className="w-full h-full object-cover object-top" />
+  {/* Right-edge gradient vignette to blend into event text panel */}
+  <div className="absolute inset-y-0 right-0 w-24 bg-gradient-to-r from-transparent to-stone-900/90 pointer-events-none" />
 </div>
 ```
 
----
-
-### 2.4 CouncilFooter — stronger visual separation + collapsible outside event phase
-
-**File:** `src/ui/layout/CouncilFooter.tsx`, `src/ui/layout/GameScreen.tsx`
-
-**Problem:** The council strip visually blends into main content. ~80px permanently committed even when council is inactive context.
-
-**Design:**
-
-Part A — stronger visual border:  
-- Change footer background from `bg-amber-950` to `bg-stone-950` (darker, distinct from main panel's `bg-stone-900`).
-- Change top border from `border-amber-900` to `border-t-2 border-amber-700` for a thicker, clearer separator.
-
-Part B — collapsible outside event phase:
-- Add local `collapsed` state, defaulting to `true` when `currentPhase !== 'event'`.
-- Auto-expand when `currentPhase === 'event'`.
-- The "EXPEDITION COUNCIL" heading row becomes a clickable toggle:
-  ```
-  ▶ EXPEDITION COUNCIL  (collapsed)
-  ▼ EXPEDITION COUNCIL  (expanded) + seat cards below
-  ```
-- When collapsed, show a single-line summary: `5/7 seats filled` in `text-stone-500 text-xs`.
+When no image is found, the existing `amber-950 → stone-950` CSS gradient already looks intentional — no change needed for the fallback case.
 
 ---
 
-## Priority 3 — Low priority polish
+### 3.4 Spoilage / notification banners — period copy
 
-### 3.1 Rating abbreviation legend
+**File:** `src/ui/layout/GameScreen.tsx`
 
-**File:** `src/ui/views/PeopleView.tsx`
+| Current | Replacement |
+|---|---|
+| `"🌙 Spoilage: {parts} lost overnight."` | `"⁂ Spoilage: {parts} were lost in the night."` |
+| After applying 1.3 resource symbols, the emoji prefix becomes consistent | — |
 
-- Add a small `?` icon or `i` tooltip next to the active skill column header that shows:
-  `FR=Fair · GD=Good · VG=Very Good · EX=Excellent · RN=Renowned · HR=Heroic`
-- Could be a simple `title` attribute on the header cell.
-
----
-
-### 3.2 Council row highlight for on-council settlers
-
-**File:** `src/ui/views/PeopleView.tsx`
-
-- When a settler `onCouncil`, show a subtle left-border highlight on their table row:
-  `border-l-2 border-amber-500` in addition to the star icon.
-- This makes council membership scannable from the roster without checking the footer.
+The banner background `bg-amber-950/80 border-amber-800/60` is already nicely atmospheric — no colour change needed.
 
 ---
 
 ## Implementation Order (recommended)
 
-1. **1.1** Column headers (2 min)
-2. **1.2** Arrange Marriage button style (2 min)
-3. **1.3** Stub nav tooltips (2 min)
-4. **1.4** Section heading colour (2 min)
-5. **1.5** Skill column layout shift (10 min)
-6. **1.7** Skin-tone dot size (2 min)
-7. **3.2** Council row highlight (5 min)
-8. **2.1** Toolbar restructure (30 min)
-9. **2.4A** CouncilFooter border (5 min)
-10. **2.4B** CouncilFooter collapsible (20 min)
-11. **2.3** PersonDetail slide-over drawer (30 min)
-12. **2.2** BottomBar deltas (45 min)
-13. **1.6** "No traits" founder seeding (20 min)
-14. **3.1** Rating abbreviation legend (5 min)
+### Commit A — "Atmosphere pass: fonts, copy & glyphs" (~2 hours)
+1. **1.1** Import Cinzel + `font-display` utility class + apply to headings
+2. **1.2** All copy replacements (string-only, zero logic risk)
+3. **1.3** Unicode resource glyphs in `resource-display.ts`
+4. **1.4** Roman numeral year in `LeftNav`
+5. **1.5** Season glyphs in `LeftNav`
 
-Items 1–7 can all be shipped as a single commit ("UI polish pass 1").  
-Items 8–10 are a second commit ("Toolbar & council layout cleanup").  
-Items 11–14 are longer-running features for a third commit.
+### Commit B — "Layout refinements" (~1.5 hours)
+6. **2.1** EventView choice presentation (left-border + roman numerals)
+7. **2.2** PersonDetail section heading + hairline rule
+8. **2.3** LeftNav parchment treatment
+9. **2.4** PeopleView filter label copy
+10. **3.4** Spoilage banner copy
+
+### Commit C — "Surface polish" (~1 hour)
+11. **2.5** BottomBar glyph labels + tooltip text
+12. **2.6** CouncilFooter font + copy
+13. **3.1** GameSetup title treatment + gradient
+14. **3.2** Trait badge heraldic palette consolidation
+15. **3.3** EventView vignette overlay
+
+Commits A and B can be reviewed independently. Commit C is pure cosmetic — safe to ship together with B or defer entirely.

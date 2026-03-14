@@ -101,12 +101,12 @@ export default function CouncilFooter() {
         className="w-full flex items-center justify-between mb-1 group"
         aria-expanded={!collapsed}
       >
-        <p className="text-amber-600 text-xs font-semibold uppercase tracking-wide flex items-center gap-1.5">
+        <p className="font-display text-amber-600 text-xs font-semibold uppercase tracking-wide flex items-center gap-1.5">
           <span className="text-stone-500 text-[10px]">{collapsed ? '▶' : '▼'}</span>
           Expedition Council
         </p>
         <span className="text-stone-600 text-xs group-hover:text-stone-400 transition-colors">
-          {filledCount}/{MAX_COUNCIL_SEATS} seats
+          {filledCount} of {MAX_COUNCIL_SEATS} councillors
         </span>
       </button>
 

@@ -141,14 +141,14 @@ export default function PeopleView() {
       <div className="flex-1 min-w-0 overflow-y-auto p-4">
         {/* Header */}
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <h2 className="text-amber-200 font-bold text-lg">
-            Settlers ({sorted.length}{filtered.length !== people.length ? `/${people.length}` : ''})
+          <h2 className="font-display text-amber-200 font-bold text-lg">
+            Company Rolls — {sorted.length}{filtered.length !== people.length ? ` of ${people.length}` : ''}{' '}{sorted.length === 1 ? 'soul' : 'souls'}
           </h2>
           <button
             onClick={() => setShowMarriageDialog(true)}
             className="px-3 py-1 rounded text-xs font-bold bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-stone-950 shadow transition-colors"
           >
-            Arrange Marriage
+            Arrange a Match
           </button>
         </div>
 
@@ -156,7 +156,7 @@ export default function PeopleView() {
         <div className="mb-3 rounded bg-stone-800 border border-stone-700 divide-y divide-stone-700">
           {/* Row 1 — Sort */}
           <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5">
-            <span className="text-stone-500 text-xs font-medium w-7 shrink-0">Sort</span>
+            <span className="text-stone-500 text-xs font-medium shrink-0">Order by</span>
             <span className="w-px h-3 bg-stone-600 self-center mx-0.5" />
             {(['name', 'age', 'heritage', 'role'] as SortKey[]).map(k => (
               <button key={k} onClick={() => setSortKey(k)} className={selectBtn(sortKey === k)}>
@@ -164,7 +164,7 @@ export default function PeopleView() {
               </button>
             ))}
             <span className="w-px h-3 bg-stone-600 self-center mx-0.5" />
-            <span className="text-stone-600 text-[10px] font-medium self-center">Skills</span>
+            <span className="text-stone-600 text-[10px] font-medium self-center">Faculty</span>
             {SKILL_SORT_LABELS.map(({ id, label }) => (
               <button key={id} onClick={() => setSortKey(id)} className={selectBtn(sortKey === id)}>
                 {label}
@@ -182,11 +182,11 @@ export default function PeopleView() {
               </button>
             ))}
             <span className="w-px h-3 bg-stone-600 self-center mx-1.5" />
-            <span className="text-stone-500 text-xs font-medium">Status</span>
+            <span className="text-stone-500 text-xs font-medium">Bond</span>
             <span className="w-px h-3 bg-stone-600 self-center mx-0.5" />
             {(['all', 'unmarried', 'married'] as const).map(v => (
               <button key={v} onClick={() => setFilter(f => ({ ...f, married: v }))} className={selectBtn(filter.married === v)}>
-                {v === 'all' ? 'All' : v === 'married' ? '◎ Married' : '○ Single'}
+                {v === 'all' ? 'All' : v === 'married' ? '◎ Bound' : '○ Unbound'}
               </button>
             ))}
             <span className="w-px h-3 bg-stone-600 self-center mx-1.5" />
@@ -350,7 +350,7 @@ export default function PeopleView() {
               {sorted.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-6 text-center text-stone-500 italic">
-                    No settlers match the current filter.
+                    No records match.
                   </td>
                 </tr>
               )}

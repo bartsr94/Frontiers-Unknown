@@ -381,8 +381,8 @@ describe('isEventEligible', () => {
 
   it('treats unknown prerequisite types as satisfied (Phase 3+ stubs)', () => {
     const event = makeEvent({
-      // Use a genuinely unimplemented type — cultural_blend_above is now real
-      prerequisites: [{ type: 'tribe_disposition_above' as const, params: { tribeId: 'x', value: 50 } }],
+      // Use a genuinely unknown type not present in the switch statement
+      prerequisites: [{ type: 'completely_unknown_type' as any, params: {} }],
     });
     expect(isEventEligible(event, makeState())).toBe(true);
   });
@@ -721,3 +721,153 @@ describe('language_tension_above prerequisite', () => {
     expect(isEventEligible(event, withPop(lowTension))).toBe(false);
   });
 });
+
+// ─── tribe_exists prerequisite ────────────────────────────────────────────────
+
+describe('tribe_exists prerequisite', () => {
+  function makeStateWithTribe(tribeId: string, disposition = 0): GameState {
+    const base = makeState();
+    return {
+      ...base,
+      tribes: new Map([[tribeId, { id: tribeId, name: 'Test Tribe', disposition } as any]]),
+    } as unknown as GameState;
+  }
+
+  it('passes when the named tribe is present', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'tribe_exists', params: { tribeId: 'tribe_a' } }] });
+    expect(isEventEligible(event, makeStateWithTribe('tribe_a'))).toBe(true);
+  });
+
+  it('blocks when the named tribe is absent', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'tribe_exists', params: { tribeId: 'tribe_b' } }] });
+    expect(isEventEligible(event, makeStateWithTribe('tribe_a'))).toBe(false);
+  });
+
+  it('blocks when tribes map is empty', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'tribe_exists', params: { tribeId: 'tribe_a' } }] });
+    expect(isEventEligible(event, makeState())).toBe(false);
+  });
+});
+
+// ─── tribe_disposition_above prerequisite ─────────────────────────────────────
+
+describe('tribe_disposition_above prerequisite', () => {
+  function makeStateWithDisposition(tribeId: string, disposition: number): GameState {
+    const base = makeState();
+    return {
+      ...base,
+      tribes: new Map([[tribeId, { id: tribeId, name: 'Test Tribe', disposition } as any]]),
+    } as unknown as GameState;
+  }
+
+  it('passes when tribe disposition strictly exceeds the threshold', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'tribe_disposition_above', params: { tribeId: 'tribe_a', value: 20 } }] });
+    expect(isEventEligible(event, makeStateWithDisposition('tribe_a', 21))).toBe(true);
+    expect(isEventEligible(event, makeStateWithDisposition('tribe_a', 100))).toBe(true);
+  });
+
+  it('blocks when tribe disposition equals the threshold', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'tribe_disposition_above', params: { tribeId: 'tribe_a', value: 20 } }] });
+    expect(isEventEligible(event, makeStateWithDisposition('tribe_a', 20))).toBe(false);
+  });
+
+  it('blocks when tribe disposition is below the threshold', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'tribe_disposition_above', params: { tribeId: 'tribe_a', value: 20 } }] });
+    expect(isEventEligible(event, makeStateWithDisposition('tribe_a', -10))).toBe(false);
+  });
+
+  it('blocks when the named tribe does not exist', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'tribe_disposition_above', params: { tribeId: 'missing', value: 0 } }] });
+    expect(isEventEligible(event, makeStateWithDisposition('tribe_a', 50))).toBe(false);
+  });
+});
+
+// ─── tribe_disposition_below prerequisite ─────────────────────────────────────
+
+describe('tribe_disposition_below prerequisite', () => {
+  function makeStateWithDisposition(tribeId: string, disposition: number): GameState {
+    const base = makeState();
+    return {
+      ...base,
+      tribes: new Map([[tribeId, { id: tribeId, name: 'Test Tribe', disposition } as any]]),
+    } as unknown as GameState;
+  }
+
+  it('passes when tribe disposition is strictly below the threshold', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'tribe_disposition_below', params: { tribeId: 'tribe_a', value: -10 } }] });
+    expect(isEventEligible(event, makeStateWithDisposition('tribe_a', -11))).toBe(true);
+    expect(isEventEligible(event, makeStateWithDisposition('tribe_a', -100))).toBe(true);
+  });
+
+  it('blocks when tribe disposition equals the threshold', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'tribe_disposition_below', params: { tribeId: 'tribe_a', value: -10 } }] });
+    expect(isEventEligible(event, makeStateWithDisposition('tribe_a', -10))).toBe(false);
+  });
+
+  it('blocks when tribe disposition is above the threshold', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'tribe_disposition_below', params: { tribeId: 'tribe_a', value: -10 } }] });
+    expect(isEventEligible(event, makeStateWithDisposition('tribe_a', 5))).toBe(false);
+  });
+
+  it('blocks when the named tribe does not exist', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'tribe_disposition_below', params: { tribeId: 'missing', value: 50 } }] });
+    expect(isEventEligible(event, makeStateWithDisposition('tribe_a', -50))).toBe(false);
+  });
+});
+
+// ─── company_standing_above prerequisite ──────────────────────────────────────
+
+describe('company_standing_above prerequisite', () => {
+  function makeStateWithStanding(standing: number): GameState {
+    const base = makeState();
+    return {
+      ...base,
+      company: { ...base.company, standing },
+    } as unknown as GameState;
+  }
+
+  it('passes when company standing strictly exceeds the threshold', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'company_standing_above', params: { value: 50 } }] });
+    expect(isEventEligible(event, makeStateWithStanding(51))).toBe(true);
+    expect(isEventEligible(event, makeStateWithStanding(100))).toBe(true);
+  });
+
+  it('blocks when company standing equals the threshold', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'company_standing_above', params: { value: 50 } }] });
+    expect(isEventEligible(event, makeStateWithStanding(50))).toBe(false);
+  });
+
+  it('blocks when company standing is below the threshold', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'company_standing_above', params: { value: 50 } }] });
+    expect(isEventEligible(event, makeStateWithStanding(20))).toBe(false);
+  });
+});
+
+// ─── company_standing_below prerequisite ──────────────────────────────────────
+
+describe('company_standing_below prerequisite', () => {
+  function makeStateWithStanding(standing: number): GameState {
+    const base = makeState();
+    return {
+      ...base,
+      company: { ...base.company, standing },
+    } as unknown as GameState;
+  }
+
+  it('passes when company standing is strictly below the threshold', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'company_standing_below', params: { value: 40 } }] });
+    expect(isEventEligible(event, makeStateWithStanding(39))).toBe(true);
+    expect(isEventEligible(event, makeStateWithStanding(0))).toBe(true);
+  });
+
+  it('blocks when company standing equals the threshold', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'company_standing_below', params: { value: 40 } }] });
+    expect(isEventEligible(event, makeStateWithStanding(40))).toBe(false);
+  });
+
+  it('blocks when company standing is above the threshold', () => {
+    const event = makeEvent({ prerequisites: [{ type: 'company_standing_below', params: { value: 40 } }] });
+    expect(isEventEligible(event, makeStateWithStanding(60))).toBe(false);
+  });
+});
+

@@ -57,54 +57,54 @@ const GROUP_LABELS: Record<EthnicGroup, string> = {
 // ─── Trait badge colours ──────────────────────────────────────────────────────
 
 const TRAIT_COLORS: Record<string, string> = {
-  // Positive personality
-  ambitious: 'bg-amber-900 text-amber-200',
-  brave: 'bg-amber-800 text-amber-100',
-  kind: 'bg-teal-900 text-teal-200',
-  generous: 'bg-teal-800 text-teal-200',
-  patient: 'bg-sky-900 text-sky-200',
-  honest: 'bg-sky-800 text-sky-200',
-  humble: 'bg-stone-700 text-stone-200',
-  gregarious: 'bg-lime-900 text-lime-200',
-  // Negative personality
-  cruel: 'bg-rose-950 text-rose-300',
-  craven: 'bg-slate-800 text-slate-400',
-  greedy: 'bg-yellow-950 text-yellow-400',
-  deceitful: 'bg-red-950 text-red-400',
-  wrathful: 'bg-red-900 text-red-200',
-  proud: 'bg-purple-900 text-purple-200',
-  shy: 'bg-stone-700 text-stone-400',
-  content: 'bg-stone-700 text-stone-300',
-  lustful: 'bg-pink-950 text-pink-300',
-  chaste: 'bg-stone-600 text-stone-300',
-  // Aptitude
-  strong: 'bg-orange-900 text-orange-200',
-  weak: 'bg-stone-700 text-stone-500',
-  clever: 'bg-indigo-900 text-indigo-200',
-  slow: 'bg-stone-700 text-stone-500',
-  beautiful: 'bg-rose-900 text-rose-200',
-  plain: 'bg-stone-700 text-stone-400',
-  robust: 'bg-green-900 text-green-200',
-  sickly: 'bg-stone-700 text-stone-500',
-  fertile: 'bg-emerald-900 text-emerald-200',
-  barren: 'bg-stone-700 text-stone-500',
-  // Cultural
-  traditional: 'bg-amber-950 text-amber-400',
-  cosmopolitan: 'bg-cyan-900 text-cyan-200',
-  devout: 'bg-violet-950 text-violet-300',
-  skeptical: 'bg-slate-800 text-slate-300',
-  xenophobic: 'bg-red-950 text-red-400',
-  welcoming: 'bg-green-900 text-green-300',
-  // Earned
-  veteran: 'bg-stone-700 text-amber-300',
-  scarred: 'bg-stone-800 text-stone-400',
-  respected_elder: 'bg-yellow-900 text-yellow-200',
-  scandal: 'bg-rose-950 text-rose-400',
-  oath_breaker: 'bg-red-950 text-red-500',
-  hero: 'bg-amber-800 text-amber-100',
-  coward: 'bg-slate-900 text-slate-500',
-  wealthy: 'bg-yellow-900 text-yellow-200',
-  indebted: 'bg-orange-950 text-orange-400',
+  // Positive personality — Or (gold)
+  ambitious:   'bg-amber-900/70 text-amber-200',
+  brave:       'bg-amber-900/70 text-amber-200',
+  kind:        'bg-amber-900/70 text-amber-200',
+  generous:    'bg-amber-900/70 text-amber-200',
+  patient:     'bg-amber-900/70 text-amber-200',
+  honest:      'bg-amber-900/70 text-amber-200',
+  humble:      'bg-amber-900/70 text-amber-200',
+  gregarious:  'bg-amber-900/70 text-amber-200',
+  // Negative personality — Gules (red)
+  cruel:       'bg-red-950/70 text-red-300',
+  craven:      'bg-red-950/70 text-red-300',
+  greedy:      'bg-red-950/70 text-red-300',
+  deceitful:   'bg-red-950/70 text-red-300',
+  wrathful:    'bg-red-950/70 text-red-300',
+  proud:       'bg-red-950/70 text-red-300',
+  shy:         'bg-red-950/70 text-red-300',
+  content:     'bg-red-950/70 text-red-300',
+  lustful:     'bg-red-950/70 text-red-300',
+  chaste:      'bg-red-950/70 text-red-300',
+  coward:      'bg-red-950/70 text-red-300',
+  // Aptitude — Azure (blue)
+  strong:      'bg-blue-950/70 text-blue-300',
+  weak:        'bg-blue-950/70 text-blue-300',
+  clever:      'bg-blue-950/70 text-blue-300',
+  slow:        'bg-blue-950/70 text-blue-300',
+  beautiful:   'bg-blue-950/70 text-blue-300',
+  plain:       'bg-blue-950/70 text-blue-300',
+  robust:      'bg-blue-950/70 text-blue-300',
+  sickly:      'bg-blue-950/70 text-blue-300',
+  fertile:     'bg-blue-950/70 text-blue-300',
+  barren:      'bg-blue-950/70 text-blue-300',
+  // Cultural — Sable (stone)
+  traditional: 'bg-stone-700/80 text-stone-300',
+  cosmopolitan:'bg-stone-700/80 text-stone-300',
+  devout:      'bg-stone-700/80 text-stone-300',
+  skeptical:   'bg-stone-700/80 text-stone-300',
+  xenophobic:  'bg-stone-700/80 text-stone-300',
+  welcoming:   'bg-stone-700/80 text-stone-300',
+  // Earned — Vert (green)
+  veteran:          'bg-emerald-950/70 text-emerald-300',
+  scarred:          'bg-emerald-950/70 text-emerald-300',
+  respected_elder:  'bg-emerald-950/70 text-emerald-300',
+  hero:             'bg-emerald-950/70 text-emerald-300',
+  wealthy:          'bg-emerald-950/70 text-emerald-300',
+  scandal:          'bg-red-950/70 text-red-300',
+  oath_breaker:     'bg-red-950/70 text-red-300',
+  indebted:         'bg-red-950/70 text-red-300',
 };
 
 const TRAIT_LABELS: Record<TraitId, string> = {
@@ -191,9 +191,12 @@ const RATING_BORDER_CLASS: Record<SkillRating, string> = {
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="text-stone-400 font-semibold text-[11px] uppercase tracking-wide mb-2">
-      {children}
-    </h3>
+    <div className="flex items-center gap-2 mb-2 mt-4 first:mt-0">
+      <h3 className="text-stone-500 font-semibold text-[10px] uppercase tracking-widest shrink-0">
+        {children}
+      </h3>
+      <div className="flex-1 h-px bg-stone-700" />
+    </div>
   );
 }
 
@@ -283,7 +286,7 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
 
       {/* ── Header bar ── */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-stone-700 bg-stone-950">
-        <span className="text-amber-300 font-semibold text-sm truncate">
+        <span className="font-display text-amber-300 font-semibold text-sm truncate">
           {person.firstName} {person.familyName}
           {person.nickname && (
             <span className="text-stone-400 font-normal ml-1">"{person.nickname}"</span>
@@ -438,7 +441,7 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
             ))}
           </div>
         ) : (
-          <p className="text-stone-500 italic text-xs mb-1">Character not yet known.</p>
+          <p className="text-stone-500 italic text-xs mb-1">No account kept.</p>
         )}
 
         {/* Ambition badge */}
@@ -582,7 +585,7 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
 
           return (
             <>
-              <SectionHeading>Key Opinions</SectionHeading>
+              <SectionHeading>Standing Among Kin</SectionHeading>
               <div className="flex flex-col gap-1.5 mb-1 text-xs">
                 {positives.length > 0 && (
                   <div>

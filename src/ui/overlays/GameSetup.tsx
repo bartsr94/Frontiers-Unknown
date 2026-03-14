@@ -33,11 +33,11 @@ export default function GameSetup() {
       {/* Parchment card */}
       <div className="w-full max-w-md bg-amber-950 border border-amber-800 rounded-lg shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="bg-amber-900 px-8 py-6 text-center">
-          <h1 className="text-3xl font-bold text-amber-100 tracking-wide">
+        <div className="bg-gradient-to-b from-amber-900 to-amber-950 px-8 py-6 text-center">
+          <h1 className="font-display text-3xl font-bold text-amber-100 tracking-wide">
             Palusteria
           </h1>
-          <p className="text-amber-300 text-sm mt-1 italic">
+          <p className="text-amber-300 text-sm mt-1 italic tracking-[0.15em]">
             Children of the Ashmark
           </p>
         </div>

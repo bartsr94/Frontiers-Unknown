@@ -37,7 +37,7 @@ function SpoilageNotification() {
 
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-950/80 border-b border-amber-800/60 text-xs text-amber-300 shrink-0">
-      <span>🌙 Spoilage: {parts.join(', ')} lost overnight.</span>
+      <span>⁂ Spoilage: {parts.join(', ')} were lost in the night.</span>
       <button
         onClick={dismissSpoilage}
         className="ml-auto text-amber-500 hover:text-amber-300 leading-none"
@@ -68,7 +68,7 @@ function NotificationBanner() {
 function StubView({ name }: { name: string }) {
   return (
     <div className="flex-1 flex items-center justify-center text-stone-500 text-sm italic">
-      {name} — coming soon
+      {name} — records forthcoming
     </div>
   );
 }

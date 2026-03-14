@@ -22,6 +22,9 @@ import type { Person } from '../../simulation/population/person';
 import { interpolateText } from '../../simulation/events/actor-resolver';
 import { skinToneColor } from '../components/Portrait';
 
+// Roman numeral labels for event choices (max 7 should be more than enough).
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+
 // ─── Event image panel ────────────────────────────────────────────────────────
 
 function EventImagePanel({
@@ -45,7 +48,7 @@ function EventImagePanel({
   }
 
   return (
-    <div className="w-[60%] flex-shrink-0 overflow-hidden">
+    <div className="w-[60%] flex-shrink-0 overflow-hidden relative">
       <img
         key={srcs[fallbackIdx]}
         src={srcs[fallbackIdx]}
@@ -54,6 +57,8 @@ function EventImagePanel({
         onError={() => setFallbackIdx(i => i + 1)}
         aria-hidden="true"
       />
+      {/* Right-edge gradient vignette to blend into the event text panel */}
+      <div className="absolute inset-y-0 right-0 w-24 bg-gradient-to-r from-transparent to-stone-900/90 pointer-events-none" />
     </div>
   );
 }
@@ -227,7 +232,7 @@ export default function EventView() {
       <span className="text-amber-400 text-xs uppercase tracking-widest font-semibold">
         {event.category}
       </span>
-      <h3 className="text-amber-100 font-bold text-xl mt-0.5 leading-snug">
+      <h3 className="font-display text-amber-100 font-bold text-xl mt-0.5 leading-snug">
         {interp(event.title)}
       </h3>
     </div>
@@ -315,21 +320,22 @@ export default function EventView() {
         </div>
 
         {/* Choices */}
-        <div className="px-5 pb-6 space-y-2 flex-shrink-0">
-          {event.choices.map(c => (
+        <div className="px-5 pb-6 space-y-1 flex-shrink-0">
+          {event.choices.map((c, idx) => (
             <button
               key={c.id}
               onClick={() => handleChoiceClick(c.id)}
               title={c.description ? interp(c.description) : undefined}
-              className="w-full text-left bg-stone-700 hover:bg-stone-600 active:bg-stone-800
-                         border border-stone-600 hover:border-amber-700
-                         rounded px-4 py-3 transition-colors"
+              className="w-full text-left px-4 py-3 border-l-2 border-amber-800 bg-stone-800/50
+                         hover:bg-stone-700/60 hover:border-amber-500 transition-colors group
+                         border-b border-b-stone-700/40"
             >
-              <span className="text-amber-200 font-semibold text-sm block">
-                {interp(c.label)}
+              <span className="text-amber-600 font-bold mr-2 text-sm group-hover:text-amber-400">
+                {ROMAN[idx] ?? String(idx + 1)}.
               </span>
+              <span className="text-stone-200 text-sm">{interp(c.label)}</span>
               {c.skillCheck && (
-                <span className="text-stone-500 text-xs mt-1 block italic">
+                <span className="text-stone-500 text-xs mt-1 block pl-6 italic">
                   Skill check: {c.skillCheck.attemptLabel ?? c.skillCheck.skill} (difficulty {c.skillCheck.difficulty})
                 </span>
               )}

@@ -959,3 +959,371 @@ describe("applyEventChoice — 'set_household_tradition' consequence", () => {
     expect(result.state.households?.get('hh-3')?.tradition).toBe('ansberite');
   });
 });
+
+// ─── modify_religion consequence ──────────────────────────────────────────────
+
+describe("applyEventChoice — 'modify_religion' consequence", () => {
+  function makePerson(id: string, religion: Person['religion']): Person {
+    return {
+      id, firstName: 'Test', familyName: 'Person', sex: 'male', age: 30,
+      alive: true, role: 'unassigned', socialStatus: 'settler',
+      traits: [], spouseIds: [], parentIds: [null, null], childrenIds: [],
+      religion,
+      languages: [], relationships: new Map(), opinionModifiers: [],
+      heritage: { bloodline: [], primaryCulture: 'imanian_homeland', culturalFluency: new Map() },
+      genetics: { visibleTraits: { skinTone: 0.2, skinUndertone: 'cool_pink', hairColor: 'light_brown', hairTexture: 'straight', eyeColor: 'blue', buildType: 'athletic', height: 'average', facialStructure: 'oval' }, genderRatioModifier: 0.5, extendedFertility: false },
+      fertility: { isExtended: false, fertilityStart: 14, fertilityPeak: 25, fertilityDeclineStart: 35, fertilityEnd: 45 },
+      health: { currentHealth: 100, conditions: [] },
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+      portraitVariant: 1,
+    } as unknown as Person;
+  }
+
+  it('changes the targeted person religion to the given value', () => {
+    const person = makePerson('p1', 'imanian_orthodox');
+    const state = { ...makeState(), people: new Map([['p1', person]]) } as unknown as GameState;
+    const event = makeEvent([{ type: 'modify_religion', target: '{convert}', value: 'sacred_wheel' }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { convert: 'p1' });
+    expect(result.state.people.get('p1')?.religion).toBe('sacred_wheel');
+  });
+
+  it('leaves other people unchanged', () => {
+    const p1 = makePerson('p1', 'imanian_orthodox');
+    const p2 = makePerson('p2', 'imanian_orthodox');
+    const state = { ...makeState(), people: new Map([['p1', p1], ['p2', p2]]) } as unknown as GameState;
+    const event = makeEvent([{ type: 'modify_religion', target: '{convert}', value: 'sacred_wheel' }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { convert: 'p1' });
+    expect(result.state.people.get('p2')?.religion).toBe('imanian_orthodox');
+  });
+
+  it('returns state with no people changes when target person does not exist', () => {
+    const state = makeState();
+    const event = makeEvent([{ type: 'modify_religion', target: 'nonexistent', value: 'sacred_wheel' }]);
+    const result = applyEventChoice(event, 'choice_a', state);
+    // applyEventChoice always adds bookkeeping (eventHistory/eventCooldowns),
+    // but the people map itself should be empty/unchanged.
+    expect(result.state.people.size).toBe(0);
+  });
+});
+
+// ─── set_religious_policy consequence ────────────────────────────────────────
+
+describe("applyEventChoice — 'set_religious_policy' consequence", () => {
+  it('sets the religious policy on the settlement', () => {
+    const state = makeState();
+    const event = makeEvent([{ type: 'set_religious_policy', target: 'settlement', value: 'orthodox_enforced' }]);
+    const result = applyEventChoice(event, 'choice_a', state);
+    expect(result.state.settlement.religiousPolicy).toBe('orthodox_enforced');
+  });
+
+  it('implicitly sets hiddenWheelEmerged when policy is hidden_wheel_recognized', () => {
+    const state = makeState();
+    const event = makeEvent([{ type: 'set_religious_policy', target: 'settlement', value: 'hidden_wheel_recognized' }]);
+    const result = applyEventChoice(event, 'choice_a', state);
+    expect(result.state.settlement.religiousPolicy).toBe('hidden_wheel_recognized');
+    expect(result.state.culture.hiddenWheelEmerged).toBe(true);
+  });
+
+  it('does not set hiddenWheelEmerged for other policy values', () => {
+    const state = makeState();
+    const event = makeEvent([{ type: 'set_religious_policy', target: 'settlement', value: 'wheel_permitted' }]);
+    const result = applyEventChoice(event, 'choice_a', state);
+    expect(result.state.culture.hiddenWheelEmerged).toBeFalsy();
+  });
+});
+
+// ─── modify_cultural_blend consequence ───────────────────────────────────────
+
+describe("applyEventChoice — 'modify_cultural_blend' consequence", () => {
+  it('adds the delta to culturalBlend', () => {
+    const base = makeState();
+    const state = { ...base, culture: { ...base.culture, culturalBlend: 0.5 } } as unknown as GameState;
+    const event = makeEvent([{ type: 'modify_cultural_blend', target: 'settlement', value: 0.1 }]);
+    const result = applyEventChoice(event, 'choice_a', state);
+    expect(result.state.culture.culturalBlend).toBeCloseTo(0.6);
+  });
+
+  it('clamps culturalBlend at 1.0', () => {
+    const base = makeState();
+    const state = { ...base, culture: { ...base.culture, culturalBlend: 0.95 } } as unknown as GameState;
+    const event = makeEvent([{ type: 'modify_cultural_blend', target: 'settlement', value: 0.2 }]);
+    const result = applyEventChoice(event, 'choice_a', state);
+    expect(result.state.culture.culturalBlend).toBe(1.0);
+  });
+
+  it('clamps culturalBlend at 0.0', () => {
+    const base = makeState();
+    const state = { ...base, culture: { ...base.culture, culturalBlend: 0.05 } } as unknown as GameState;
+    const event = makeEvent([{ type: 'modify_cultural_blend', target: 'settlement', value: -0.2 }]);
+    const result = applyEventChoice(event, 'choice_a', state);
+    expect(result.state.culture.culturalBlend).toBe(0.0);
+  });
+});
+
+// ─── modify_all_tribe_dispositions consequence ────────────────────────────────
+
+describe("applyEventChoice — 'modify_all_tribe_dispositions' consequence", () => {
+  function stateWithTribes(tribes: Array<{ id: string; disposition: number }>): GameState {
+    const tribeMap = new Map(tribes.map(t => [t.id, { id: t.id, name: t.id, disposition: t.disposition } as any]));
+    return { ...makeState(), tribes: tribeMap } as unknown as GameState;
+  }
+
+  it('adds the delta to every tribe disposition', () => {
+    const state = stateWithTribes([
+      { id: 'tribe_a', disposition: 10 },
+      { id: 'tribe_b', disposition: -5 },
+    ]);
+    const event = makeEvent([{ type: 'modify_all_tribe_dispositions', target: 'all', value: 15 }]);
+    const result = applyEventChoice(event, 'choice_a', state);
+    expect(result.state.tribes.get('tribe_a')?.disposition).toBe(25);
+    expect(result.state.tribes.get('tribe_b')?.disposition).toBe(10);
+  });
+
+  it('clamps tribe disposition at 100', () => {
+    const state = stateWithTribes([{ id: 'tribe_a', disposition: 95 }]);
+    const event = makeEvent([{ type: 'modify_all_tribe_dispositions', target: 'all', value: 20 }]);
+    const result = applyEventChoice(event, 'choice_a', state);
+    expect(result.state.tribes.get('tribe_a')?.disposition).toBe(100);
+  });
+
+  it('clamps tribe disposition at -100', () => {
+    const state = stateWithTribes([{ id: 'tribe_a', disposition: -90 }]);
+    const event = makeEvent([{ type: 'modify_all_tribe_dispositions', target: 'all', value: -20 }]);
+    const result = applyEventChoice(event, 'choice_a', state);
+    expect(result.state.tribes.get('tribe_a')?.disposition).toBe(-100);
+  });
+
+  it('applies delta to all tribes independently', () => {
+    const state = stateWithTribes([
+      { id: 'tribe_a', disposition: 0 },
+      { id: 'tribe_b', disposition: 50 },
+      { id: 'tribe_c', disposition: -50 },
+    ]);
+    const event = makeEvent([{ type: 'modify_all_tribe_dispositions', target: 'all', value: -10 }]);
+    const result = applyEventChoice(event, 'choice_a', state);
+    expect(result.state.tribes.get('tribe_a')?.disposition).toBe(-10);
+    expect(result.state.tribes.get('tribe_b')?.disposition).toBe(40);
+    expect(result.state.tribes.get('tribe_c')?.disposition).toBe(-60);
+  });
+
+  it('returns state unchanged when there are no tribes', () => {
+    const state = makeState();
+    const event = makeEvent([{ type: 'modify_all_tribe_dispositions', target: 'all', value: 10 }]);
+    const result = applyEventChoice(event, 'choice_a', state);
+    expect(result.state.tribes.size).toBe(0);
+  });
+});
+
+// ─── modify_opinion_pair consequence ─────────────────────────────────────────
+
+describe("applyEventChoice — 'modify_opinion_pair' consequence", () => {
+  function makePerson(id: string): Person {
+    return {
+      id, firstName: 'Test', familyName: id, sex: 'male', age: 30,
+      alive: true, role: 'unassigned', socialStatus: 'settler',
+      traits: [], spouseIds: [], parentIds: [null, null], childrenIds: [],
+      religion: 'imanian_orthodox',
+      languages: [], relationships: new Map(), opinionModifiers: [],
+      heritage: { bloodline: [], primaryCulture: 'imanian_homeland', culturalFluency: new Map() },
+      genetics: { visibleTraits: { skinTone: 0.2, skinUndertone: 'cool_pink', hairColor: 'light_brown', hairTexture: 'straight', eyeColor: 'blue', buildType: 'athletic', height: 'average', facialStructure: 'oval' }, genderRatioModifier: 0.5, extendedFertility: false },
+      fertility: { isExtended: false, fertilityStart: 14, fertilityPeak: 25, fertilityDeclineStart: 35, fertilityEnd: 45 },
+      health: { currentHealth: 100, conditions: [] },
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+      portraitVariant: 1,
+    } as unknown as Person;
+  }
+
+  it('adds a timed modifier from A toward B and from B toward A', () => {
+    const pA = makePerson('pA');
+    const pB = makePerson('pB');
+    const state = { ...makeState(), people: new Map([['pA', pA], ['pB', pB]]) } as unknown as GameState;
+    const event = makeEvent([{
+      type: 'modify_opinion_pair',
+      target: '{actorA}',
+      value: 8,
+      params: { slotB: '{actorB}', label: 'Joint project' },
+    }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { actorA: 'pA', actorB: 'pB' });
+    const modA = result.state.people.get('pA')?.opinionModifiers?.find(m => m.targetId === 'pB');
+    const modB = result.state.people.get('pB')?.opinionModifiers?.find(m => m.targetId === 'pA');
+    expect(modA?.value).toBe(8);
+    expect(modA?.label).toBe('Joint project');
+    expect(modB?.value).toBe(8);
+  });
+
+  it('supports asymmetric values via valueB param', () => {
+    const pA = makePerson('pA');
+    const pB = makePerson('pB');
+    const state = { ...makeState(), people: new Map([['pA', pA], ['pB', pB]]) } as unknown as GameState;
+    const event = makeEvent([{
+      type: 'modify_opinion_pair',
+      target: '{actorA}',
+      value: 5,
+      params: { slotB: '{actorB}', valueB: -3, label: 'Argument' },
+    }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { actorA: 'pA', actorB: 'pB' });
+    const modA = result.state.people.get('pA')?.opinionModifiers?.find(m => m.targetId === 'pB');
+    const modB = result.state.people.get('pB')?.opinionModifiers?.find(m => m.targetId === 'pA');
+    expect(modA?.value).toBe(5);
+    expect(modB?.value).toBe(-3);
+  });
+});
+
+// ─── modify_opinion_labeled consequence ──────────────────────────────────────
+
+describe("applyEventChoice — 'modify_opinion_labeled' consequence", () => {
+  function makePerson(id: string): Person {
+    return {
+      id, firstName: 'Test', familyName: id, sex: 'male', age: 30,
+      alive: true, role: 'unassigned', socialStatus: 'settler',
+      traits: [], spouseIds: [], parentIds: [null, null], childrenIds: [],
+      religion: 'imanian_orthodox',
+      languages: [], relationships: new Map(), opinionModifiers: [],
+      heritage: { bloodline: [], primaryCulture: 'imanian_homeland', culturalFluency: new Map() },
+      genetics: { visibleTraits: { skinTone: 0.2, skinUndertone: 'cool_pink', hairColor: 'light_brown', hairTexture: 'straight', eyeColor: 'blue', buildType: 'athletic', height: 'average', facialStructure: 'oval' }, genderRatioModifier: 0.5, extendedFertility: false },
+      fertility: { isExtended: false, fertilityStart: 14, fertilityPeak: 25, fertilityDeclineStart: 35, fertilityEnd: 45 },
+      health: { currentHealth: 100, conditions: [] },
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+      portraitVariant: 1,
+    } as unknown as Person;
+  }
+
+  it('broadcasts a timed modifier from every observer toward the target', () => {
+    const target  = makePerson('target');
+    const obs1    = makePerson('obs1');
+    const obs2    = makePerson('obs2');
+    const state   = { ...makeState(), people: new Map([['target', target], ['obs1', obs1], ['obs2', obs2]]) } as unknown as GameState;
+    const event   = makeEvent([{
+      type: 'modify_opinion_labeled',
+      target: '{hero}',
+      value: 12,
+      params: { label: 'Heroic act' },
+    }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { hero: 'target' });
+    const m1 = result.state.people.get('obs1')?.opinionModifiers?.find(m => m.targetId === 'target');
+    const m2 = result.state.people.get('obs2')?.opinionModifiers?.find(m => m.targetId === 'target');
+    expect(m1?.value).toBe(12);
+    expect(m1?.label).toBe('Heroic act');
+    expect(m2?.value).toBe(12);
+  });
+
+  it('does not add a self-modifier to the target', () => {
+    const target = makePerson('target');
+    const state  = { ...makeState(), people: new Map([['target', target]]) } as unknown as GameState;
+    const event  = makeEvent([{
+      type: 'modify_opinion_labeled',
+      target: 'target',
+      value: 5,
+      params: { label: 'Act' },
+    }]);
+    const result = applyEventChoice(event, 'choice_a', state);
+    const selfMod = result.state.people.get('target')?.opinionModifiers?.find(m => m.targetId === 'target');
+    expect(selfMod).toBeUndefined();
+  });
+});
+
+// ─── add_trait / remove_trait consequences ────────────────────────────────────
+
+describe("applyEventChoice — 'add_trait' and 'remove_trait' consequences", () => {
+  function makePerson(id: string, traits: string[] = []): Person {
+    return {
+      id, firstName: 'Test', familyName: id, sex: 'male', age: 30,
+      alive: true, role: 'unassigned', socialStatus: 'settler',
+      traits, spouseIds: [], parentIds: [null, null], childrenIds: [],
+      religion: 'imanian_orthodox',
+      languages: [], relationships: new Map(), opinionModifiers: [],
+      heritage: { bloodline: [], primaryCulture: 'imanian_homeland', culturalFluency: new Map() },
+      genetics: { visibleTraits: { skinTone: 0.2, skinUndertone: 'cool_pink', hairColor: 'light_brown', hairTexture: 'straight', eyeColor: 'blue', buildType: 'athletic', height: 'average', facialStructure: 'oval' }, genderRatioModifier: 0.5, extendedFertility: false },
+      fertility: { isExtended: false, fertilityStart: 14, fertilityPeak: 25, fertilityDeclineStart: 35, fertilityEnd: 45 },
+      health: { currentHealth: 100, conditions: [] },
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+      portraitVariant: 1,
+    } as unknown as Person;
+  }
+
+  it('add_trait appends a new trait to the person', () => {
+    const person = makePerson('p1', ['brave']);
+    const state  = { ...makeState(), people: new Map([['p1', person]]) } as unknown as GameState;
+    const event  = makeEvent([{ type: 'add_trait', target: '{target}', value: 'loyal' }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { target: 'p1' });
+    expect(result.state.people.get('p1')?.traits).toContain('loyal');
+    expect(result.state.people.get('p1')?.traits).toContain('brave');
+  });
+
+  it('add_trait is idempotent — does not duplicate an already-present trait', () => {
+    const person = makePerson('p1', ['brave']);
+    const state  = { ...makeState(), people: new Map([['p1', person]]) } as unknown as GameState;
+    const event  = makeEvent([{ type: 'add_trait', target: '{target}', value: 'brave' }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { target: 'p1' });
+    expect(result.state.people.get('p1')?.traits.filter(t => t === 'brave').length).toBe(1);
+  });
+
+  it('remove_trait removes an existing trait from the person', () => {
+    const person = makePerson('p1', ['brave', 'reckless']);
+    const state  = { ...makeState(), people: new Map([['p1', person]]) } as unknown as GameState;
+    const event  = makeEvent([{ type: 'remove_trait', target: '{target}', value: 'reckless' }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { target: 'p1' });
+    expect(result.state.people.get('p1')?.traits).not.toContain('reckless');
+    expect(result.state.people.get('p1')?.traits).toContain('brave');
+  });
+
+  it('remove_trait is a no-op when the trait is not present', () => {
+    const person = makePerson('p1', ['brave']);
+    const state  = { ...makeState(), people: new Map([['p1', person]]) } as unknown as GameState;
+    const event  = makeEvent([{ type: 'remove_trait', target: '{target}', value: 'cowardly' }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { target: 'p1' });
+    expect(result.state.people.get('p1')?.traits).toEqual(['brave']);
+  });
+});
+
+// ─── wound_person consequence ─────────────────────────────────────────────────
+
+describe("applyEventChoice — 'wound_person' consequence", () => {
+  function makePerson(id: string, health = 100): Person {
+    return {
+      id, firstName: 'Test', familyName: id, sex: 'male', age: 30,
+      alive: true, role: 'unassigned', socialStatus: 'settler',
+      traits: [], spouseIds: [], parentIds: [null, null], childrenIds: [],
+      religion: 'imanian_orthodox',
+      languages: [], relationships: new Map(), opinionModifiers: [],
+      heritage: { bloodline: [], primaryCulture: 'imanian_homeland', culturalFluency: new Map() },
+      genetics: { visibleTraits: { skinTone: 0.2, skinUndertone: 'cool_pink', hairColor: 'light_brown', hairTexture: 'straight', eyeColor: 'blue', buildType: 'athletic', height: 'average', facialStructure: 'oval' }, genderRatioModifier: 0.5, extendedFertility: false },
+      fertility: { isExtended: false, fertilityStart: 14, fertilityPeak: 25, fertilityDeclineStart: 35, fertilityEnd: 45 },
+      health: { currentHealth: health, conditions: [] },
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+      portraitVariant: 1,
+    } as unknown as Person;
+  }
+
+  it('reduces health by the specified amount', () => {
+    const person = makePerson('p1', 80);
+    const state  = { ...makeState(), people: new Map([['p1', person]]) } as unknown as GameState;
+    const event  = makeEvent([{ type: 'wound_person', target: '{victim}', value: 25 }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { victim: 'p1' });
+    expect(result.state.people.get('p1')?.health.currentHealth).toBe(55);
+  });
+
+  it('clamps health at 0', () => {
+    const person = makePerson('p1', 15);
+    const state  = { ...makeState(), people: new Map([['p1', person]]) } as unknown as GameState;
+    const event  = makeEvent([{ type: 'wound_person', target: '{victim}', value: 50 }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { victim: 'p1' });
+    expect(result.state.people.get('p1')?.health.currentHealth).toBe(0);
+  });
+
+  it("adds the 'wounded' condition if not already present", () => {
+    const person = makePerson('p1', 100);
+    const state  = { ...makeState(), people: new Map([['p1', person]]) } as unknown as GameState;
+    const event  = makeEvent([{ type: 'wound_person', target: '{victim}', value: 10 }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { victim: 'p1' });
+    expect(result.state.people.get('p1')?.health.conditions).toContain('wounded');
+  });
+
+  it("does not duplicate the 'wounded' condition", () => {
+    const person = { ...makePerson('p1', 80), health: { currentHealth: 80, conditions: ['wounded' as const] } } as unknown as Person;
+    const state  = { ...makeState(), people: new Map([['p1', person]]) } as unknown as GameState;
+    const event  = makeEvent([{ type: 'wound_person', target: '{victim}', value: 10 }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { victim: 'p1' });
+    expect(result.state.people.get('p1')?.health.conditions.filter(c => c === 'wounded').length).toBe(1);
+  });
+});

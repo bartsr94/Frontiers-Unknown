@@ -36,15 +36,13 @@ export default function BottomBar() {
     : null;
 
   return (
-    <footer className="h-10 bg-stone-900 border-t border-stone-700 flex items-center px-4 gap-5 text-sm shrink-0">
+    <footer className="h-10 bg-stone-900 border-t-2 border-stone-700 flex items-center px-4 gap-5 text-sm shrink-0">
       {PILLS.map(pill => {
         const current = resources ? Math.floor(resources[pill.key] ?? 0) : null;
         const delta   = netDelta ? netDelta[pill.key] : 0;
         const deltaLabel = delta > 0 ? `+${delta}` : delta < 0 ? `${delta}` : null;
         const deltaClass = delta > 0 ? 'text-green-400' : 'text-red-400';
-        const tooltipText = deltaLabel
-          ? `Net this season: ${deltaLabel}/turn`
-          : undefined;
+        const tooltipText = `${pill.label}: ${current !== null ? current : '—'}${deltaLabel ? ` (${deltaLabel}/season)` : ''}`;
 
         return (
           <span key={pill.key} className="flex items-center gap-1 text-stone-300" title={tooltipText}>
@@ -64,8 +62,8 @@ export default function BottomBar() {
       <span className="ml-auto text-stone-600">|</span>
 
       {/* Population */}
-      <span className="flex items-center gap-1.5 text-stone-300 ml-1">
-        <span className="text-base leading-none">👥</span>
+      <span className="flex items-center gap-1.5 text-stone-300 ml-1" title={`Population: ${pop} souls`}>
+        <span className="text-base leading-none">⊛</span>
         <span className="font-semibold text-amber-200">{pop}</span>
         <span className="text-stone-500 text-xs hidden sm:inline">Pop</span>
       </span>

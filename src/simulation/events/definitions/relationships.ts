@@ -18,7 +18,7 @@ export const RELATIONSHIP_EVENTS: GameEvent[] = [
     category: 'personal',
     prerequisites: [
       { type: 'max_opinion_pair', params: { threshold: -25 } },
-      { type: 'min_population', params: { count: 3 } },
+      { type: 'min_population', params: { value: 3 } },
     ],
     actorRequirements: [
       { slot: 'instigator', criteria: { minAge: 18 } },
@@ -141,7 +141,7 @@ export const RELATIONSHIP_EVENTS: GameEvent[] = [
     category: 'personal',
     prerequisites: [
       { type: 'max_opinion_pair', params: { threshold: -40 } },
-      { type: 'min_population',   params: { count: 4 } },
+      { type: 'min_population',   params: { value: 4 } },
     ],
     actorRequirements: [
       { slot: 'leaver', criteria: { minAge: 18 } },

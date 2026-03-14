@@ -169,6 +169,30 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
       const turns = prereq.params['turns'] as number;
       return (state.identityPressure?.tribalPressureTurns ?? 0) >= turns;
     }
+    case 'tribe_exists': {
+      const tribeId = prereq.params['tribeId'] as string;
+      return (state.tribes ?? new Map()).has(tribeId);
+    }
+    case 'tribe_disposition_above': {
+      const tribeId = prereq.params['tribeId'] as string;
+      const value   = prereq.params['value'] as number;
+      const tribe   = (state.tribes ?? new Map()).get(tribeId);
+      return tribe !== undefined && tribe.disposition > value;
+    }
+    case 'tribe_disposition_below': {
+      const tribeId = prereq.params['tribeId'] as string;
+      const value   = prereq.params['value'] as number;
+      const tribe   = (state.tribes ?? new Map()).get(tribeId);
+      return tribe !== undefined && tribe.disposition < value;
+    }
+    case 'company_standing_above': {
+      const value = prereq.params['value'] as number;
+      return (state.company?.standing ?? 0) > value;
+    }
+    case 'company_standing_below': {
+      const value = prereq.params['value'] as number;
+      return (state.company?.standing ?? 0) < value;
+    }
     default:
       return true;
   }
