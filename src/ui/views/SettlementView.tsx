@@ -22,6 +22,67 @@ import type { BuildingId, BuildingStyle, BuiltBuilding, ConstructionProject, Res
 import { RESOURCE_EMOJI } from '../shared/resource-display';
 import { computeReligiousTension } from '../../simulation/population/culture';
 import { IdentityScale } from '../components/IdentityScale';
+import { factionLabel } from '../../simulation/world/factions';
+import ActivityFeed from '../components/ActivityFeed';
+import PersonDetail from './PersonDetail';
+
+// ─── Factions Panel ──────────────────────────────────────────────────────────
+
+const FACTION_COLOR: Record<string, string> = {
+  cultural_preservationists: 'text-emerald-300 bg-emerald-950/50 border-emerald-700',
+  company_loyalists:         'text-amber-300  bg-amber-950/50  border-amber-700',
+  orthodox_faithful:         'text-yellow-300 bg-yellow-950/50 border-yellow-700',
+  wheel_devotees:            'text-violet-300 bg-violet-950/50 border-violet-700',
+  community_elders:          'text-stone-300  bg-stone-800/50  border-stone-600',
+  merchant_bloc:             'text-blue-300   bg-blue-950/50   border-blue-700',
+};
+
+function FactionsPanel({ factions, people }: { factions: import('../../simulation/turn/game-state').Faction[]; people: Map<string, import('../../simulation/population/person').Person>; }) {
+  if (factions.length === 0) {
+    return (
+      <p className="text-xs text-stone-500 italic">
+        No factions have formed yet.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {factions.map(faction => {
+        const colorCls = FACTION_COLOR[faction.type] ?? 'text-stone-300 bg-stone-800/50 border-stone-600';
+        const strengthPct = Math.round(faction.strength * 100);
+        const spokespersonId = faction.memberIds[0];
+        const spokesperson = spokespersonId ? people.get(spokespersonId) : undefined;
+        return (
+          <div key={faction.id} className={`rounded border p-2 text-xs ${colorCls}`}>
+            <div className="font-semibold mb-1">{factionLabel(faction.type)}</div>
+            {spokesperson && (
+              <div className="text-stone-400 mb-1">
+                {faction.memberIds.length} member{faction.memberIds.length !== 1 ? 's' : ''}
+                {' · '}led by {spokesperson.firstName}
+              </div>
+            )}
+            <div className="flex items-center gap-1 mb-1">
+              <span className="text-stone-400">Strength</span>
+              <div className="flex-1 bg-stone-700 rounded-full h-1.5 mx-1">
+                <div
+                  className="h-1.5 rounded-full bg-current opacity-80"
+                  style={{ width: `${strengthPct}%` }}
+                />
+              </div>
+              <span>{strengthPct}%</span>
+            </div>
+            {faction.activeDemand && (
+              <div className="mt-1 px-2 py-1 bg-black/30 rounded text-stone-300 italic">
+                ⚑ {faction.activeDemand.description}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 // ─── Helper constants ─────────────────────────────────────────────────────────
 
@@ -483,6 +544,7 @@ export default function SettlementView() {
 
   // Track which style is selected for style-variant buildings
   const [pendingStyle, setPendingStyle] = useState<Record<string, BuildingStyle>>({});
+  const [personDetailId, setPersonDetailId] = useState<string | null>(null);
 
   if (!gameState) return null;
 
@@ -655,6 +717,35 @@ export default function SettlementView() {
           <ReligionPanel disabled={!canManage} />
         </div>
       </div>
+
+      {/* ── Factions panel ─────────────────────────────────────────────── */}
+      <div className="w-56 flex-shrink-0 flex flex-col overflow-hidden border-l border-stone-700 pl-4">
+        <h3 className="text-base font-semibold text-slate-300 mb-3">
+          Factions
+        </h3>
+        <div className="flex-1 overflow-y-auto">
+          <FactionsPanel factions={gameState.factions ?? []} people={people} />
+          <ActivityFeed
+            entries={gameState.activityLog}
+            people={people}
+            graveyard={gameState.graveyard}
+            onNavigate={id => setPersonDetailId(id)}
+          />
+        </div>
+      </div>
+
+      {/* ── PersonDetail overlay (triggered from ActivityFeed) ─────────── */}
+      {personDetailId && (
+        <div className="fixed inset-0 z-50 flex items-start justify-end pointer-events-none">
+          <div className="pointer-events-auto w-96 h-full overflow-y-auto bg-stone-900 border-l border-stone-700 shadow-2xl">
+            <PersonDetail
+              personId={personDetailId}
+              onClose={() => setPersonDetailId(null)}
+              onNavigate={id => setPersonDetailId(id)}
+            />
+          </div>
+        </div>
+      )}
 
     </div>
   );

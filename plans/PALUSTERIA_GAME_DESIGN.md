@@ -1,6 +1,6 @@
 # Palusteria: Children of the Ashmark — Game Design Document
 
-**Version:** 1.5 (updated after Phase 3.9 — Trait Expansion)  
+**Version:** 1.6 (updated after Phase 4.0 — Character Autonomy)  
 **Document Type:** Game Design (What & Why)  
 **Companion Document:** `PALUSTERIA_ARCHITECTURE.md` (How)  
 **Setting:** The Ashmark region of Palusteria
@@ -222,18 +222,51 @@ Opinions are visible in the PersonDetail panel as colour-coded chips (top‐3 po
 New event consequences `modify_opinion_pair` and `modify_opinion_labeled` create timed modifiers. When an event resolves with multiple named actors, a small automatic `+2 "Shared: {event title}"` bond is applied between every co-actor pair unless the choice explicitly opts out (`skipActorBond: true` — used for hostile or quarrel outcomes). The tooltip in PersonDetail shows the countdown: **Joint project: +8 (6t)**.
 ### 6.3 Character Autonomy
 
-Each settler can hold one active `PersonAmbition` at a time — a personal goal that grows in intensity each turn until it drives an event.
+Settlers act on their own. The player is the settlement’s overseer, not its puppet-master. They set conditions, observe what emerges, and intervene when it matters. All autonomous behaviour is visible to the player through PersonDetail badges, the Key Opinions panel, and a settlement-level Activity Feed.
 
-**Five ambition types:**
+**Ambitions** give each settler one active personal goal at a time:
 - `seek_spouse` — an unmarried adult wants to marry
 - `seek_council` — a skilled leader or diplomat wants a Council seat
 - `seek_seniority` — a wife in a polygamous household wants the senior position
 - `seek_cultural_duty` — a Sauromatian man wants to fulfil the keth-thara vow
 - `seek_informal_union` — two attracted people want to formalise their bond
 
-**Intensity:** Ambitions start at 10% intensity and grow +5% per turn. The `content` trait blocks intensity growth. At 70% intensity (`AMBITION_FIRING_THRESHOLD`), the ambition can trigger one of five autonomous events in `definitions/relationships.ts`.
+Ambitions start at 10% intensity and grow +5% per turn. The `content` trait blocks intensity growth. At 70% intensity (`AMBITION_FIRING_THRESHOLD`), the ambition can trigger one of five autonomous events in `definitions/relationships.ts`. Ambitions are visible as a badge in PersonDetail, colour-coded by intensity (grey → amber → rose).
 
-Ambitions are visible as a badge in each settler's detail panel, colour-coded by intensity (grey → amber → rose).
+**Named Relationships** form autonomously based on sustained opinion:
+- When two people’s effective opinion of each other stays above threshold (`FRIEND_OPINION_THRESHOLD = 50`) for several consecutive turns (`FRIEND_SUSTAIN_TURNS = 4`), a `friend` bond forms silently.
+- Negative sustained opinions form `rival` and `nemesis` bonds.
+- Deeper bonds — `confidant`, `mentor`, `student` — form through mentoring schemes reaching their conclusion.
+- Bonds dissolve when opinions drop back below threshold.
+- At game start, `seedFoundingRelationships()` pre-seeds pairs with high/low opinions so the founding generation arrives with a social texture already in place.
+
+**Schemes** are hidden personal projects each settler can pursue:
+- `scheme_court_person` — romantic pursuit; triggered by `passionate`, `romantic`, `lonely` traits
+- `scheme_convert_faith` — quiet evangelism; triggered by `devout`, `zealous` traits
+- `scheme_befriend_person` — deliberate friendship-building; triggered by `gregarious`, `warm` traits
+- `scheme_undermine_person` — sabotage of a competitor; triggered by `ambitious`, `cruel`, `envious` traits
+- `scheme_tutor_person` — skill-mentoring; triggered by `mentor_hearted`, `patient` traits
+
+Each scheme advances 1 progress/turn and fires a player-facing climax event when it reaches 100. Courtship, undermining, and faith advocacy climaxes surface as decisions. Befriending and tutoring reach their conclusion silently (a `friend` bond forms or a skill tick is awarded) unless discovered. A scheme badge in PersonDetail shows the player that someone is scheming, even if they can’t see exactly what.
+
+**Factions** form when settlers who share values cluster together and demand a voice:
+- `cultural_preservationists` — traditionalists who resist cultural drift
+- `company_loyalists` — Imanian settlers prioritising Company standing
+- `orthodox_faithful` — Orthodox worshippers opposed to Wheel spread
+- `wheel_devotees` — Sacred Wheel practitioners seeking recognition
+- `community_elders` — respected elders asserting collective wisdom
+- `merchant_bloc` — traders and craftspeople focused on economic policy
+
+A faction forms when at least 3 eligible members exist. At strength ≥ 0.45 (faction strength = member fraction × alignment), the faction generates a player-facing event demand. Factions are visible in the Community tab with strength bars and active demand indicators.
+
+**Community Tab** (`CommunityView`) provides a settlement-level activity overview:
+- **Left panel**: living population count, bond distribution (how many friendships, rivalries, mentorships exist)
+- **Centre panel**: active factions with strength bars and demands
+- **Right panel**: the rolling Activity Feed — a 30-entry log of every autonomous action captured in narrative form (relationship formed/dissolved, scheme started/succeeded/failed, faction formed/dissolved, trait acquired, ambition formed/cleared, role self-assigned)
+
+Activity Feed entries include clickable person name chips that navigate directly to PersonDetail. This is the player’s window into everything that happened without their direct input.
+
+**Shared-Role Opinion Drift**: settlers who share the same work role gain +1 opinion of each other per turn. Co-workers who spend years in the same job quietly become colleagues, then friends.
 
 ### 6.4 Future Expansion
 

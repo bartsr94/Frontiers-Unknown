@@ -75,7 +75,19 @@ export type ConsequenceType =
    * Applies a disposition delta to every external tribe in the region.
    * `value` = numeric delta. Result is clamped to [-100, 100] per tribe.
    */
-  | 'modify_all_tribe_dispositions';
+  | 'modify_all_tribe_dispositions'
+  /**
+   * Clears the target person's active scheme immediately.
+   * Used by event choices that forbid or interrupt a scheme in progress.
+   * `target` = personId or slot token. No `value` needed.
+   */
+  | 'clear_scheme'
+  /**
+   * Clears the target person's active ambition immediately.
+   * Used when an event choice fulfils or cancels the ambition.
+   * `target` = personId or slot token. No `value` needed.
+   */
+  | 'clear_ambition';
 
 // ─── Event Category ──────────────────────────────────────────────────────────
 
@@ -148,7 +160,9 @@ export type PrerequisiteType =
   /** True when companyPressureTurns (native-zone seasons) is >= the given value (params: { turns: number }). */
   | 'min_company_pressure_turns'
   /** True when tribalPressureTurns (Imanian-zone seasons) is >= the given value (params: { turns: number }). */
-  | 'min_tribal_pressure_turns';
+  | 'min_tribal_pressure_turns'
+  /** True when at least one faction of the given type is active (params?: { type: FactionType }; omit to check any faction). */
+  | 'has_active_faction';
 
 // ─── Prerequisite & Requirement Interfaces ────────────────────────────────────
 
@@ -160,8 +174,8 @@ export type PrerequisiteType =
 export interface EventPrerequisite {
   /** The kind of check to perform. */
   type: PrerequisiteType;
-  /** Type-specific parameters. Validated by the prerequisite checker. */
-  params: Record<string, unknown>;
+  /** Type-specific parameters. Validated by the prerequisite checker. Optional for parameterless checks. */
+  params?: Record<string, unknown>;
 }
 
 /**

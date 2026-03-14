@@ -477,6 +477,129 @@ export interface GameFlags {
   creoleEmergedNotified: boolean;
 }
 
+// ─── Activity Log ────────────────────────────────────────────────────────────
+
+/** All autonomous-activity categories that can be logged. */
+export type ActivityLogType =
+  | 'role_self_assigned'
+  | 'relationship_formed'
+  | 'relationship_dissolved'
+  | 'scheme_started'
+  | 'scheme_succeeded'
+  | 'scheme_failed'
+  | 'faction_formed'
+  | 'faction_dissolved'
+  | 'trait_acquired'
+  | 'ambition_formed'
+  | 'ambition_cleared';
+
+/**
+ * A single entry in the rolling Activity Log.
+ * Trimmed to the last 30 entries (FIFO) by addActivityEntry().
+ */
+export interface ActivityLogEntry {
+  turn: number;
+  type: ActivityLogType;
+  /** Primary person involved. */
+  personId?: string;
+  /** Secondary person involved (if applicable). */
+  targetId?: string;
+  /** Human-readable description using first names only. */
+  description: string;
+}
+
+/** Appends an entry and trims the log to the last 30 entries. */
+export function addActivityEntry(
+  log: ActivityLogEntry[],
+  entry: ActivityLogEntry,
+): ActivityLogEntry[] {
+  const updated = [...log, entry];
+  return updated.length > 30 ? updated.slice(updated.length - 30) : updated;
+}
+
+// ─── Factions ────────────────────────────────────────────────────────────────
+
+/** The six kinds of factions that can form in the settlement. */
+export type FactionType =
+  | 'cultural_preservationists' // Sauromatian heritage; resist company cultural drift
+  | 'company_loyalists'         // Imanian heritage; defend the Company's authority
+  | 'orthodox_faithful'         // Orthodox believers; oppose Wheel presence
+  | 'wheel_devotees'            // Wheel/Hidden Wheel believers; seek tolerance
+  | 'community_elders'          // Respected elders; collective moral authority
+  | 'merchant_bloc';            // Traders and craftsmen; want economic freedom
+
+/** The four kinds of demands a faction can make. */
+export type FactionDemandType =
+  | 'policy_change'
+  | 'resource_grant'
+  | 'building_request'
+  | 'cultural_accommodation';
+
+/** A demand made by a faction when its strength exceeds the threshold. */
+export interface FactionDemand {
+  type: FactionDemandType;
+  /** Human-readable: e.g. "We demand the Wheel faith be recognised". */
+  description: string;
+  /** Machine-readable parameters e.g. { policy: 'wheel_permitted' }. */
+  params: Record<string, unknown>;
+}
+
+/**
+ * A political faction — a bloc of settlers acting collectively around a shared
+ * cultural, religious, or economic interest.
+ */
+export interface Faction {
+  /** e.g. 'faction_orthodox_1' */
+  id: string;
+  type: FactionType;
+  /** Person IDs of all current members. */
+  memberIds: string[];
+  /**
+   * Strength 0.0–1.0:
+   *   clamp(memberCount / totalPop, 0, 1) × (0.5 + coherence × 0.5)
+   * where coherence = avg(pairwise effectiveOpinion between members) / 100.
+   */
+  strength: number;
+  formedTurn: number;
+  /** Active demand, if any. */
+  activeDemand?: FactionDemand;
+  /** Turn on which the demand event was queued. Used for 20-turn cooldown. */
+  demandFiredTurn?: number;
+}
+
+// ─── Debug & Settings ────────────────────────────────────────────────────────
+
+/** Developer/debug toggles. Serialised with GameState. */
+export interface DebugSettings {
+  /** Master switch: emit autonomy events to browser console. Zero overhead when false. */
+  showAutonomyLog: boolean;
+  /** Sub-toggle: scheme progress milestones. */
+  logSchemes: boolean;
+  /** Sub-toggle: every opinion delta above ±5. */
+  logOpinionDeltas: boolean;
+  /** Sub-toggle: faction strength + demand status each turn. */
+  logFactionStrength: boolean;
+  /** Sub-toggle: ambition lifecycle events. */
+  logAmbitions: boolean;
+  /** When true, emits a console warning when a scheme is about to fire an event. */
+  pauseOnSchemeEvent: boolean;
+  /** When true, all pending events are discarded each turn — jump straight to management phase. */
+  skipEvents: boolean;
+}
+
+/** Returns a fresh DebugSettings with all toggles off. */
+export function defaultDebugSettings(): DebugSettings {
+  return {
+    showAutonomyLog:    false,
+    logSchemes:         false,
+    logOpinionDeltas:   false,
+    logFactionStrength: false,
+    logAmbitions:       false,
+    pauseOnSchemeEvent: false,
+    skipEvents:         false,
+  };
+}
+
 // ─── Master Game State ────────────────────────────────────────────────────────
 
 /**
@@ -558,4 +681,22 @@ export interface GameState {
    * Drive passive standing/disposition deltas and gate identity events.
    */
   identityPressure: IdentityPressure;
+
+  /**
+   * All active political factions in the settlement.
+   * Plain array — no Map serialisation needed.
+   */
+  factions: Faction[];
+
+  /**
+   * Rolling log of autonomous character actions (last 30 entries).
+   * Trimmed by addActivityEntry(). Plain array — JSON-safe.
+   */
+  activityLog: ActivityLogEntry[];
+
+  /**
+   * Developer/debug toggles.
+   * Serialised with GameState so settings survive save/load cycles.
+   */
+  debugSettings: DebugSettings;
 }

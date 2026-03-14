@@ -22,7 +22,7 @@ import { useGameStore } from '../../stores/game-store';
 import Portrait from '../components/Portrait';
 import FamilyTree from './FamilyTree';
 import { CULTURE_LABELS } from '../../simulation/population/culture';
-import type { EthnicGroup, HouseholdRole } from '../../simulation/population/person';
+import type { EthnicGroup, HouseholdRole, SchemeType } from '../../simulation/population/person';
 import { getSkillRating, getDerivedSkill } from '../../simulation/population/person';
 import type { SkillId, DerivedSkillId, SkillRating } from '../../simulation/population/person';
 import type { TraitId } from '../../simulation/personality/traits';
@@ -79,6 +79,17 @@ function traitLabel(id: TraitId): string {
 function traitColor(id: TraitId): string {
   const category = TRAIT_DEFINITIONS[id]?.category;
   return CATEGORY_COLORS[category ?? ''] ?? 'bg-stone-700 text-stone-300';
+}
+
+/** Returns a human-readable verb phrase for a scheme type. */
+function schemeTypeLabel(type: SchemeType): string {
+  switch (type) {
+    case 'scheme_court_person':     return 'Courting';
+    case 'scheme_convert_faith':    return 'Converting';
+    case 'scheme_befriend_person':  return 'Befriending';
+    case 'scheme_undermine_person': return 'Undermining';
+    case 'scheme_tutor_person':     return 'Tutoring';
+  }
 }
 // ─── Skill display helpers ───────────────────────────────────────────────────────
 
@@ -424,6 +435,33 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
           </div>
         )}
 
+        {/* Pursuing — active scheme indicator */}
+        {person.activeScheme && (
+          <div className="mt-1 mb-1">
+            {!person.activeScheme.revealedToPlayer ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-900 text-amber-200 border border-amber-700">
+                ● This person is quietly pursuing something…
+              </span>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded text-xs font-medium bg-stone-800 text-stone-300 border border-stone-600">
+                  {schemeTypeLabel(person.activeScheme.type)}{' '}
+                  {people?.get(person.activeScheme.targetId)?.firstName ?? '(unknown)'}
+                </span>
+                <div
+                  className="flex-1 h-1 bg-stone-800 rounded overflow-hidden"
+                  title={`Scheme progress: ${(person.activeScheme.progress * 100).toFixed(0)}%`}
+                >
+                  <div
+                    className="h-full rounded bg-purple-600"
+                    style={{ width: `${(person.activeScheme.progress * 100).toFixed(0)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <Divider />
 
         {/* Skills — compact 3-column chip grid */}
@@ -605,6 +643,58 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
                     </div>
                   </div>
                 )}
+              </div>
+              <Divider />
+            </>
+          );
+        })()}
+
+        {/* Bonds — Named Relationships */}
+        {person.namedRelationships.length > 0 && (() => {
+          const BOND_COLORS: Record<string, string> = {
+            friend:    'bg-green-950 text-green-300 hover:bg-green-900',
+            confidant: 'bg-emerald-950 text-emerald-300 hover:bg-emerald-900',
+            mentor:    'bg-sky-950 text-sky-300 hover:bg-sky-900',
+            student:   'bg-sky-950 text-sky-300 hover:bg-sky-900',
+            rival:     'bg-orange-950 text-orange-300 hover:bg-orange-900',
+            nemesis:   'bg-red-950 text-red-300 hover:bg-red-900',
+          };
+          const BOND_ICONS: Record<string, string> = {
+            friend: '🤝', confidant: '🫂', mentor: '📖', student: '🧑‍🎓',
+            rival: '⚔', nemesis: '💀',
+          };
+
+          return (
+            <>
+              <SectionHeading>Bonds</SectionHeading>
+              <div className="flex flex-wrap gap-1 mb-1 text-xs">
+                {person.namedRelationships.map(rel => {
+                  const colorClass = BOND_COLORS[rel.type] ?? 'bg-stone-800 text-stone-300';
+                  const icon = BOND_ICONS[rel.type] ?? '•';
+                  const depthPct = Math.round(rel.depth * 100);
+                  return (
+                    <button
+                      key={`${rel.type}-${rel.targetId}`}
+                      onClick={() => navigateTo(rel.targetId)}
+                      title={`${rel.type} — depth ${depthPct}%\nFormed turn ${rel.formedTurn}`}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded ${colorClass}`}
+                    >
+                      <span>{icon}</span>
+                      <span className="capitalize">{rel.type}</span>
+                      <span className="opacity-60">·</span>
+                      <span>{nameOf(rel.targetId)}</span>
+                      <span
+                        className="ml-1 w-8 h-1 bg-stone-700 rounded-full overflow-hidden inline-block align-middle"
+                        title={`Depth: ${depthPct}%`}
+                      >
+                        <span
+                          className="block h-full bg-current rounded-full"
+                          style={{ width: `${depthPct}%` }}
+                        />
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
               <Divider />
             </>

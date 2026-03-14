@@ -36,6 +36,20 @@ const DECAY_RATE = 1;
 /** Baseline opinion score assigned to any two strangers at first meeting. */
 const STRANGER_BASELINE = 0;
 
+// ─── Kinship constants ────────────────────────────────────────────────────────
+// Applied to computeBaselineOpinion when two kin first have opinions initialized,
+// and as a per-turn drift counteracting the standard decay for established kin.
+
+const KIN_SPOUSE_BONUS    = 25;  // on top of any culture / religion overlap
+const KIN_PARENT_BONUS    = 30;  // parent↔child (both directions)
+const KIN_SIBLING_BONUS   = 20;  // full sibling (2 shared parents)
+const KIN_HALF_SIB_BONUS  = 12;  // half sibling (1 shared parent)
+
+/** Per-turn kinship drift — exactly cancels DECAY_RATE so kin opinions hold steady. */
+const KIN_DRIFT_RATE = 1;
+/** Extra drift for spouses (net +1/turn after decay — marriages slowly deepen). */
+const KIN_SPOUSE_DRIFT_EXTRA = 1;
+
 // ─── Core getters / setters ───────────────────────────────────────────────────
 
 /**
@@ -144,6 +158,45 @@ export function decayOpinionModifiers(
   return changed;
 }
 
+// ─── Kinship detection ───────────────────────────────────────────────────────
+
+interface KinshipInfo {
+  type: 'spouse' | 'parent' | 'child' | 'sibling' | 'half_sibling' | null;
+  bonus: number;
+  /** Drift added per turn on top of the standard KIN_DRIFT_RATE (spouses get +1 extra). */
+  extraDrift: number;
+  label: string;
+}
+
+/**
+ * Detects the closest kinship relationship A holds toward B.
+ * Uses only the two Person objects — no Map lookup needed.
+ * Priority: spouse > child > parent > full sibling > half sibling.
+ */
+function detectKinship(a: Person, b: Person): KinshipInfo {
+  if (a.spouseIds.includes(b.id)) {
+    return { type: 'spouse', bonus: KIN_SPOUSE_BONUS, extraDrift: KIN_SPOUSE_DRIFT_EXTRA, label: 'Spouse' };
+  }
+  if (a.childrenIds.includes(b.id)) {
+    return { type: 'child', bonus: KIN_PARENT_BONUS, extraDrift: 0, label: 'Your child' };
+  }
+  if (a.parentIds[0] === b.id || a.parentIds[1] === b.id) {
+    return { type: 'parent', bonus: KIN_PARENT_BONUS, extraDrift: 0, label: 'Your parent' };
+  }
+  // Count non-null shared parent IDs for sibling detection.
+  let shared = 0;
+  for (const pid of a.parentIds) {
+    if (pid !== null && b.parentIds.includes(pid)) shared++;
+  }
+  if (shared >= 2) {
+    return { type: 'sibling', bonus: KIN_SIBLING_BONUS, extraDrift: 0, label: 'Full sibling' };
+  }
+  if (shared === 1) {
+    return { type: 'half_sibling', bonus: KIN_HALF_SIB_BONUS, extraDrift: 0, label: 'Half sibling' };
+  }
+  return { type: null, bonus: 0, extraDrift: 0, label: '' };
+}
+
 // ─── Baseline calculation ─────────────────────────────────────────────────────
 
 /**
@@ -216,6 +269,9 @@ export function computeBaselineOpinion(a: Person, b: Person): number {
 
   // Trait component
   score += computeTraitOpinion(a, b);
+
+  // Kinship bonus — family members start (or restart) with a meaningful positive opinion
+  score += detectKinship(a, b).bonus;
 
   return Math.max(-80, Math.min(80, score));
 }
@@ -340,8 +396,17 @@ export function applyOpinionDrift(
       const a = updated.get(ids[i]!);
       const b = updated.get(ids[j]!);
       if (!a || !b) continue;
-      // Only act on established relationships
-      if (!a.relationships.has(b.id) && !b.relationships.has(a.id)) continue;
+
+      const kin = detectKinship(a, b);
+      const kinDrift = kin.type !== null ? KIN_DRIFT_RATE + kin.extraDrift : 0;
+
+      const aHasB = a.relationships.has(b.id);
+      const bHasA = b.relationships.has(a.id);
+
+      // Act if either direction is established, OR if kin drift would maintain the bond.
+      // For kin, we always process even when the entry was lost to decay so the
+      // relationship isn't permanently erased by a string of negative events.
+      if (!aHasB && !bHasA && kinDrift === 0) continue;
 
       let delta = 0;
 
@@ -358,6 +423,9 @@ export function applyOpinionDrift(
       );
       if (![...aLangs].some(l => bLangs.has(l))) delta -= 1;
 
+      // Kinship: family bonds resist decay (and spouses slowly deepen over time).
+      delta += kinDrift;
+
       if (delta === 0) continue;
 
       // Apply symmetrically
@@ -365,6 +433,88 @@ export function applyOpinionDrift(
       const updB = adjustOpinion(updated.get(b.id)!, a.id, delta);
       updated.set(a.id, updA);
       updated.set(b.id, updB);
+    }
+  }
+
+  return updated;
+}
+
+// ─── Shared-role proximity drift ─────────────────────────────────────────────
+
+/**
+ * Roles where people genuinely work shoulder-to-shoulder and form opinions
+ * through daily proximity. Solo or abstracted roles are excluded.
+ */
+const PROXIMITY_ROLES = new Set<import('../population/person').WorkRole>([
+  'guard', 'farmer', 'craftsman', 'healer', 'builder',
+  'gather_food', 'gather_stone', 'gather_lumber',
+  'priest_solar', 'wheel_singer',
+]);
+
+/** Per-turn drift applied to same-role pairs. */
+const SHARED_ROLE_DELTA = 1;
+
+/** Cap (absolute) on the role-proximity contribution — won't push above/below ±20. */
+const SHARED_ROLE_CAP = 20;
+
+/**
+ * Applies a ±1/turn opinion drift between pairs of people sharing a
+ * proximity-role (`guard`, `farmer`, `craftsman`, etc.).
+ *
+ * - Compatible pair (no mutual TRAIT_CONFLICTS): +1/turn, capped at +20.
+ * - Incompatible pair (at least one TRAIT_CONFLICTS hit): −1/turn, floored at −20.
+ *
+ * Only acts on established opinion entries. O(n²), guarded by OPINION_TRACK_CAP.
+ */
+export function applySharedRoleOpinionDrift(
+  people: Map<string, Person>,
+): Map<string, Person> {
+  if (people.size > OPINION_TRACK_CAP) return people;
+
+  const list = Array.from(people.values()).filter(p => PROXIMITY_ROLES.has(p.role));
+  const updated = new Map(people);
+
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      const a = list[i]!;
+      const b = list[j]!;
+
+      // Only the same role creates proximity
+      if (a.role !== b.role) continue;
+
+      // Only act on pairs that already have an opinion entry
+      const aKnowsB = updated.get(a.id)?.relationships.has(b.id) ?? false;
+      const bKnowsA = updated.get(b.id)?.relationships.has(a.id) ?? false;
+      if (!aKnowsB && !bKnowsA) continue;
+
+      // Check for trait conflicts between the two
+      const aTraits = new Set(a.traits);
+      const bTraits = new Set(b.traits);
+      const hasConflict = TRAIT_CONFLICTS.some(
+        ([t1, t2]) => (aTraits.has(t1) && bTraits.has(t2)) || (aTraits.has(t2) && bTraits.has(t1)),
+      );
+
+      const delta = hasConflict ? -SHARED_ROLE_DELTA : SHARED_ROLE_DELTA;
+
+      // Apply, respecting the cap
+      const pA = updated.get(a.id)!;
+      const pB = updated.get(b.id)!;
+      const curAB = pA.relationships.get(b.id) ?? 0;
+      const curBA = pB.relationships.get(a.id) ?? 0;
+
+      const wouldExceedCap = delta > 0
+        ? curAB >= SHARED_ROLE_CAP && curBA >= SHARED_ROLE_CAP
+        : curAB <= -SHARED_ROLE_CAP && curBA <= -SHARED_ROLE_CAP;
+      if (wouldExceedCap) continue;
+
+      const clamp = (v: number) =>
+        delta > 0 ? Math.min(v + delta, SHARED_ROLE_CAP) : Math.max(v + delta, -SHARED_ROLE_CAP);
+
+      if (aKnowsB) updated.set(a.id, { ...pA, relationships: new Map(pA.relationships).set(b.id, clamp(curAB)) });
+      if (bKnowsA) {
+        const pBNow = updated.get(b.id)!;
+        updated.set(b.id, { ...pBNow, relationships: new Map(pBNow.relationships).set(a.id, clamp(curBA)) });
+      }
     }
   }
 
@@ -474,6 +624,12 @@ export function computeOpinionBreakdown(
     if (a.traits.includes(trait) && b.traits.includes(trait)) {
       lines.push({ label: `Shared trait (${trait})`, delta: bonus });
     }
+  }
+
+  // Kinship bond
+  const kin = detectKinship(a, b);
+  if (kin.type !== null) {
+    lines.push({ label: kin.label, delta: kin.bonus });
   }
 
   // Events / manual adjustments — the gap between baseline and stored score

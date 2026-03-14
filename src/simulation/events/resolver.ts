@@ -585,6 +585,28 @@ function applyConsequence(
       return { ...state, tribes: updatedTribes };
     }
 
+    case 'clear_scheme': {
+      // Clears the active scheme on the target person.
+      const resolvedId = resolveConsequenceTarget(consequence.target, boundActors);
+      if (!resolvedId) return state;
+      const schemePerson = state.people.get(resolvedId);
+      if (!schemePerson) return state;
+      const updatedPeople = new Map(state.people);
+      updatedPeople.set(resolvedId, { ...schemePerson, activeScheme: null });
+      return { ...state, people: updatedPeople };
+    }
+
+    case 'clear_ambition': {
+      // Clears the active ambition on the target person.
+      const resolvedId = resolveConsequenceTarget(consequence.target, boundActors);
+      if (!resolvedId) return state;
+      const ambitionPerson = state.people.get(resolvedId);
+      if (!ambitionPerson) return state;
+      const updatedPeople = new Map(state.people);
+      updatedPeople.set(resolvedId, { ...ambitionPerson, ambition: null });
+      return { ...state, people: updatedPeople };
+    }
+
     // Exhaustiveness guard — compile error if a new ConsequenceType is added without a handler.
     default: {
       const _exhaustive: never = consequence;

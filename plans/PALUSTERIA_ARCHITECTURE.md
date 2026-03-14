@@ -1,6 +1,6 @@
 # Palusteria: Children of the Ashmark — Architecture & Implementation Guide
 
-**Version:** 1.8 (updated after Phase 3.9 — Trait Expansion)  
+**Version:** 1.9 (updated after Phase 4.0 — Character Autonomy)  
 **Document Type:** Technical Architecture (How)  
 **Companion Document:** `PALUSTERIA_GAME_DESIGN.md` (What & Why)  
 **Stack:** React 19 + TypeScript (strict) + Vite + Zustand + Tailwind CSS
@@ -51,8 +51,9 @@ palusteria-game/
 │   │   │   ├── culture.ts              # CultureId, processCulturalDrift, deriveCulture; religion formulae (computeReligiousTension, computeHiddenWheelDivergence, computeCompanyReligiousPressure) ✅
 │   │   │   ├── marriage.ts             # Marriage matching, polygamy rules, formConcubineRelationship ✅
 │   │   │   ├── household.ts            # createHousehold, addToHousehold, removeFromHousehold, dissolveHousehold ✅
-│   │   │   ├── opinions.ts             # Opinion scores, baseline, drift/decay, OpinionModifier, getEffectiveOpinion ✅
+│   │   │   ├── opinions.ts             # Opinion scores, baseline, drift/decay, OpinionModifier, getEffectiveOpinion, applySharedRoleOpinionDrift ✅
 │   │   │   ├── ambitions.ts            # PersonAmbition model, generation, intensity tick, evaluation ✅
+│   │   │   ├── named-relationships.ts  # Named relationship formation/dissolution; processNamedRelationships(), seedFoundingRelationships() ✅
 │   │   │   ├── naming.ts               # Culturally appropriate name generation ✅
 │   │   │   └── relationships.ts        # (placeholder — opinion logic lives in opinions.ts)
 │   │   │
@@ -60,6 +61,7 @@ palusteria-game/
 │   │   │   ├── traits.ts               # TraitId union + IMANIAN_TRAITS constant ✅
 │   │   │   ├── trait-behavior.ts       # computeTraitCategoryBoosts, applyTraitOpinionEffects, getTraitSkillGrowthBonuses ✅
 │   │   │   ├── assignment.ts           # applyTemporaryTraitExpiry, checkEarnedTraitAcquisition, grantTrait ✅
+│   │   │   ├── scheme-engine.ts        # processSchemes(), generateScheme(); 5 scheme types; SCHEME_GENERATE_INTERVAL = 12 ✅
 │   │   │   └── state.ts                # PersonState stub (future mood/needs slot)
 │   │   │
 │   │   ├── economy/
@@ -75,6 +77,7 @@ palusteria-game/
 │   │   │
 │   │   ├── world/
 │   │   │   ├── tribes.ts               # External tribe state and AI behavior ✅
+│   │   │   ├── factions.ts             # processFactions(), computeFactionStrength(), isEligibleMember(); 6 faction types ✅
 │   │   │   ├── diplomacy.ts            # Disposition calculation, trade/war logic
 │   │   │   └── region.ts               # Map data, location definitions, distances
 │   │   │
@@ -84,7 +87,7 @@ palusteria-game/
 │   │   │   ├── resolver.ts             # applyEventChoice(…, boundActors?), resolveSkillCheck(), resolveConsequenceTarget(), add_person handler ✅
 │   │   │   ├── actor-resolver.ts       # matchesCriteria, canFillSlot, canResolveActors, selectActor, resolveActors, interpolateText ✅
 │   │   │   ├── council-advice.ts       # VoiceArchetype, generateAdvice() — pure logic ✅
-│   │   │   └── definitions/            # 51 events across 10 files; all events with named actors have actorRequirements ✅
+│   │   │   └── definitions/            # 57 events across 11 files; all events with named actors have actorRequirements ✅
 │   │   │       ├── company.ts          # Company Supply Delivery, Letter from the Company ✅
 │   │   │       ├── diplomacy.ts        # Watchers at the River (Riverfolk first contact) ✅
 │   │   │       ├── domestic.ts         # Game Tracks, Weight of Distance, Men at Work ✅
@@ -94,7 +97,8 @@ palusteria-game/
 │   │   │       ├── building.ts         # 5 settlement events (overcrowding, construction) ✅
 │   │   │       ├── household.ts        # 6 household events (thralls, Keth-Thara, wife-council, Ashka-Melathi) ✅
 │   │   │       ├── relationships.ts    # 5 autonomous ambition-driven events (mutual attraction, council petition, etc.) ✅
-│   │   │       └── identity.ts         # 6 cultural identity pressure events (Company concern, inspector, tribal recognition, etc.) ✅
+│   │   │       ├── identity.ts         # 6 cultural identity pressure events (Company concern, inspector, tribal recognition, etc.) ✅
+│   │   │       └── schemes.ts          # 5 scheme climax events; all isDeferredOutcome: true ✅
 │   │   │
 │   │   ├── buildings/
 │   │   │   ├── building-definitions.ts # BuildingId (13 types), BuildingDef, BUILDING_CATALOG ✅
@@ -121,6 +125,7 @@ palusteria-game/
 │   │   │   ├── FamilyTree.tsx          # 3-generation genealogy browser ✅
 │   │   │   ├── SettlementView.tsx      # 5-panel: buildings, construction, build menu, crafting, Religion sidebar (IdentityScale + ReligionPanel) ✅
 │   │   │   ├── TradeView.tsx           # Trade & Commerce: Company quota, tribe barter, fairness meter ✅
+│   │   │   ├── CommunityView.tsx       # 3-panel community: population/bonds summary, factions list, activity feed ✅
 │   │   │   ├── DiplomacyView.tsx       # Relations with tribes and Company (Phase 3)
 │   │   │   └── MapView.tsx             # Canvas-rendered regional map (Phase 3)
 │   │   │
@@ -130,6 +135,7 @@ palusteria-game/
 │   │   │   ├── CouncilPortrait.tsx     # 40×50px img with skin-tone swatch fallback ✅
 │   │   │   ├── AdviceBubble.tsx        # Italic speech bubble for adviser voice ✅
 │   │   │   ├── IdentityScale.tsx       # Five-zone cultural blend bar + pressure badges ✅
+│   │   │   ├── ActivityFeed.tsx        # Rolling 30-entry activity feed with type icons and person-chip navigation ✅
 │   │   │   ├── heritage-helpers.ts     # heritageAbbr(), GROUP_ABBR lookup ✅
 │   │   │   ├── TraitBadge.tsx          # Personality trait pill/badge
 │   │   │   ├── ResourceBar.tsx         # Resource display widget
@@ -210,12 +216,19 @@ palusteria-game/
     │   └── identity-pressure.test.ts  # processIdentityPressure — all zones, counters, trait multipliers, multi-tribe ✅
     ├── personality/
     │   ├── trait-behavior.test.ts      # computeTraitCategoryBoosts, applyTraitOpinionEffects, getTraitSkillGrowthBonuses ✅
-    │   └── assignment.test.ts          # applyTemporaryTraitExpiry, checkEarnedTraitAcquisition, grantTrait ✅
+    │   ├── assignment.test.ts          # applyTemporaryTraitExpiry, checkEarnedTraitAcquisition, grantTrait ✅
+    │   └── scheme-engine.test.ts       # processSchemes, generateScheme, progress ticking, climax event firing ✅
     ├── genetics/
     │   ├── inheritance.test.ts         # Trait blending ranges ✅
     │   ├── gender-ratio.test.ts        # Ratio math matches lore values ✅
     │   ├── fertility.test.ts           # Fertility window edge cases ✅
     │   └── aptitude-inheritance.test.ts # inheritAptitudeTraits — probability, both-parents boost, personality exclusion ✅
+    ├── population/
+    │   └── named-relationships.test.ts # Formation gates, dissolution, seed logic, sustain-turn gating ✅
+    ├── world/
+    │   └── factions.test.ts            # Eligibility by type, strength formula, demand threshold ✅
+    ├── store/
+    │   └── serialization.test.ts       # Round-trip serialization: namedRelationships, activeScheme, factions, activityLog ✅
     └── utils/
         └── rng.test.ts                 # Deterministic output from known seeds ✅
 
@@ -287,6 +300,15 @@ interface Person {
 
   opinionModifiers: OpinionModifier[]; // Timed decaying per-event experience modifiers
 
+  // Named relationship bonds (friend/rival/nemesis/confidant/mentor/student)
+  namedRelationships: NamedRelationship[];
+
+  // Active personal scheme (one scheme at a time; null = not scheming)
+  activeScheme: PersonScheme | null;
+
+  // Per-pair sustain tracking for named relationship formation
+  opinionSustainedSince?: Partial<Record<string, number>>;
+
   role: WorkRole;
   socialStatus: SocialStatus;
   isPlayerControlled: boolean;
@@ -315,6 +337,92 @@ interface OpinionModifier {
   eventId: string;   // Source event (for debugging / future UI)
 }
 ```
+
+### 4.1b Named Relationship
+
+```typescript
+type NamedRelationshipType = 'friend' | 'rival' | 'nemesis' | 'confidant' | 'mentor' | 'student';
+
+interface NamedRelationship {
+  type: NamedRelationshipType;
+  targetId: string;
+  formedTurn: number;
+}
+```
+
+Constants:
+- `FRIEND_OPINION_THRESHOLD = 50` — opinion above which a friendship can form
+- `FRIEND_SUSTAIN_TURNS = 4` — consecutive turns at threshold required before bond forms
+
+### 4.1c Scheme
+
+```typescript
+type SchemeType =
+  | 'scheme_court_person'
+  | 'scheme_convert_faith'
+  | 'scheme_befriend_person'
+  | 'scheme_undermine_person'
+  | 'scheme_tutor_person';
+
+interface PersonScheme {
+  type: SchemeType;
+  targetId: string;
+  progress: number;    // 0–100; fires climax event at 100
+  startedTurn: number;
+}
+```
+
+Constant: `SCHEME_GENERATE_INTERVAL = 12` — turns between scheme generation attempts per person.
+
+### 4.1d Activity Log
+
+```typescript
+type ActivityLogType =
+  | 'role_self_assigned'
+  | 'relationship_formed'
+  | 'relationship_dissolved'
+  | 'scheme_started'
+  | 'scheme_succeeded'
+  | 'scheme_failed'
+  | 'faction_formed'
+  | 'faction_dissolved'
+  | 'trait_acquired'
+  | 'ambition_formed'
+  | 'ambition_cleared';
+
+interface ActivityLogEntry {
+  turn: number;
+  type: ActivityLogType;
+  personId?: string;
+  targetId?: string;
+  description: string;
+}
+```
+
+`GameState.activityLog: ActivityLogEntry[]` — capped at 30 entries (FIFO). Helper: `addActivityEntry(log, entry)` — immutable, enforces the cap.
+
+### 4.1e Faction
+
+```typescript
+type FactionType =
+  | 'cultural_preservationists'
+  | 'company_loyalists'
+  | 'orthodox_faithful'
+  | 'wheel_devotees'
+  | 'community_elders'
+  | 'merchant_bloc';
+
+interface Faction {
+  id: string;
+  type: FactionType;
+  memberIds: string[];
+  formedTurn: number;
+}
+```
+
+Constants:
+- `FACTION_MIN_MEMBERS = 3` — minimum members before a faction forms
+- `DEMAND_STRENGTH_THRESHOLD = 0.45` — faction strength at which demands activate
 
 ### 4.2 Genetic Profile
 

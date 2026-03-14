@@ -9,6 +9,7 @@ import {
   computeBaselineOpinion,
   initializeFamilyOpinions,
   applyOpinionDrift,
+  applySharedRoleOpinionDrift,
   decayOpinions,
   applyMarriageOpinionFloor,
   findMarriageRefuser,
@@ -56,6 +57,8 @@ function makePerson(id: string, overrides: Partial<Person> = {}): Person {
     childIds: [],
     motherIds: [],
     fatherIds: [],
+    childrenIds: [],
+    parentIds: [null, null],
     relationships: new Map(),
     householdId: null,
     householdRole: null,
@@ -541,6 +544,95 @@ describe('decayOpinionModifiers', () => {
   });
 });
 
+// ─── applySharedRoleOpinionDrift ──────────────────────────────────────────────
+
+describe('applySharedRoleOpinionDrift', () => {
+  it('compatible same-role pair gains +1 per turn', () => {
+    const a = makePerson('a', { role: 'guard', relationships: new Map([['b', 10]]) });
+    const b = makePerson('b', { role: 'guard', relationships: new Map([['a', 10]]) });
+    const people = new Map([['a', a], ['b', b]]);
+    const result = applySharedRoleOpinionDrift(people);
+    expect(result.get('a')!.relationships.get('b')).toBe(11);
+    expect(result.get('b')!.relationships.get('a')).toBe(11);
+  });
+
+  it('incompatible same-role pair (trait conflict) loses -1 per turn', () => {
+    // 'honest' vs 'deceitful' is a TRAIT_CONFLICTS pair
+    const a = makePerson('a', { role: 'farmer', traits: ['honest'], relationships: new Map([['b', 5]]) });
+    const b = makePerson('b', { role: 'farmer', traits: ['deceitful'], relationships: new Map([['a', 5]]) });
+    const people = new Map([['a', a], ['b', b]]);
+    const result = applySharedRoleOpinionDrift(people);
+    expect(result.get('a')!.relationships.get('b')).toBe(4);
+    expect(result.get('b')!.relationships.get('a')).toBe(4);
+  });
+
+  it('different roles in proximity set do not drift toward each other', () => {
+    const a = makePerson('a', { role: 'guard',    relationships: new Map([['b', 10]]) });
+    const b = makePerson('b', { role: 'craftsman', relationships: new Map([['a', 10]]) });
+    const people = new Map([['a', a], ['b', b]]);
+    const result = applySharedRoleOpinionDrift(people);
+    expect(result.get('a')!.relationships.get('b')).toBe(10);
+    expect(result.get('b')!.relationships.get('a')).toBe(10);
+  });
+
+  it('excluded roles (away, trader, unassigned) do not drift', () => {
+    for (const role of ['away', 'trader', 'unassigned'] as const) {
+      const a = makePerson('a', { role, relationships: new Map([['b', 10]]) });
+      const b = makePerson('b', { role, relationships: new Map([['a', 10]]) });
+      const people = new Map([['a', a], ['b', b]]);
+      const result = applySharedRoleOpinionDrift(people);
+      expect(result.get('a')!.relationships.get('b')).toBe(10);
+      expect(result.get('b')!.relationships.get('a')).toBe(10);
+    }
+  });
+
+  it('does not exceed the +20 cap', () => {
+    const a = makePerson('a', { role: 'guard', relationships: new Map([['b', 20]]) });
+    const b = makePerson('b', { role: 'guard', relationships: new Map([['a', 20]]) });
+    const people = new Map([['a', a], ['b', b]]);
+    const result = applySharedRoleOpinionDrift(people);
+    expect(result.get('a')!.relationships.get('b')).toBe(20);
+  });
+
+  it('does not go below the -20 floor', () => {
+    const a = makePerson('a', { role: 'farmer', traits: ['honest'], relationships: new Map([['b', -20]]) });
+    const b = makePerson('b', { role: 'farmer', traits: ['deceitful'], relationships: new Map([['a', -20]]) });
+    const people = new Map([['a', a], ['b', b]]);
+    const result = applySharedRoleOpinionDrift(people);
+    expect(result.get('a')!.relationships.get('b')).toBe(-20);
+  });
+
+  it('does not create new opinion entries for strangers with no existing relationship', () => {
+    const a = makePerson('a', { role: 'guard' });
+    const b = makePerson('b', { role: 'guard' });
+    const people = new Map([['a', a], ['b', b]]);
+    const result = applySharedRoleOpinionDrift(people);
+    expect(result.get('a')!.relationships.has('b')).toBe(false);
+  });
+
+  it('no-ops when population exceeds OPINION_TRACK_CAP', () => {
+    const people = new Map<string, Person>();
+    // 151 people all as guards — over the cap
+    for (let i = 0; i < 151; i++) {
+      const id = `p${i}`;
+      people.set(id, makePerson(id, { role: 'guard', relationships: new Map([['p0', 10]]) }));
+    }
+    const result = applySharedRoleOpinionDrift(people);
+    // Should return the same map reference unchanged
+    expect(result).toBe(people);
+  });
+
+  it('one-sided opinion entry still drifts for the side that exists', () => {
+    // Only a knows b, b has no entry for a
+    const a = makePerson('a', { role: 'craftsman', relationships: new Map([['b', 5]]) });
+    const b = makePerson('b', { role: 'craftsman', relationships: new Map() });
+    const people = new Map([['a', a], ['b', b]]);
+    const result = applySharedRoleOpinionDrift(people);
+    expect(result.get('a')!.relationships.get('b')).toBe(6);
+    expect(result.get('b')!.relationships.has('a')).toBe(false);
+  });
+});
+
 // ─── computeOpinionBreakdown with timed modifiers ────────────────────────────
 
 describe('computeOpinionBreakdown with timed modifiers', () => {
@@ -619,5 +711,213 @@ describe('decayOpinions — stale target IDs', () => {
     expect(result.get('a')!.relationships.get('stale_id')).toBe(4);
     // Live entry also decayed by 1 as normal
     expect(result.get('a')!.relationships.get('live_id')).toBe(19);
+  });
+});
+
+// ─── Kinship opinion bonuses ──────────────────────────────────────────────────
+// Verify that family relationships give baseline bonuses, per-turn drift, and
+// appear correctly in the opinion breakdown tooltip.
+
+/** Gives person A kinship fields pointing to B as their spouse. */
+function withSpouseIds(a: Person, bId: string): Person {
+  return { ...a, spouseIds: [...a.spouseIds, bId] };
+}
+/** Gives person A `childrenIds` containing bId (A is B's parent). */
+function withChildrenIds(a: Person, ...childIds: string[]): Person {
+  return { ...a, childrenIds: [...a.childrenIds, ...childIds] };
+}
+/** Gives person A parentIds [parent0Id, parent1Id]. */
+function withParentIds(a: Person, parent0Id: string | null, parent1Id: string | null): Person {
+  return { ...a, parentIds: [parent0Id, parent1Id] };
+}
+
+describe('computeBaselineOpinion — kinship bonuses', () => {
+  it('spouse bonus is larger than a same-culture same-religion pair without kinship', () => {
+    const a = makePerson('a', { religion: 'imanian_orthodox' });
+    const b = makePerson('b', { religion: 'imanian_orthodox' });
+    const noKin = computeBaselineOpinion(a, b); // same culture (imanian) + same religion
+
+    const aSpouse = withSpouseIds(withSpouseIds(a, 'b'), 'b');
+    const bSpouse = withSpouseIds(b, 'a');
+    const withKin = computeBaselineOpinion(aSpouse, bSpouse);
+
+    expect(withKin).toBeGreaterThan(noKin);
+    expect(withKin - noKin).toBe(25); // KIN_SPOUSE_BONUS
+  });
+
+  it('parent-child pair gets +30 kinship bonus', () => {
+    const parent = withChildrenIds(makePerson('parent'), 'child');
+    const child  = withParentIds(makePerson('child'), 'parent', null);
+
+    // Baseline with no culture/religion overlap (just kinship)
+    const parentPOV = computeBaselineOpinion(parent, child);
+    const childPOV  = computeBaselineOpinion(child, parent);
+
+    // Both default to 'imanian' culture (+10) and 'animist' religion (+8),
+    // neither has languages (−15 language penalty).
+    // Net without kin: 10 + 8 - 15 = 3. With parent bonus: 3 + 30 = 33.
+    expect(parentPOV).toBe(33);
+    expect(childPOV).toBe(33);
+  });
+
+  it('full sibling pair (2 shared parents) gets +20 bonus', () => {
+    const sibA = withParentIds(makePerson('a'), 'mom', 'dad');
+    const sibB = withParentIds(makePerson('b'), 'mom', 'dad');
+
+    const noKin = computeBaselineOpinion(makePerson('a'), makePerson('b'));
+    const withKin = computeBaselineOpinion(sibA, sibB);
+
+    expect(withKin - noKin).toBe(20);
+  });
+
+  it('half sibling (1 shared parent) gets +12 bonus', () => {
+    const sibA = withParentIds(makePerson('a'), 'mom', 'dadA');
+    const sibB = withParentIds(makePerson('b'), 'mom', 'dadB');
+
+    const noKin = computeBaselineOpinion(makePerson('a'), makePerson('b'));
+    const withKin = computeBaselineOpinion(sibA, sibB);
+
+    expect(withKin - noKin).toBe(12);
+  });
+
+  it('non-kin pair gets no kinship bonus', () => {
+    const a = makePerson('a');
+    const b = makePerson('b');
+    const noKin = computeBaselineOpinion(a, b);
+
+    // Apply a non-kin-related mutation just to confirm no effect
+    const withKin = computeBaselineOpinion(a, b);
+    expect(withKin).toBe(noKin);
+  });
+});
+
+describe('applyOpinionDrift — kinship drift', () => {
+  it('maintains spouse opinion: kinship drift cancels decay (net +1 for spouses)', () => {
+    // Spouses get KIN_DRIFT_RATE (1) + KIN_SPOUSE_DRIFT_EXTRA (1) = +2/turn
+    // decayOpinions subtracts 1/turn → net change for spouse opinions = +1
+    let a = withSpouseIds(makePerson('a', { relationships: new Map([['b', 50]]) }), 'b');
+    let b = withSpouseIds(makePerson('b', { relationships: new Map([['a', 50]]) }), 'a');
+    const people = new Map([['a', a], ['b', b]]);
+
+    const afterDrift = applyOpinionDrift(people);
+    // Drift adds +2 to each score (before decay is applied separately)
+    expect(afterDrift.get('a')!.relationships.get('b')).toBe(52);
+    expect(afterDrift.get('b')!.relationships.get('a')).toBe(52);
+  });
+
+  it('maintains parent-child opinion: kinship drift (+1) holds existing score stable vs decay', () => {
+    // Parent has child in childrenIds; child has parent in parentIds.
+    let parent = withChildrenIds(
+      makePerson('parent', { relationships: new Map([['child', 45]]) }),
+      'child',
+    );
+    let child = withParentIds(
+      makePerson('child', { relationships: new Map([['parent', 40]]) }),
+      'parent', null,
+    );
+    const people = new Map([['parent', parent], ['child', child]]);
+
+    const afterDrift = applyOpinionDrift(people);
+    // Drift adds +1 per turn (net 0 combined with decay — stable)
+    expect(afterDrift.get('parent')!.relationships.get('child')).toBe(46);
+    expect(afterDrift.get('child')!.relationships.get('parent')).toBe(41);
+  });
+
+  it('sibling drift (+1) applies to existing entries', () => {
+    let sibA = withParentIds(
+      makePerson('a', { relationships: new Map([['b', 20]]) }),
+      'mom', 'dad',
+    );
+    let sibB = withParentIds(
+      makePerson('b', { relationships: new Map([['a', 20]]) }),
+      'mom', 'dad',
+    );
+    const people = new Map([['a', sibA], ['b', sibB]]);
+
+    const afterDrift = applyOpinionDrift(people);
+    expect(afterDrift.get('a')!.relationships.get('b')).toBe(21);
+    expect(afterDrift.get('b')!.relationships.get('a')).toBe(21);
+  });
+
+  it('spouse kinship drift recreates an entry if it decayed to 0 and was deleted', () => {
+    // If the opinion entry was removed (value hit 0 and was deleted), the
+    // kinship logic should recreate it so the spouse bond isn't permanently lost.
+    let a = withSpouseIds(makePerson('a'), 'b'); // no entry for b in relationships
+    let b = withSpouseIds(makePerson('b'), 'a'); // no entry for a in relationships
+    const people = new Map([['a', a], ['b', b]]);
+
+    const afterDrift = applyOpinionDrift(people);
+    // Entry should now exist with the kinship drift applied (+2 from 0)
+    expect(afterDrift.get('a')!.relationships.has('b')).toBe(true);
+    expect(afterDrift.get('a')!.relationships.get('b')).toBe(2);
+  });
+
+  it('non-kin strangers without entries are still skipped (no new entries created)', () => {
+    const a = makePerson('a'); // no kin links
+    const b = makePerson('b');
+    const people = new Map([['a', a], ['b', b]]);
+
+    const afterDrift = applyOpinionDrift(people);
+    // No entry should be created for unrelated strangers
+    expect(afterDrift.get('a')?.relationships.has('b')).toBe(false);
+  });
+});
+
+describe('computeOpinionBreakdown — kinship labels', () => {
+  it('shows "Spouse" label in breakdown for spouse pair', () => {
+    const a = withSpouseIds(makePerson('a', { relationships: new Map([['b', 40]]) }), 'b');
+    const b = withSpouseIds(makePerson('b', { relationships: new Map([['a', 40]]) }), 'a');
+
+    const breakdown = computeOpinionBreakdown(a, b);
+    const kin = breakdown.find(l => l.label === 'Spouse');
+    expect(kin).toBeDefined();
+    expect(kin!.delta).toBe(25);
+  });
+
+  it('shows "Your child" when observer has target in childrenIds', () => {
+    const parent = withChildrenIds(
+      makePerson('parent', { relationships: new Map([['child', 35]]) }),
+      'child',
+    );
+    const child = withParentIds(makePerson('child'), 'parent', null);
+
+    const breakdown = computeOpinionBreakdown(parent, child);
+    expect(breakdown.some(l => l.label === 'Your child')).toBe(true);
+  });
+
+  it('shows "Your parent" when observer has target listed as their parent', () => {
+    const parent = withChildrenIds(makePerson('parent'), 'child');
+    const child  = withParentIds(
+      makePerson('child', { relationships: new Map([['parent', 35]]) }),
+      'parent', null,
+    );
+
+    const breakdown = computeOpinionBreakdown(child, parent);
+    expect(breakdown.some(l => l.label === 'Your parent')).toBe(true);
+  });
+
+  it('shows "Full sibling" for two people sharing both parents', () => {
+    const sibA = withParentIds(makePerson('a', { relationships: new Map([['b', 20]]) }), 'mom', 'dad');
+    const sibB = withParentIds(makePerson('b'), 'mom', 'dad');
+
+    const breakdown = computeOpinionBreakdown(sibA, sibB);
+    expect(breakdown.some(l => l.label === 'Full sibling')).toBe(true);
+  });
+
+  it('shows "Half sibling" for two people sharing one parent', () => {
+    const sibA = withParentIds(makePerson('a', { relationships: new Map([['b', 12]]) }), 'mom', 'dadA');
+    const sibB = withParentIds(makePerson('b'), 'mom', 'dadB');
+
+    const breakdown = computeOpinionBreakdown(sibA, sibB);
+    expect(breakdown.some(l => l.label === 'Half sibling')).toBe(true);
+  });
+
+  it('no kinship label for unrelated strangers', () => {
+    const a = makePerson('a');
+    const b = makePerson('b');
+
+    const breakdown = computeOpinionBreakdown(a, b);
+    const kinshipLabels = ['Spouse', 'Your child', 'Your parent', 'Full sibling', 'Half sibling'];
+    expect(breakdown.some(l => kinshipLabels.includes(l.label))).toBe(false);
   });
 });

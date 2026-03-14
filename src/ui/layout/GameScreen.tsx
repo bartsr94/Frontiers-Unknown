@@ -20,6 +20,7 @@ import EventView from '../views/EventView';
 import SettlementView from '../views/SettlementView';
 import TradeView from '../views/TradeView';
 import DiplomacyView from '../views/DiplomacyView';
+import CommunityView from '../views/CommunityView';
 import { useGameStore } from '../../stores/game-store';
 import type { ResourceType } from '../../simulation/turn/game-state';
 import { RESOURCE_EMOJI } from '../shared/resource-display';
@@ -83,6 +84,7 @@ export default function GameScreen() {
       case 'events':     return <EventView />;
       case 'settlement': return <SettlementView />;
       case 'trade':      return <TradeView />;
+      case 'community':  return <CommunityView />;
       case 'diplomacy':  return <DiplomacyView />;
       case 'map':        return <StubView name="Map" />;
       case 'chronicle':  return <StubView name="Chronicle" />;

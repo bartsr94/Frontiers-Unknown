@@ -30,6 +30,8 @@ import { HOUSEHOLD_EVENTS }     from './definitions/household';
 import { RELATIONSHIP_EVENTS }  from './definitions/relationships';
 import { RELIGIOUS_EVENTS }     from './definitions/religious';
 import { IDENTITY_EVENTS }      from './definitions/identity';
+import { SCHEME_EVENTS }        from './definitions/schemes';
+import { FACTION_EVENTS }       from './definitions/factions';
 
 // ─── Master event deck ────────────────────────────────────────────────────────
 
@@ -46,6 +48,8 @@ export const ALL_EVENTS: GameEvent[] = [
   ...RELATIONSHIP_EVENTS,
   ...RELIGIOUS_EVENTS,
   ...IDENTITY_EVENTS,
+  ...SCHEME_EVENTS,
+  ...FACTION_EVENTS,
 ];
 
 // ─── Prerequisite checking ────────────────────────────────────────────────────
@@ -141,6 +145,14 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
         return true;
       });
     }
+    case 'has_named_relationship': {
+      const reqType = prereq.params['type'] as import('../population/person').NamedRelationshipType | undefined;
+      return Array.from(state.people.values()).some(p =>
+        reqType
+          ? p.namedRelationships.some(r => r.type === reqType)
+          : p.namedRelationships.length > 0,
+      );
+    }
     case 'religion_fraction_above': {
       const religion = prereq.params['religion'] as ReligionId;
       const threshold = prereq.params['threshold'] as number;
@@ -192,6 +204,13 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
     case 'company_standing_below': {
       const value = prereq.params['value'] as number;
       return (state.company?.standing ?? 0) < value;
+    }
+    case 'has_active_faction': {
+      const factionType = (prereq.params?.['type']) as string | undefined;
+      const factions = state.factions ?? [];
+      return factionType
+        ? factions.some(f => f.type === factionType)
+        : factions.length > 0;
     }
     default:
       return true;

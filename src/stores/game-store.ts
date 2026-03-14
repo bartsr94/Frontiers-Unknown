@@ -30,6 +30,7 @@ import { canMarry, performMarriage, formConcubineRelationship } from '../simulat
 import type { InformalUnionStyle } from '../simulation/population/marriage';
 import { applyMarriageOpinionFloor, initializeBaselineOpinions } from '../simulation/population/opinions';
 import { generateAmbition } from '../simulation/population/ambitions';
+import { seedFoundingRelationships } from '../simulation/population/named-relationships';
 import { createFertilityProfile } from '../simulation/genetics/fertility';
 import { ETHNIC_DISTRIBUTIONS } from '../data/ethnic-distributions';
 import {
@@ -60,6 +61,8 @@ import type { BoundEvent } from '../simulation/events/engine';
 import { resolveActors } from '../simulation/events/actor-resolver';
 import { generateId } from '../utils/id';
 import { clamp } from '../utils/math';
+import { defaultDebugSettings } from '../simulation/turn/game-state';
+import type { DebugSettings } from '../simulation/turn/game-state';
 import { IMANIAN_TRAITS } from '../simulation/genetics/traits';
 import { TRAIT_CONFLICTS } from '../data/trait-affinities';
 import type { SeededRNG } from '../utils/rng';
@@ -146,6 +149,8 @@ export interface GameStore {
   getLivingPeople: () => Person[];
   getSettlementCulture: () => SettlementCulture | undefined;
   getFamilyOf: (personId: string) => Person[];
+  /** Update one or more debug settings fields. Persists to localStorage. */
+  updateDebugSettings: (partial: Partial<DebugSettings>) => void;
 }
 
 // ─── Serialisation helpers ───────────────────────────────────────────────────
@@ -186,6 +191,8 @@ const FOUNDER_TRAIT_POOL: readonly TraitId[] = [
   'shy', 'stubborn', 'melancholic', 'deceitful', 'greedy', 'suspicious',
   'jealous', 'wrathful', 'fickle', 'reckless', 'devout', 'cynical',
   'green_thumb', 'keen_hunter', 'gifted_speaker', 'mentor_hearted', 'folklorist',
+  // Scheme-enabling traits (allow court/befriend schemes to start from founders)
+  'passionate', 'romantic', 'lonely',
 ];
 
 /** Returns true if two traits directly conflict with each other. */
@@ -424,6 +431,9 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
     config,
     flags: { creoleEmergedNotified: false },
     identityPressure: { companyPressureTurns: 0, tribalPressureTurns: 0 },
+    factions: [],
+    activityLog: [],
+    debugSettings: defaultDebugSettings(),
   };
 
   // ── Seed opinions and ambitions at game start ──────────────────────────────
@@ -439,7 +449,11 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
     }
   }
 
-  return { ...initialGameState, people: seededPeople };
+  // Seed pre-formed named relationships (friends, rivals, confidants, mentors)
+  // reflecting the group's shared Company journey before arriving at the settlement.
+  const peopleWithRelationships = seedFoundingRelationships(seededPeople, rng);
+
+  return { ...initialGameState, people: peopleWithRelationships };
 }
 
 // ─── Store implementation ────────────────────────────────────────────────────
@@ -597,6 +611,59 @@ export const useGameStore = create<GameStore>((set, get) => {
             involvedPersonIds: [b.childId, b.motherId],
           })),
         ],
+        // Append autonomous activity to the rolling activity log (capped at 30).
+        activityLog: (() => {
+          const relEntries = dawnResult.newRelationshipEntries.map(e => ({
+            turn: gameState.turnNumber,
+            type: e.type,
+            personId: e.personId,
+            targetId: e.targetId,
+            description: e.description,
+          }));
+          const schemeEntries = dawnResult.newSchemeEntries.map(e => ({
+            turn: gameState.turnNumber,
+            type: e.type,
+            personId: e.personId,
+            targetId: e.targetId,
+            description: e.description,
+          }));
+          const factionEntries = dawnResult.newFactionEntries.map(e => ({
+            turn: gameState.turnNumber,
+            type: e.type,
+            description: e.description,
+          }));
+          const ambitionEntries = dawnResult.newAmbitionEntries.map(e => ({
+            turn: gameState.turnNumber,
+            type: e.type,
+            personId: e.personId,
+            description: e.description,
+          }));
+          const roleEntries = dawnResult.idleRoleAssignments.map(({ personId, role }) => {
+            const p = dawnResult.updatedPeople.get(personId);
+            const name = p ? p.firstName : '(unknown)';
+            return {
+              turn: gameState.turnNumber,
+              type: 'role_self_assigned' as const,
+              personId,
+              description: `**${name}** took on the role of ${role.replace(/_/g, ' ')}.`,
+            };
+          });
+          const traitEntries = dawnResult.traitChanges
+            .filter(tc => tc.gained)
+            .map(tc => {
+              const p = dawnResult.updatedPeople.get(tc.personId);
+              const name = p ? p.firstName : '(unknown)';
+              return {
+                turn: gameState.turnNumber,
+                type: 'trait_acquired' as const,
+                personId: tc.personId,
+                description: `**${name}** gained the trait: ${tc.gained!.replace(/_/g, ' ')}.`,
+              };
+            });
+          const combined = [...gameState.activityLog, ...relEntries, ...schemeEntries, ...factionEntries, ...ambitionEntries, ...roleEntries, ...traitEntries];
+          return combined.slice(-30); // FIFO cap
+        })(),
+        factions: dawnResult.updatedFactions,
       };
 
       // Drain any deferred events whose turn has arrived, and prepend them
@@ -664,8 +731,35 @@ export const useGameStore = create<GameStore>((set, get) => {
         }
       }
 
+      // Inject scheme events generated this dawn (climaxes + intermediate notifications).
+      const schemeBoundEvents: BoundEvent[] = dawnResult.pendingSchemeEvents
+        .map(({ eventId, personId, targetId }) => {
+          const ev = getEventById(eventId);
+          if (!ev) return null;
+          // Pre-bind the first two actor slots to schemer/target using the event's slot names.
+          const actorSlots = ev.actorRequirements ?? [];
+          const boundActors: Record<string, string> = {};
+          if (actorSlots[0]) boundActors[actorSlots[0].slot] = personId;
+          if (actorSlots[1]) boundActors[actorSlots[1].slot] = targetId;
+          return { ...ev, boundActors } as BoundEvent;
+        })
+        .filter((e): e is BoundEvent => e !== null);
+
+      // Inject faction demand/standoff events generated this dawn.
+      const factionBoundEvents: BoundEvent[] = dawnResult.pendingFactionEvents
+        .map(({ eventId }) => {
+          const ev = getEventById(eventId);
+          if (!ev) return null;
+          // Bind the spokesperson slot to the highest-leadership faction member.
+          const actorSlots = ev.actorRequirements ?? [];
+          if (actorSlots.length === 0) return { ...ev, boundActors: {} } as BoundEvent;
+          const actors = resolveActors(actorSlots, stateAfterDrain, rng);
+          return { ...ev, boundActors: actors ?? {} } as BoundEvent;
+        })
+        .filter((e): e is BoundEvent => e !== null);
+
       // Deferred events are prepended so they resolve before new draws.
-      const allPending: BoundEvent[] = [...deferredBoundEvents, ...boundDrawn];
+      const allPending: BoundEvent[] = [...deferredBoundEvents, ...schemeBoundEvents, ...factionBoundEvents, ...boundDrawn];
 
       // One-time creole emergence notification.
       const showCreoleNotification =
@@ -677,10 +771,12 @@ export const useGameStore = create<GameStore>((set, get) => {
       _pendingProduction = dawnResult.production;
       _pendingConsumption = dawnResult.consumption;
       _pendingSpoilage = dawnResult.spoilageThisTurn;
+      const skipEvents = stateWithFlags.debugSettings?.skipEvents ?? false;
+      const effectivePending = skipEvents ? [] : allPending;
       set({
         gameState: stateWithFlags,
-        currentPhase: allPending.length > 0 ? 'event' : 'management',
-        pendingEvents: allPending,
+        currentPhase: effectivePending.length > 0 ? 'event' : 'management',
+        pendingEvents: effectivePending,
         currentEventIndex: 0,
         lastSpoilage: (() => {
           const s = dawnResult.spoilageThisTurn;
@@ -848,7 +944,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       const person = gameState.people.get(personId);
       if (!person) return;
       const updatedPeople = new Map(gameState.people);
-      updatedPeople.set(personId, { ...person, role });
+      updatedPeople.set(personId, { ...person, role, roleAssignedTurn: gameState.turnNumber });
       set({ gameState: { ...gameState, people: updatedPeople } });
     },
 
@@ -939,7 +1035,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
       const prevRole = person.role;
       const updatedPeople = new Map(gameState.people);
-      updatedPeople.set(personId, { ...person, role: 'keth_thara' });
+      updatedPeople.set(personId, { ...person, role: 'keth_thara', roleAssignedTurn: gameState.turnNumber });
 
       const deferredEntry = {
         eventId: 'hh_keth_thara_service_ends',
@@ -1073,7 +1169,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       if (person.role === 'away') return; // Cannot assign a person who is away on a mission
       const updatedProject = buildingAssignBuilder(project, personId);
       const updatedPeople = new Map(gameState.people);
-      updatedPeople.set(personId, { ...person, role: 'builder' });
+      updatedPeople.set(personId, { ...person, role: 'builder', roleAssignedTurn: gameState.turnNumber });
       set({
         gameState: {
           ...gameState,
@@ -1096,7 +1192,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       if (!project || !person) return;
       const updatedProject = buildingRemoveBuilder(project, personId);
       const updatedPeople = new Map(gameState.people);
-      updatedPeople.set(personId, { ...person, role: 'unassigned' });
+      updatedPeople.set(personId, { ...person, role: 'unassigned', roleAssignedTurn: gameState.turnNumber });
       set({
         gameState: {
           ...gameState,
@@ -1189,6 +1285,17 @@ export const useGameStore = create<GameStore>((set, get) => {
       return Array.from(familyIds)
         .map(id => gameState.people.get(id))
         .filter((p): p is Person => p !== undefined);
+    },
+
+    updateDebugSettings(partial) {
+      const { gameState } = get();
+      if (!gameState) return;
+      const updated: GameState = {
+        ...gameState,
+        debugSettings: { ...gameState.debugSettings, ...partial },
+      };
+      set({ gameState: updated });
+      localStorage.setItem(SAVE_KEY, serializeGameState(updated));
     },
   };
 });

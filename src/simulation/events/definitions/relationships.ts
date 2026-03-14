@@ -432,4 +432,280 @@ export const RELATIONSHIP_EVENTS: GameEvent[] = [
       },
     ],
   },
+
+  // ── Ambition expansion events (Phase 5) ─────────────────────────────────────
+
+  {
+    id: 'rel_prestige_opportunity',
+    title: 'A Hunger for Renown',
+    category: 'personal',
+    prerequisites: [
+      { type: 'has_person_with_ambition', params: { ambitionId: 'seek_prestige' } },
+    ],
+    actorRequirements: [
+      { slot: 'petitioner', criteria: { minAge: 25, minSkill: { skill: 'leadership', value: 46 } } },
+    ],
+    weight: 2,
+    cooldown: 10,
+    isUnique: false,
+    description:
+      '{petitioner} has been restless. {petitioner.He} has the skill for something greater ' +
+      'than daily routine — and the ambition to match it. {petitioner.He} asks to be given ' +
+      'a task worthy of {petitioner.his} ability, something that will let {petitioner.him} ' +
+      'prove {petitioner.his} worth to the settlement.',
+    choices: [
+      {
+        id: 'send_mission',
+        label: 'Dispatch them on a scouting mission.',
+        description: 'Satisfy the hunger for adventure. They will be away for a time.',
+        missionActorSlot: 'petitioner',
+        deferredEventId: 'rel_prestige_mission_return',
+        deferredTurns: 3,
+        consequences: [
+          { type: 'modify_opinion', target: '{petitioner}', value: 15 },
+        ],
+      },
+      {
+        id: 'offer_leadership',
+        label: 'Offer them a leadership role in the settlement.',
+        description: 'Recognition without absence. Costs nothing but reputation.',
+        consequences: [
+          { type: 'modify_opinion',  target: '{petitioner}', value: 20  },
+          { type: 'clear_ambition', target: '{petitioner}', value: 0 },
+        ],
+      },
+      {
+        id: 'decline',
+        label: 'Decline — they should be patient like everyone else.',
+        description: 'A bruising refusal.',
+        consequences: [
+          { type: 'modify_opinion', target: '{petitioner}', value: -10 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'rel_prestige_mission_return',
+    title: 'Return From the Wilds',
+    category: 'personal',
+    isDeferredOutcome: true,
+    prerequisites: [],
+    actorRequirements: [
+      { slot: 'petitioner', criteria: { minAge: 18 } },
+    ],
+    weight: 1,
+    cooldown: 0,
+    isUnique: false,
+    description:
+      '{petitioner} has returned from their mission. {petitioner.He} bears the look of someone ' +
+      'who has seen open country and handled it alone. Whatever hunger drove {petitioner.him} ' +
+      'out there, it has changed shape — the achievement is now something {petitioner.he} carries.',
+    choices: [
+      {
+        id: 'celebrate',
+        label: 'Celebrate their return. They have earned it.',
+        consequences: [
+          { type: 'add_trait',      target: '{petitioner}', value: 'veteran'  },
+          { type: 'modify_opinion', target: '{petitioner}', value: 20         },
+          { type: 'clear_ambition', target: '{petitioner}', value: 0 },
+        ],
+      },
+      {
+        id: 'acknowledge',
+        label: 'Acknowledge it and move on.',
+        consequences: [
+          { type: 'modify_opinion', target: '{petitioner}', value: 5  },
+          { type: 'clear_ambition', target: '{petitioner}', value: 0 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'rel_faith_calling',
+    title: 'The Spirit Calls',
+    category: 'personal',
+    prerequisites: [
+      { type: 'has_person_with_ambition', params: { ambitionId: 'seek_faith_influence' } },
+    ],
+    actorRequirements: [
+      { slot: 'devout', criteria: { minAge: 18, hasTrait: 'zealous' } },
+    ],
+    weight: 2,
+    cooldown: 10,
+    isUnique: false,
+    description:
+      '{devout} speaks of a calling — not ambition, {devout.he} insists, but duty. ' +
+      'The faith lacks a voice in this settlement. {devout.He} has the conviction and ' +
+      'the words; {devout.he} only needs your recognition.',
+    choices: [
+      {
+        id: 'assign_priest',
+        label: 'Recognise them as the settlement\'s spiritual voice.',
+        description: 'Assigns a priestly role. Faith in the settlement rises.',
+        consequences: [
+          { type: 'modify_opinion', target: '{devout}', value: 25 },
+          { type: 'clear_ambition', target: '{devout}', value: 0 },
+        ],
+      },
+      {
+        id: 'acknowledge',
+        label: 'Acknowledge the calling without giving a formal role.',
+        description: 'Kind but non-committal.',
+        consequences: [
+          { type: 'modify_opinion', target: '{devout}', value: 5 },
+        ],
+      },
+      {
+        id: 'dismiss',
+        label: 'This is a settlement, not a temple. Redirect them.',
+        description: 'Blunt refusal. The faithful will notice.',
+        consequences: [
+          { type: 'modify_opinion', target: '{devout}', value: -15 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'rel_mastery_dedication',
+    title: 'A Craftsperson in Full Stride',
+    category: 'personal',
+    prerequisites: [
+      { type: 'has_person_with_ambition', params: { ambitionId: 'seek_skill_mastery' } },
+    ],
+    actorRequirements: [
+      { slot: 'artisan', criteria: { minAge: 18, minSkill: { skill: 'custom', value: 46 } } },
+    ],
+    weight: 2,
+    cooldown: 8,
+    isUnique: false,
+    description:
+      '{artisan} is in the middle of something. You have seen the look before — ' +
+      'someone who has found the edge of their ability and is determined to push past it. ' +
+      '{artisan.He} asks for a light season, time to focus on the work itself.',
+    choices: [
+      {
+        id: 'endorse',
+        label: 'Give them the time. The settlement can spare it.',
+        description: 'Provides a temporary skill surge.',
+        consequences: [
+          { type: 'add_trait',      target: '{artisan}', value: 'inspired' },
+          { type: 'modify_opinion', target: '{artisan}', value: 15         },
+          { type: 'clear_ambition', target: '{artisan}', value: 0 },
+        ],
+      },
+      {
+        id: 'acknowledge',
+        label: 'Acknowledge the work without lightening their duties.',
+        consequences: [
+          { type: 'modify_opinion', target: '{artisan}', value: 5 },
+        ],
+      },
+      {
+        id: 'redirect',
+        label: 'The settlement needs their hands on practical tasks.',
+        description: 'Frustrates the ambition.',
+        consequences: [
+          { type: 'modify_opinion', target: '{artisan}', value: -8 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'rel_legacy_concern',
+    title: 'A Parent\'s Worry',
+    category: 'personal',
+    prerequisites: [
+      { type: 'has_person_with_ambition', params: { ambitionId: 'seek_legacy' } },
+    ],
+    actorRequirements: [
+      { slot: 'parent', criteria: { minAge: 45 } },
+    ],
+    weight: 2,
+    cooldown: 10,
+    isUnique: false,
+    description:
+      '{parent} is thinking about what they leave behind. {parent.He} does not say it plainly, ' +
+      'but the concern is for {parent.his} children — whether they will find their place here, ' +
+      'whether the settlement will hold a future for them.',
+    choices: [
+      {
+        id: 'help_marriage',
+        label: 'Offer to help arrange something for their child.',
+        description: 'Practical commitment. A good-faith gesture.',
+        consequences: [
+          { type: 'modify_opinion', target: '{parent}', value: 20 },
+          { type: 'clear_ambition', target: '{parent}', value: 0 },
+        ],
+      },
+      {
+        id: 'reassure',
+        label: 'Reassure them — the settlement will look after its own.',
+        description: 'Warm but non-committal. Eases the intensity.',
+        consequences: [
+          { type: 'modify_opinion', target: '{parent}', value: 10 },
+        ],
+      },
+      {
+        id: 'dismiss',
+        label: 'Everyone has children. They will manage.',
+        description: 'Cold. The parent will not forget it.',
+        consequences: [
+          { type: 'modify_opinion', target: '{parent}', value: -12 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'rel_independence_voice',
+    title: 'Enough of Their Rules',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'has_person_with_ambition', params: { ambitionId: 'seek_autonomy' } },
+    ],
+    actorRequirements: [
+      { slot: 'dissenter', criteria: { minAge: 18, sauromatianHeritage: true } },
+    ],
+    weight: 2,
+    cooldown: 12,
+    isUnique: false,
+    description:
+      '{dissenter} has had enough of bending to Company expectations. ' +
+      '{dissenter.He} is not reckless — {dissenter.he} simply believes the settlement ' +
+      'should answer to itself first. {dissenter.He} wants to know where you stand.',
+    choices: [
+      {
+        id: 'acknowledge',
+        label: 'Acknowledge the grievance — allow more local custom.',
+        description: 'Shifts the cultural blend toward native tradition.',
+        consequences: [
+          { type: 'modify_cultural_blend', target: 'settlement', value: -0.05 },
+          { type: 'modify_opinion',         target: '{dissenter}', value: 15  },
+          { type: 'clear_ambition', target: '{dissenter}', value: 0 },
+        ],
+      },
+      {
+        id: 'defend_company',
+        label: 'Defend the Company relationship. It protects this settlement.',
+        description: 'A principled stand. Sauromatian members will notice.',
+        consequences: [
+          { type: 'modify_opinion',                  target: '{dissenter}', value: -15 },
+          { type: 'modify_all_tribe_dispositions',   target: 'all',         value: -3  },
+        ],
+      },
+      {
+        id: 'convene_council',
+        label: 'Bring it before the council. This deserves a proper hearing.',
+        description: 'Defers judgment but earns some trust.',
+        consequences: [
+          { type: 'modify_opinion', target: '{dissenter}', value: 8 },
+        ],
+      },
+    ],
+  },
 ];
+

@@ -115,6 +115,52 @@ export function evaluateAmbition(
       if (target.spouseIds.length > 0) return 'failed';
       return 'ongoing';
     }
+
+    case 'seek_prestige':
+      // Fulfilled if they gained a glory trait or are currently on a mission
+      if (person.traits.includes('veteran') || person.traits.includes('respected_elder')) return 'fulfilled';
+      if (person.role === 'away') return 'fulfilled'; // on a mission — counts as progress
+      return 'ongoing';
+
+    case 'seek_faith_influence':
+      if (person.role === 'priest_solar' || person.role === 'wheel_singer' || person.role === 'voice_of_wheel') return 'fulfilled';
+      return 'ongoing';
+
+    case 'seek_skill_mastery':
+      // Fulfilled if any base skill has crossed into Excellent tier (63+)
+      if (
+        person.skills.animals    >= 63 ||
+        person.skills.bargaining >= 63 ||
+        person.skills.combat     >= 63 ||
+        person.skills.custom     >= 63 ||
+        person.skills.leadership >= 63 ||
+        person.skills.plants     >= 63
+      ) return 'fulfilled';
+      return 'ongoing';
+
+    case 'seek_legacy': {
+      // Fulfilled if all adult children are married or in informal unions
+      const childIds: string[] = [];
+      for (const p of state.people.values()) {
+        if (p.motherId === person.id || p.fatherId === person.id) {
+          childIds.push(p.id);
+        }
+      }
+      const adultChildren = childIds.map(id => state.people.get(id)).filter((c): c is import('../population/person').Person => !!c && c.age >= 14);
+      if (adultChildren.length === 0) return 'fulfilled'; // All grown children left or died
+      const allSettled = adultChildren.every(c => c.spouseIds.length > 0 || c.householdRole === 'concubine');
+      return allSettled ? 'fulfilled' : 'ongoing';
+    }
+
+    case 'seek_autonomy':
+      // Fulfilled if policy became permissive, standing dropped below threshold, or company loyalists appeared
+      if (
+        state.settlement.religiousPolicy === 'wheel_permitted' ||
+        state.settlement.religiousPolicy === 'hidden_wheel_recognized' ||
+        state.company.standing < 40
+      ) return 'fulfilled';
+      if (state.factions.some(f => f.type === 'company_loyalists')) return 'fulfilled';
+      return 'ongoing';
   }
 }
 
@@ -140,7 +186,9 @@ export function determineAmbitionType(
   if (person.role === 'away') return null;
   if (person.socialStatus === 'thrall') return null;
 
-  // 1. seek_spouse — unmarried adult with strong opinion of an eligible partner
+  // 1. seek_spouse — unmarried adult with at least a neutral opinion of an eligible partner.
+  // Threshold kept low (20) so Imanian men can develop this ambition toward Sauromatian women
+  // even when language/culture differences create a modest initial opinion gap.
   if (person.spouseIds.length === 0 && person.age >= 18) {
     const candidates = Array.from(state.people.values()).filter(
       other =>
@@ -148,7 +196,7 @@ export function determineAmbitionType(
         other.sex !== person.sex &&
         other.spouseIds.length === 0 &&
         other.age >= 16 &&
-        getEffectiveOpinion(person, other.id) >= 40,
+        getEffectiveOpinion(person, other.id) >= 20,
     );
     if (candidates.length > 0) {
       const target = candidates[rng.nextInt(0, candidates.length - 1)]!;
@@ -192,7 +240,8 @@ export function determineAmbitionType(
     return { type: 'seek_cultural_duty', targetPersonId: null };
   }
 
-  // 5. seek_informal_union — non-Sauromatian man with strong interest in an eligible woman
+  // 5. seek_informal_union — non-Sauromatian man with at least a neutral opinion of an eligible woman.
+  // Threshold kept lower (25) to allow courtship ambitions to form once early barriers begin to ease.
   if (
     person.sex === 'male' &&
     !SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture) &&
@@ -204,12 +253,75 @@ export function determineAmbitionType(
         other.sex === 'female' &&
         other.spouseIds.length === 0 &&
         other.age >= 16 &&
-        getEffectiveOpinion(person, other.id) >= 50,
+        getEffectiveOpinion(person, other.id) >= 25,
     );
     if (targets.length > 0) {
       const target = targets[rng.nextInt(0, targets.length - 1)]!;
       return { type: 'seek_informal_union', targetPersonId: target.id };
     }
+  }
+
+  // 6. seek_prestige — seasoned warrior/leader craving recognition
+  if (
+    person.age >= 25 &&
+    person.role !== 'away' &&
+    (person.skills.leadership >= 46 || person.skills.combat >= 46) &&
+    !person.traits.includes('veteran') &&
+    !person.traits.includes('respected_elder')
+  ) {
+    return { type: 'seek_prestige', targetPersonId: null };
+  }
+
+  // 7. seek_faith_influence — pious person called to spiritual leadership
+  if (
+    (person.traits.includes('zealous') || person.traits.includes('pious')) &&
+    (person.skills.leadership >= 46 || person.skills.bargaining >= 46) &&
+    person.role !== 'priest_solar' &&
+    person.role !== 'wheel_singer' &&
+    person.role !== 'voice_of_wheel'
+  ) {
+    return { type: 'seek_faith_influence', targetPersonId: null };
+  }
+
+  // 8. seek_skill_mastery — person has a skill in VG range (46–62) and trains it
+  {
+    const skillsInVG: { skillId: 'animals' | 'bargaining' | 'combat' | 'custom' | 'leadership' | 'plants'; value: number }[] = [
+      { skillId: 'animals',    value: person.skills.animals },
+      { skillId: 'bargaining', value: person.skills.bargaining },
+      { skillId: 'combat',     value: person.skills.combat },
+      { skillId: 'custom',     value: person.skills.custom },
+      { skillId: 'leadership', value: person.skills.leadership },
+      { skillId: 'plants',     value: person.skills.plants },
+    ].filter(s => s.value >= 46 && s.value <= 62);
+
+    if (skillsInVG.length > 0) {
+      return { type: 'seek_skill_mastery', targetPersonId: null };
+    }
+  }
+
+  // 9. seek_legacy — ageing parent with at least one unmarried adult child
+  if (person.age >= 45) {
+    const childIds: string[] = [];
+    for (const p of state.people.values()) {
+      if (p.motherId === person.id || p.fatherId === person.id) {
+        childIds.push(p.id);
+      }
+    }
+    const hasUnmarriedAdultChild = childIds.some(childId => {
+      const child = state.people.get(childId);
+      return child && child.age >= 14 && child.spouseIds.length === 0 && child.householdRole !== 'concubine';
+    });
+    if (hasUnmarriedAdultChild) {
+      return { type: 'seek_legacy', targetPersonId: null };
+    }
+  }
+
+  // 10. seek_autonomy — Sauromatian-heritage person under prolonged Company pressure
+  if (
+    SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture) &&
+    (state.identityPressure?.companyPressureTurns ?? 0) >= 4
+  ) {
+    return { type: 'seek_autonomy', targetPersonId: null };
   }
 
   return null;
@@ -254,11 +366,16 @@ export function clearAmbition(person: Person): Person {
  */
 export function getAmbitionLabel(ambition: PersonAmbition): string {
   switch (ambition.type) {
-    case 'seek_spouse':         return 'Seeking a companion';
-    case 'seek_council':        return 'Seeking a council seat';
-    case 'seek_seniority':      return 'Seeking senior-wife standing';
-    case 'seek_cultural_duty':  return 'Called to keth-thara';
-    case 'seek_informal_union': return 'Seeking an informal bond';
+    case 'seek_spouse':          return 'Seeking a companion';
+    case 'seek_council':         return 'Seeking a council seat';
+    case 'seek_seniority':       return 'Seeking senior-wife standing';
+    case 'seek_cultural_duty':   return 'Called to keth-thara';
+    case 'seek_informal_union':  return 'Seeking an informal bond';
+    case 'seek_prestige':        return 'Craving recognition';
+    case 'seek_faith_influence': return 'Called to spiritual service';
+    case 'seek_skill_mastery':   return 'Striving for mastery';
+    case 'seek_legacy':          return 'Worried about the next generation';
+    case 'seek_autonomy':        return 'Chafing under authority';
   }
 }
 

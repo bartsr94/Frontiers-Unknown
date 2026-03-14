@@ -17,6 +17,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 | Phase 3.7 — Religion System | ✅ Complete | Three faiths (`imanian_orthodox`, `sacred_wheel`, `syncretic_hidden_wheel`) ✅ · Hidden Wheel divergence counter ✅ · Religious tension formula ✅ · Company religious pressure drain ✅ · `ReligiousPolicy` (4 values) ✅ · 7 religion events ✅ · Priesthood roles (`priest_solar`, `wheel_singer`, `voice_of_wheel`) ✅ · Religion UI panel ✅ · 19 new tests ✅ |
 | Phase 3.8 — Cultural Identity Pressure | ✅ Complete | `IdentityPressure` counters ✅ · Five-zone blend scale ✅ · Passive Company standing + tribe disposition deltas ✅ · 6 identity events ✅ · `modify_cultural_blend` / `modify_all_tribe_dispositions` consequences ✅ · `sauromatianHeritage` actor criterion ✅ · `IdentityScale` UI widget ✅ · 35 new tests ✅ |
 | Phase 3.9 — Trait Expansion | ✅ Complete | `TraitDefinition` catalog (~80 traits) ✅ · 6 trait categories incl. `mental_state` ✅ · Temporary traits with `traitExpiry` map ✅ · Expanded `TRAIT_CONFLICTS` (21 pairs) + `TRAIT_SHARED_BONUS` (15 entries) ✅ · `computeTraitCategoryBoosts` event-deck shaping ✅ · `applyTraitOpinionEffects` per-turn autonomous drift ✅ · `getTraitSkillGrowthBonuses` ✅ · `applyTemporaryTraitExpiry` + earned trait acquisition ✅ · `inheritAptitudeTraits()` at birth ✅ · 128 new tests ✅ |
+| Phase 4.0 — Character Autonomy | ✅ Complete | Named relationships (friend/rival/nemesis/confidant/mentor/student) ✅ · Scheme engine (5 types, progress-based event firing) ✅ · Faction system (6 types, membership/strength/demands) ✅ · Activity log (30-entry rolling feed, 11 entry types) ✅ · Community tab (bonds, factions, feed) ✅ · Shared-role opinion drift ✅ · 135 new tests ✅ |
 | Phase 4 — Polish | 🔲 Not started | — |
 ---
 
@@ -123,6 +124,7 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/events/definitions/household.ts` | 6 household/domestic events: `hh_tribal_thrall_offer`, `hh_thrall_elevation`, `hh_wife_council_demands`, `hh_tradition_clash`, `hh_ashka_melathi_deepens`, `hh_keth_thara_service_ends` |
 | `src/simulation/events/definitions/relationships.ts` | 5 autonomous ambition-driven events: `rel_mutual_attraction`, `rel_council_petition`, `rel_seniority_bid`, `rel_keth_thara_selfvow`, `rel_informal_union_proposed` |
 | `src/simulation/events/definitions/identity.ts` | 6 cultural identity pressure events: `ident_company_cultural_concern`, `ident_company_inspector_dispatched`, `ident_company_pleased`, `ident_tribal_leader_invitation`, `ident_tribal_champion_recognised`, `ident_settlers_feel_foreign` |
+| `src/simulation/events/definitions/schemes.ts` | 5 scheme resolution events: `sch_courtship_discovered`, `sch_faith_advocacy_noticed`, `sch_rumours_spreading`, `sch_undermining_climax`, `sch_tutor_breakthrough`; all have `isDeferredOutcome: true` |
 | `src/simulation/buildings/building-definitions.ts` | `BuildingId` (13-member union), `BuildingDef`, `BUILDING_CATALOG`, `getBuildingDisplayName(defId, style)` — static catalog of all building types |
 | `src/simulation/buildings/building-effects.ts` | Pure effect getters: `getShelterCapacity`, `getOvercrowdingRatio`, `getBuildingFlatProductionBonus`, `getLanguageDriftMultiplier`, `getBuildingCulturePull`, `getSkillGrowthBonuses`, `hasBuilding`, `lacksBuilding`, etc. |
 | `src/simulation/buildings/construction.ts` | `canBuild` → `CanBuildResult` (`{ ok: true }` / `{ ok: false; reason }`); `startConstruction`, `assignBuilder`, `removeBuilder`, `processConstruction`, `cancelConstruction` |
@@ -141,6 +143,9 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/population/household.ts` | `createHousehold`, `addToHousehold`, `removeFromHousehold`, `getHouseholdMembers`, `getHouseholdByPerson`, `getSeniorWife`, `countWives`, `countConcubines`, `dissolveHousehold`, `HOUSEHOLD_ROLE_LABELS`, `HOUSEHOLD_ROLE_COLORS` |
 | `src/simulation/population/opinions.ts` | `computeBaselineOpinion`, `computeTraitOpinion`, `computeOpinionBreakdown`, `initializeBaselineOpinions`, `applyOpinionDrift`, `decayOpinions`, `decayOpinionModifiers`, `getOpinion`, `getEffectiveOpinion`, `setOpinion`, `adjustOpinion`, `addOpinionModifier`, `getModifierSummary`, `applyMarriageOpinionFloor`, `OPINION_TRACK_CAP` |
 | `src/simulation/population/ambitions.ts` | `tickAmbitionIntensity`, `evaluateAmbition`, `determineAmbitionType`, `generateAmbition`, `clearAmbition`, `getAmbitionLabel`, `getAmbitionIntensityClass`, `AMBITION_FIRING_THRESHOLD` |
+| `src/simulation/population/named-relationships.ts` | Named relationship formation/dissolution; `processNamedRelationships()`, `seedFoundingRelationships()`; `NamedRelationshipType` (friend/rival/nemesis/confidant/mentor/student); `FRIEND_OPINION_THRESHOLD = 50`, `FRIEND_SUSTAIN_TURNS = 4` |
+| `src/simulation/personality/scheme-engine.ts` | `processSchemes()`, `generateScheme()`; 5 scheme types (`scheme_court_person`, `scheme_convert_faith`, `scheme_befriend_person`, `scheme_undermine_person`, `scheme_tutor_person`); `SCHEME_GENERATE_INTERVAL = 12`; fires climax events at scheme completion |
+| `src/simulation/world/factions.ts` | `processFactions()`, `computeFactionStrength()`, `isEligibleMember()`; 6 faction types (`cultural_preservationists`, `company_loyalists`, `orthodox_faithful`, `wheel_devotees`, `community_elders`, `merchant_bloc`); `FACTION_MIN_MEMBERS = 3`, `DEMAND_STRENGTH_THRESHOLD = 0.45` |
 | `src/data/trait-definitions.ts` | `TRAIT_DEFINITIONS` — authoritative catalog of all ~80 `TraitDefinition` entries; `TEMPORARY_TRAITS: ReadonlySet<string>`; `APTITUDE_TRAITS: ReadonlySet<string>` |
 | `src/data/trait-affinities.ts` | `TRAIT_CONFLICTS` (21 conflicting pairs with penalties) · `TRAIT_SHARED_BONUS` (15 shared-trait bonuses) |
 | `src/simulation/personality/trait-behavior.ts` | `computeTraitCategoryBoosts(people)` — geometric-mean event-deck multipliers; `applyTraitOpinionEffects(people)` — per-turn jealous/envious/suspicious/trusting/charming deltas; `getTraitSkillGrowthBonuses(person)` — green_thumb/keen_hunter/gifted_speaker/mentor_hearted/inspired/bereaved skill deltas |
@@ -160,6 +165,8 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/ui/views/FamilyTree.tsx` | 3-generation ancestor/descendant tree; spouses shown to the side of root node |
 | `src/ui/views/EventView.tsx` | Event card with choices; actor badge strip (portrait + name) above description when slots are bound; `interpolateText` applied to all displayed text; calls `resolveEventChoice` + `nextEvent` |
 | `src/ui/views/TradeView.tsx` | Trade & Commerce view: Company quota panel, tribe list with dispositions, barter interface with fairness meter; locked without Trading Post |
+| `src/ui/views/CommunityView.tsx` | 3-panel community tab — left: population/bonds summary; centre: factions list with strength/demands; right: expanded activity feed |
+| `src/ui/components/ActivityFeed.tsx` | Rolling 30-entry activity feed; per-type icon (relationship/scheme/faction/trait/ambition/role); clickable person name chips navigate to PersonDetail |
 | `src/ui/shared/role-display.ts` | `ROLE_LABELS` and `ROLE_COLORS` — exhaustive `Record<WorkRole, string>` for all 11 roles |
 | `src/simulation/economy/company.ts` | `computeYearlyQuota`, `checkQuotaStatus`, `applyQuotaConsequences`, `getCompanySupplyDelivery` — Company quota math and failure escalation |
 | `src/simulation/economy/trade.ts` | `getTradeValue`, `validateTrade`, `executeTribeTradeLogic`, `TradeOffer`, `TradeResult` — barter pricing and tribe disposition effects |
@@ -612,6 +619,81 @@ interface TraitDefinition {
 | `tests/personality/trait-behavior.test.ts` | 15 tests |
 | `tests/personality/assignment.test.ts` | 18 tests |
 | `tests/genetics/aptitude-inheritance.test.ts` | 6 tests |
+| `tests/population/named-relationships.test.ts` | 13 tests |
+| `tests/personality/scheme-engine.test.ts` | 63 tests |
+| `tests/world/factions.test.ts` | 35 tests |
+
+---
+
+## Phase 4.0 — Character Autonomy Notes
+
+### Named Relationships
+
+- **`NamedRelationshipType`**: `friend | rival | nemesis | confidant | mentor | student`
+- **Formation**: `processNamedRelationships()` runs each dawn; checks opinion pairs; a sustained opinion above `FRIEND_OPINION_THRESHOLD = 50` for `FRIEND_SUSTAIN_TURNS = 4` consecutive turns forms a `friend` bond; analogous thresholds apply for rival/nemesis
+- **`opinionSustainedSince`**: `Partial<Record<string, number>>` on `Person` — maps `"{personId}"` → turn number when sustained observation began; used for the sustain-turn gate
+- **Dissolution**: bonds dissolve if opinion drops below the sustain threshold and stays there
+- **Seeding**: `seedFoundingRelationships()` called in `createInitialState` — pre-seeds pairs with high/low opinion as friends/rivals so the game starts with social texture
+- **Activity log entries**: `relationship_formed` and `relationship_dissolved` written each dawn as bonds change
+
+### Scheme Engine
+
+- **`PersonScheme`** on `Person`: `{ type: SchemeType; targetId: string; progress: number; startedTurn: number }` or stored as `activeScheme: PersonScheme | null`
+- **5 scheme types**: `scheme_court_person` · `scheme_convert_faith` · `scheme_befriend_person` · `scheme_undermine_person` · `scheme_tutor_person`
+- **Generation**: `generateScheme(person, people, rng)` runs every `SCHEME_GENERATE_INTERVAL = 12` turns per person (jittered by person index); trait-weighted type selection
+- **Progress**: `processSchemes()` advances each active scheme by 1 progress/turn; fires a climax event when progress reaches 100
+- **Climax events** (all `isDeferredOutcome: true`, fired from turn-processor not the deck):
+  - `sch_courtship_discovered` · `sch_faith_advocacy_noticed` · `sch_rumours_spreading` · `sch_undermining_climax` · `sch_tutor_breakthrough`
+- **Activity log entries**: `scheme_started`, `scheme_succeeded`, `scheme_failed`
+
+### Faction System
+
+- **`Faction`** on `GameState.factions: Faction[]`
+- **6 faction types**: `cultural_preservationists` · `company_loyalists` · `orthodox_faithful` · `wheel_devotees` · `community_elders` · `merchant_bloc`
+- **Membership**: `isEligibleMember(person, factionType)` — checks traits, religion, skills, age; `FACTION_MIN_MEMBERS = 3` to form
+- **Strength**: `computeFactionStrength(faction, people)` — fraction of pop that are members × alignment coefficient (0–1)
+- **Demands**: factions at strength ≥ `DEMAND_STRENGTH_THRESHOLD = 0.45` generate a player-facing event demand each season
+- **`processFactions()`**: called each dawn after identity pressure (step 9.6b); returns `FactionResult` with log entries and optional pending events
+- **Activity log entries**: `faction_formed`, `faction_dissolved`
+
+### Activity Log
+
+- **`ActivityLogType`** union (11 values): `role_self_assigned | relationship_formed | relationship_dissolved | scheme_started | scheme_succeeded | scheme_failed | faction_formed | faction_dissolved | trait_acquired | ambition_formed | ambition_cleared`
+- **`ActivityLogEntry`**: `{ turn: number; type: ActivityLogType; personId?: string; targetId?: string; description: string }`
+- **`activityLog: ActivityLogEntry[]`** on `GameState` — capped at 30 entries (oldest dropped first)
+- **`addActivityEntry(log, entry)`**: immutable helper; ensures the 30-entry cap is respected
+- **Written by**: turn-processor (relationships, schemes, factions), ambition tick (ambition_formed/cleared), store trait logic (trait_acquired), role handling (role_self_assigned)
+
+### Shared-Role Opinion Drift
+
+- **`applySharedRoleOpinionDrift(people)`** in `opinions.ts`: called each dawn after skill growth; persons sharing the same `WorkRole` (excluding `'idle'`) gain +1 opinion of each other per turn — co-workers develop passive positive regard over time
+
+### Community Tab
+
+- **`CommunityView`**: 3-panel layout — left panel: total pop / living bonds summary by type; centre panel: faction list with strength bars and demands; right panel: full `ActivityFeed`
+- **`ActivityFeed`**: collapsible 30-entry feed, icon per `ActivityLogType`, person name chips navigate to PersonDetail via the store's `setSelectedPersonId`
+- **Navigation**: `{ id: 'community', emoji: '🏛', label: 'Community' }` in `LeftNav`; `case 'community': return <CommunityView />` in `GameScreen`
+
+### Bug Fixes Applied (end of Phase 4.0)
+
+- **Founder trait pool**: `passionate`, `romantic`, `lonely` added to `FOUNDER_TRAIT_POOL` in `game-store.ts` — these traits drive `scheme_court_person` and `scheme_befriend_person` generation; absence meant schemes of these types never started
+- **Ambition thresholds**: `seek_spouse` opinion gate 40 → 20; `seek_informal_union` opinion gate 50 → 25 (in `ambitions.ts`) — lowered to be reachable in early game before opinion systems have run many turns
+- **Friend threshold**: `FRIEND_OPINION_THRESHOLD` 60 → 50; `FRIEND_SUSTAIN_TURNS` 6 → 4 (in `named-relationships.ts`) — makes the first friendships form in the early turns of a new game
+- **Activity log completeness**: `role_self_assigned` and `trait_acquired` entries fully wired into the store's turn handling — were declared but not written before the fix
+
+### Phase 4.0 Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/simulation/population/named-relationships.ts` | Named relationship formation/dissolution; `processNamedRelationships()`, `seedFoundingRelationships()` |
+| `src/simulation/personality/scheme-engine.ts` | `processSchemes()`, `generateScheme()`; 5 scheme types; progress-to-event pipeline |
+| `src/simulation/world/factions.ts` | `processFactions()`, `computeFactionStrength()`, `isEligibleMember()`; 6 faction types |
+| `src/simulation/events/definitions/schemes.ts` | 5 scheme climax events — all `isDeferredOutcome: true` |
+| `src/ui/views/CommunityView.tsx` | 3-panel community view (bonds, factions, activity feed) |
+| `src/ui/components/ActivityFeed.tsx` | Rolling 30-entry log with type icons and person-chip navigation |
+| `tests/population/named-relationships.test.ts` | 13 tests — formation gates, dissolution, seed logic |
+| `tests/personality/scheme-engine.test.ts` | 63 tests — scheme generation, progress, climax event firing |
+| `tests/world/factions.test.ts` | 35 tests — eligibility, strength formula, demand threshold |
 
 ---
 
@@ -695,7 +777,7 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/population/skills.test.ts` — 36/36 passing (getSkillRating, getDerivedSkill, generatePersonSkills, createPerson integration)
 - `tests/buildings/construction.test.ts` — 19/19 passing (canBuild, startConstruction, assignBuilder/removeBuilder, processConstruction, cancelConstruction)
 - `tests/buildings/building-effects.test.ts` — 23/23 passing (shelterCapacity, productionBonus, childMortalityModifier, overcrowding, hasBuilding, etc.)
-- `tests/population/opinions.test.ts` — 56/56 passing (getOpinion, setOpinion, adjustOpinion, computeTraitOpinion, computeBaselineOpinion, initializeBaselineOpinions, applyOpinionDrift, decayOpinions, marriage floor, **addOpinionModifier, getEffectiveOpinion, getModifierSummary, decayOpinionModifiers, computeOpinionBreakdown with modifiers**)
+- `tests/population/opinions.test.ts` — 64/64 passing (getOpinion, setOpinion, adjustOpinion, computeTraitOpinion, computeBaselineOpinion, initializeBaselineOpinions, applyOpinionDrift, decayOpinions, marriage floor, **addOpinionModifier, getEffectiveOpinion, getModifierSummary, decayOpinionModifiers, computeOpinionBreakdown with modifiers**, **applySharedRoleOpinionDrift**)
 - `tests/population/ambitions.test.ts` — 30/30 passing (tickAmbitionIntensity, evaluateAmbition, determineAmbitionType, generateAmbition, clearAmbition, label/intensity helpers, AMBITION_FIRING_THRESHOLD)
 - `tests/culture/religion.test.ts` — 19/19 passing (`computeReligiousTension` variants, `computeCompanyReligiousPressure` variants + policy modifiers, `computeHiddenWheelDivergence` variants including 20-turn emergence and suppression)
 - `tests/culture/identity-pressure.test.ts` — 35/35 passing (counter increment/reset per zone, company standing delta all 5 zones, boundary values, safe-zone produces no tribe deltas, single-trait and multi-trait tribe deltas, multiple tribes independent deltas)
@@ -704,4 +786,8 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/genetics/aptitude-inheritance.test.ts` — 6/6 passing (`inheritAptitudeTraits` no-parents baseline, single-parent probability, both-parents boosted probability, determinism, personality-traits excluded)
 - `tests/turn/dusk.test.ts` — 19/19 passing
 - `tests/world/tribes.test.ts` — (existing suite)
-- **Total: 981/981 passing across 32 test files**
+- `tests/store/serialization.test.ts` — serialization round-trip tests (namedRelationships, activeScheme, opinionSustainedSince, factions, activityLog)
+- `tests/population/named-relationships.test.ts` — 13/13 passing (formation gates, dissolution, seed logic, sustain-turn gating)
+- `tests/personality/scheme-engine.test.ts` — 63/63 passing (scheme generation, trait weighting, progress ticking, climax event firing, SCHEME_GENERATE_INTERVAL)
+- `tests/world/factions.test.ts` — 35/35 passing (eligibility by type, strength formula, DEMAND_STRENGTH_THRESHOLD, formation/dissolution)
+- **Total: 1116/1116 passing across 36 test files**

@@ -11,6 +11,7 @@
 
 import type { Person, CultureId, LanguageId, ReligionId } from '../simulation/population/person';
 import type { GameState, SettlementCulture, CompanyRelation, Household } from '../simulation/turn/game-state';
+import { defaultDebugSettings } from '../simulation/turn/game-state';
 import { createTribe } from '../simulation/world/tribes';
 
 // ─── Serial types ─────────────────────────────────────────────────────────────
@@ -72,6 +73,11 @@ export function deserializePerson(s: SerialPerson): Person {
     ambition: s.ambition ?? null,
     // Old saves pre-dating the timed opinion modifier system default to empty.
     opinionModifiers: s.opinionModifiers ?? [],
+    // Phase 4.0 autonomy fields — not present in pre-Phase-4 saves.
+    namedRelationships: s.namedRelationships ?? [],
+    activeScheme: s.activeScheme ?? null,
+    roleAssignedTurn: s.roleAssignedTurn ?? 0,
+    opinionSustainedSince: s.opinionSustainedSince ?? {},
   };
 }
 
@@ -144,5 +150,9 @@ export function deserializeGameState(json: string): GameState {
       ...(s.settlement as typeof s.settlement),
       religiousPolicy: ((s.settlement as Partial<typeof s.settlement>).religiousPolicy) ?? 'tolerant',
     },
+    // Phase 4.0 autonomy fields.
+    factions:       (s as unknown as Partial<GameState>).factions       ?? [],
+    activityLog:    (s as unknown as Partial<GameState>).activityLog    ?? [],
+    debugSettings:  (s as unknown as Partial<GameState>).debugSettings  ?? defaultDebugSettings(),
   };
 }

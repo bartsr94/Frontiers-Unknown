@@ -287,18 +287,28 @@ export type HouseholdTradition =
 /**
  * The category of a personal ambition.
  *
- * - seek_spouse         — unmarried adult wants to marry someone they like
- * - seek_council        — skilled person wants a council seat
- * - seek_seniority      — wife wants to become senior_wife in a multi-wife household
- * - seek_cultural_duty  — young Sauromatian male wants to perform keth-thara
- * - seek_informal_union — Imanian man wants to formalise a concubine relationship
+ * - seek_spouse           — unmarried adult wants to marry someone they like
+ * - seek_council          — skilled person wants a council seat
+ * - seek_seniority        — wife wants to become senior_wife in a multi-wife household
+ * - seek_cultural_duty    — young Sauromatian male wants to perform keth-thara
+ * - seek_informal_union   — Imanian man wants to formalise a concubine relationship
+ * - seek_prestige         — seasoned warrior/leader craves recognition or glory
+ * - seek_faith_influence  — pious person called to spiritual leadership role
+ * - seek_skill_mastery    — person in VG skill tier strives to reach Excellent
+ * - seek_legacy           — ageing parent wants all adult children settled
+ * - seek_autonomy         — Sauromatian-heritage person chafes under Company authority
  */
 export type AmbitionId =
   | 'seek_spouse'
   | 'seek_council'
   | 'seek_seniority'
   | 'seek_cultural_duty'
-  | 'seek_informal_union';
+  | 'seek_informal_union'
+  | 'seek_prestige'
+  | 'seek_faith_influence'
+  | 'seek_skill_mastery'
+  | 'seek_legacy'
+  | 'seek_autonomy';
 
 /**
  * A personal goal held by a character.
@@ -322,6 +332,59 @@ export interface PersonAmbition {
   targetPersonId: string | null;
   /** Turn number when the ambition was first formed. */
   formedTurn: number;
+}
+
+// ─── Named Relationships ─────────────────────────────────────────────────────
+
+/**
+ * The type of a named relationship — a deeper bond than a numeric opinion score.
+ * Named relationships carry ongoing mechanical effects and are visible in the UI.
+ */
+export type NamedRelationshipType =
+  | 'friend'      // Warm, sustained mutual regard
+  | 'rival'       // Sustained antagonism or direct goal conflict
+  | 'mentor'      // One teaches, one learns — skill transfer
+  | 'student'     // Inverse of mentor (same bond, dual entries)
+  | 'confidant'   // Deep trust, repeated co-involvement in events
+  | 'nemesis';    // Profound enmity; neither can share events comfortably
+
+/**
+ * A named relationship held by a person toward another individual.
+ * Depth grows over time; full depth (1.0) represents the strongest form of the bond.
+ */
+export interface NamedRelationship {
+  type: NamedRelationshipType;
+  targetId: string;
+  formedTurn: number;
+  /** 0.0–1.0; grows +0.02/turn once formed. */
+  depth: number;
+  /** Set true on first PersonDetail view that reveals it to the player. */
+  revealedToPlayer: boolean;
+}
+
+// ─── Schemes ─────────────────────────────────────────────────────────────────
+
+/** The type of private scheme a character can quietly pursue. */
+export type SchemeType =
+  | 'scheme_court_person'     // Romantic pursuit; culminates in courtship event
+  | 'scheme_convert_faith'    // Religious advocacy; may culminate in conversion
+  | 'scheme_befriend_person'  // Social bonding; SILENT — friend bond forms at 1.0
+  | 'scheme_undermine_person' // Social sabotage; undermining event at climax
+  | 'scheme_tutor_person';    // Mentoring focus; SILENT skill boost + notification
+
+/**
+ * A private project a character is quietly pursuing.
+ * Progress advances each turn. At 1.0 the scheme either completes silently
+ * or fires a player-facing event depending on scheme type.
+ */
+export interface PersonScheme {
+  type: SchemeType;
+  targetId: string;
+  /** 0.0–1.0. Advances each turn at a scheme-type-specific rate. */
+  progress: number;
+  startedTurn: number;
+  /** Set true when any event fires or the player inspects PersonDetail. */
+  revealedToPlayer: boolean;
 }
 
 // ─── Skills ──────────────────────────────────────────────────────────────────
@@ -610,6 +673,38 @@ export interface Person {
    * Serialised as a plain object — no Map handling needed.
    */
   traitExpiry?: Partial<Record<TraitId, number>>;
+
+  // ─── Autonomy (Phase 4.0) ────────────────────────────────────────────────
+
+  /**
+   * Named relationships — deeper bonds beyond the numeric opinion score.
+   * Each entry corresponds to one directional relationship (mentor and student
+   * each hold their own entry pointing at the other).
+   */
+  namedRelationships: NamedRelationship[];
+
+  /**
+   * The character's currently active private scheme, or null.
+   * Schemes advance each turn and resolve silently or via player-facing events.
+   */
+  activeScheme: PersonScheme | null;
+
+  /**
+   * Turn on which the current WorkRole was last assigned — either by the player
+   * or by the idle role-seeking system. Used to gate auto-assignment: persons
+   * unassigned for ≥ 4 turns self-select a role based on their highest skill.
+   * Defaults to 0 (game-start founder assignments all count as "turn 0").
+   */
+  roleAssignedTurn: number;
+
+  /**
+   * Tracks the first turn each pairwise opinion crossed a threshold in a sustained
+   * direction. Used by processNamedRelationships() to detect "opinion sustained
+   * for N turns" without storing per-pair history.
+   * Key: targetId. Value: turn number threshold was first crossed (low or high).
+   * Optional — populated lazily; `?? {}` fallback for old saves.
+   */
+  opinionSustainedSince?: Partial<Record<string, number>>;
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
@@ -719,5 +814,9 @@ export function createPerson(options: CreatePersonOptions = {}, rng?: SeededRNG)
     ashkaMelathiPartnerIds: options.ashkaMelathiPartnerIds ?? [],
     ambition: options.ambition ?? null,
     traitExpiry: options.traitExpiry,
+    namedRelationships: options.namedRelationships ?? [],
+    activeScheme: options.activeScheme ?? null,
+    roleAssignedTurn: options.roleAssignedTurn ?? 0,
+    opinionSustainedSince: options.opinionSustainedSince ?? {},
   };
 }

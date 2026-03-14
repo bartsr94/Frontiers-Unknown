@@ -43,6 +43,7 @@ npx tsc --noEmit   # Type-check
 | 3.7 | Religion System — Faiths of the Ashmark | ✅ Complete |
 | 3.8 | Cultural Identity Pressure | ✅ Complete |
 | 3.9 | Trait Expansion — Character Agency | ✅ Complete |
+| 4.0 | Character Autonomy — Deep Agency | ✅ Complete |
 | 4 | Polish — The Ashmark Remembers | 🔲 Planned |
 
 **Phase 3 progress:** Language acquisition engine ✅ · Cultural identity & drift system ✅ · Founder character variety ✅ · Skills & experience tracking ✅ · Council voice system ✅ · Character portrait system ✅ · Event `add_person` consequence ✅ · Settlement buildings & construction system ✅ · Event character binding (named actors, `{slot}` interpolation, portrait strip) ✅ · Economy system (Company quota, tribe trade, spoilage, crafting) ✅ · Generic task roles (Forager, Quarrier, Lumberjack) ✅ · Tilled Fields building ✅ · Clickable role assignment ✅
@@ -57,7 +58,9 @@ npx tsc --noEmit   # Type-check
 
 **Phase 3.9 progress:** `TraitDefinition` catalog (~80 traits across 6 categories) ✅ · `mental_state` temporary traits with `traitExpiry` map ✅ · Expanded `TRAIT_CONFLICTS` (21 pairs) + `TRAIT_SHARED_BONUS` (15 entries) ✅ · `computeTraitCategoryBoosts` event-deck shaping ✅ · `applyTraitOpinionEffects` per-turn autonomous opinion drift ✅ · `getTraitSkillGrowthBonuses` per-turn skill deltas ✅ · `applyTemporaryTraitExpiry` + 5-pathway earned trait acquisition ✅ · `inheritAptitudeTraits()` called at birth ✅ · Event deck shaped by trait composition each dawn ✅ · 128 new tests ✅
 
-**981/981 tests across 32 test files — zero compile errors.**
+**Phase 4.0 progress:** Named relationships (`friend` / `rival` / `nemesis` / `confidant` / `mentor` / `student`) with opinion-gated formation and dissolution ✅ · `processNamedRelationships()` + `seedFoundingRelationships()` wired into `processDawn()` ✅ · Scheme engine — 5 scheme types (`court_person`, `convert_faith`, `befriend_person`, `undermine_person`, `tutor_person`) with progress-based event firing ✅ · 5 scheme events in `definitions/schemes.ts` ✅ · Faction system — 6 faction types (`cultural_preservationists`, `company_loyalists`, `orthodox_faithful`, `wheel_devotees`, `community_elders`, `merchant_bloc`) with membership, strength, and collective demands ✅ · `activityLog` rolling 30-entry feed with 11 log entry types ✅ · `CommunityView` tab — population/bonds summary, factions panel, activity feed ✅ · `ActivityFeed` component with per-type icons and clickable person chips ✅ · `applySharedRoleOpinionDrift()` — co-workers develop opinions passively ✅ · Bug fixes: founder trait pool expanded, ambition opinion thresholds tuned, friend threshold & sustain turns tuned ✅ · 135 new tests across 4 new test files ✅
+
+**1116/1116 tests across 36 test files — zero compile errors.**
 
 ---
 
@@ -74,3 +77,5 @@ npx tsc --noEmit   # Type-check
 - [plans/AUTONOMY_SYSTEM.md](plans/AUTONOMY_SYSTEM.md) — Character autonomy system (ambitions, intensity, 5 ambition-driven events)
 - [plans/RELIGION_SYSTEM.md](plans/RELIGION_SYSTEM.md) — Religion system design (three faiths, Hidden Wheel emergence, religious policy, Company pressure)
 - [plans/CULTURAL_IDENTITY_PRESSURE.md](plans/CULTURAL_IDENTITY_PRESSURE.md) — Cultural identity pressure design (five-zone blend scale, passive Company/tribe deltas, 6 identity events)
+- [plans/TRAIT_EXPANSION.md](plans/TRAIT_EXPANSION.md) — Trait expansion design (~80 traits, 6 categories, temporary traits, aptitude inheritance, earned trait acquisition)
+- [plans/CHARACTER_AUTONOMY_OVERHAUL.md](plans/CHARACTER_AUTONOMY_OVERHAUL.md) — Character autonomy design (named relationships, scheme engine, factions, activity log, community view)

@@ -7,15 +7,17 @@
  */
 
 import type { Dispatch, SetStateAction } from 'react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useGameStore } from '../../stores/game-store';
 import { toRoman } from '../../utils/math';
+import SettingsOverlay from '../overlays/SettingsOverlay';
 
 export type View =
   | 'settlers'
   | 'events'
   | 'settlement'
   | 'trade'
+  | 'community'
   | 'diplomacy'
   | 'map'
   | 'chronicle';
@@ -32,6 +34,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'events',      emoji: '📜', label: 'Events'     },
   { id: 'settlement',  emoji: '🏘', label: 'Settlement' },
   { id: 'trade',       emoji: '🔀', label: 'Trade'      },
+  { id: 'community',   emoji: '🏛', label: 'Community'  },
   { id: 'diplomacy',   emoji: '🤝', label: 'Diplomacy'            },
   { id: 'map',         emoji: '🗺', label: 'Map',        stub: true },
   { id: 'chronicle',   emoji: '📖', label: 'Chronicle',  stub: true },
@@ -62,6 +65,8 @@ export default function LeftNav({ activeView, setActiveView }: Props) {
   const pendingCount = useGameStore(s => s.pendingEvents.length);
   const startTurn    = useGameStore(s => s.startTurn);
   const endTurn      = useGameStore(s => s.endTurn);
+
+  const [showSettings, setShowSettings] = useState(false);
 
   // 'dawn' and 'dusk' are automatic processing phases — button disabled.
   // 'event' phase is handled by EventView — button also disabled.
@@ -97,6 +102,7 @@ export default function LeftNav({ activeView, setActiveView }: Props) {
 
   return (
     <aside className="w-44 bg-amber-950 border-r-2 border-amber-900 flex flex-col shrink-0">
+      {showSettings && <SettingsOverlay onClose={() => setShowSettings(false)} />}
 
       {/* Settlement identity */}
       <div className="px-3 pt-3 pb-2 border-b border-amber-900">
@@ -146,8 +152,8 @@ export default function LeftNav({ activeView, setActiveView }: Props) {
         })}
       </nav>
 
-      {/* End Turn */}
-      <div className="p-3 border-t border-amber-900">
+      {/* End Turn + Settings */}
+      <div className="p-3 border-t border-amber-900 space-y-1.5">
         <button
           onClick={handleEndTurn}
           disabled={isDisabled}
@@ -160,6 +166,14 @@ export default function LeftNav({ activeView, setActiveView }: Props) {
                       }`}
         >
           {buttonLabel}
+        </button>
+        <button
+          onClick={() => setShowSettings(true)}
+          className="w-full py-1 rounded text-xs text-stone-500 hover:text-stone-300 hover:bg-stone-800 transition-colors flex items-center justify-center gap-1"
+          title="Settings"
+        >
+          <span>⚙</span>
+          <span>Settings</span>
         </button>
       </div>
     </aside>
