@@ -59,6 +59,11 @@ import type { GameEvent, SkillCheckResult } from '../simulation/events/engine';
 import type { BoundEvent } from '../simulation/events/engine';
 import { resolveActors } from '../simulation/events/actor-resolver';
 import { generateId } from '../utils/id';
+import { clamp } from '../utils/math';
+import { IMANIAN_TRAITS } from '../simulation/genetics/traits';
+import { TRAIT_CONFLICTS } from '../data/trait-affinities';
+import type { SeededRNG } from '../utils/rng';
+import type { TraitId } from '../simulation/personality/traits';
 
 // Re-export economy types consumed by UI components.
 export type { TradeOffer };
@@ -144,207 +149,90 @@ export interface GameStore {
 }
 
 // ─── Serialisation helpers ───────────────────────────────────────────────────
-// GameState contains several nested Maps which are not JSON-serialisable.
-// We convert each Map to a [key, value][] array on save and reconstruct on load.
-
-/** A Person with Maps replaced by serialisable arrays for JSON storage. */
-interface SerialPerson extends Omit<Person, 'heritage' | 'relationships'> {
-  heritage: {
-    bloodline: Person['heritage']['bloodline'];
-    primaryCulture: Person['heritage']['primaryCulture'];
-    culturalFluency: [CultureId, number][];
-  };
-  relationships: [string, number][];
-}
-
-/** GameState with all Maps replaced by [key, value][] arrays. */
-interface SerialGameState
-  extends Omit<
-    GameState,
-    'people' | 'tribes' | 'culture' | 'eventCooldowns' | 'households'
-  > {
-  people: [string, SerialPerson][];
-  tribes: [string, GameState['tribes'] extends Map<string, infer V> ? V : never][];
-  households: [string, import('../simulation/turn/game-state').Household][];
-  culture: Omit<SettlementCulture, 'languages' | 'religions'> & {
-    languages: [string, number][];
-    religions: [string, number][];
-  };
-  eventCooldowns: [string, number][];
-}
-
-function serializePerson(p: Person): SerialPerson {
-  return {
-    ...p,
-    heritage: {
-      ...p.heritage,
-      culturalFluency: Array.from(p.heritage.culturalFluency.entries()),
-    },
-    relationships: Array.from(p.relationships.entries()),
-  };
-}
-
-function deserializePerson(s: SerialPerson): Person {
-  return {
-    ...s,
-    heritage: {
-      ...s.heritage,
-      culturalFluency: new Map(s.heritage.culturalFluency),
-    },
-    relationships: new Map(s.relationships),
-    // Old saves pre-dating the portrait system won't have this field; default to 1.
-    portraitVariant: s.portraitVariant ?? 1,
-    // Old saves pre-dating the household system default to unattached.
-    householdId: s.householdId ?? null,
-    householdRole: s.householdRole ?? null,
-    ashkaMelathiPartnerIds: s.ashkaMelathiPartnerIds ?? [],
-    // Old saves pre-dating the ambitions system default to null.
-    ambition: s.ambition ?? null,
-    // Old saves pre-dating the timed opinion modifier system default to empty.
-    opinionModifiers: s.opinionModifiers ?? [],
-  };
-}
-
-function serializeGameState(state: GameState): string {
-  const serial: SerialGameState = {
-    ...state,
-    people: Array.from(state.people.entries()).map(
-      ([id, p]) => [id, serializePerson(p)] as [string, SerialPerson],
-    ),
-    tribes: Array.from(state.tribes.entries()) as SerialGameState['tribes'],
-    households: Array.from(state.households.entries()),
-    culture: {
-      ...state.culture,
-      languages: Array.from(state.culture.languages.entries()),
-      religions: Array.from(state.culture.religions.entries()),
-    },
-    eventCooldowns: Array.from(state.eventCooldowns.entries()),
-  };
-  return JSON.stringify(serial);
-}
-
-function deserializeGameState(json: string): GameState {
-  const s: SerialGameState = JSON.parse(json) as SerialGameState;
-  const rawCompany = s.company as Partial<CompanyRelation> & typeof s.company;
-  const restoredCompany: CompanyRelation = {
-    ...s.company,
-    quotaContributedGold:  rawCompany.quotaContributedGold  ?? 0,
-    quotaContributedGoods: rawCompany.quotaContributedGoods ?? 0,
-  };
-  // Restore ExternalTribe fields added for the trade system.
-  const restoredTribes = new Map(
-    (s.tribes as Array<[string, ReturnType<typeof createTribe>]>).map(([id, t]) => {
-      const tribeWithFallbacks = {
-        ...t,
-        contactEstablished: t.contactEstablished ?? false,
-        lastTradeTurn:      t.lastTradeTurn      ?? null,
-        tradeHistoryCount:  t.tradeHistoryCount  ?? 0,
-        tradeDesires:       t.tradeDesires       ?? [],
-        tradeOfferings:     t.tradeOfferings     ?? [],
-      };
-      return [id, tribeWithFallbacks] as [string, typeof tribeWithFallbacks];
-    }),
-  );
-  return {
-    ...s,
-    company: restoredCompany,
-    people: new Map(s.people.map(([id, p]) => [id, deserializePerson(p)])),
-    tribes: restoredTribes,
-    culture: {
-      ...s.culture,
-      languages: new Map(s.culture.languages as [import('../simulation/population/person').LanguageId, number][]),
-      religions: new Map(s.culture.religions as [import('../simulation/population/person').ReligionId, number][]),
-      // Fallbacks for saves created before the religion system was added.
-      hiddenWheelDivergenceTurns: (s.culture as Partial<typeof s.culture>).hiddenWheelDivergenceTurns ?? 0,
-      hiddenWheelSuppressedTurns: (s.culture as Partial<typeof s.culture>).hiddenWheelSuppressedTurns ?? 0,
-      hiddenWheelEmerged:         (s.culture as Partial<typeof s.culture>).hiddenWheelEmerged         ?? false,
-    },
-    eventCooldowns: new Map(s.eventCooldowns),
-    households: new Map(s.households ?? []),
-    deferredEvents: s.deferredEvents ?? [],
-    flags: (s as GameState).flags ?? { creoleEmergedNotified: false },
-    identityPressure: (s as Partial<GameState>).identityPressure ?? { companyPressureTurns: 0, tribalPressureTurns: 0 },
-    settlement: {
-      ...(s.settlement as typeof s.settlement),
-      religiousPolicy: ((s.settlement as Partial<typeof s.settlement>).religiousPolicy) ?? 'tolerant',
-    },
-  };
-}
+// Imported from ./serialization so they can be tested without loading this store
+// (which touches localStorage via the persist middleware).
+import { serializeGameState, deserializeGameState } from './serialization';
 
 const SAVE_KEY = 'palusteria_save';
 
 // ─── Founding settlers ───────────────────────────────────────────────────────
 
-/** All properties for each founding male settler, colocated for easy editing. */
-const FOUNDING_SETTLERS: Array<{
-  firstName:  string;
-  familyName: string;
-  role:       WorkRole;
-  age:        number;
-  traits:     Person['traits'];
-  genetics:   Person['genetics'];
-}> = [
-  // 0 – Edmund Farrow, farmer 17 — young, earnest, careful
-  {
-    firstName: 'Edmund', familyName: 'Farrow', role: 'farmer', age: 17,
-    traits: ['patient', 'humble'],
-    genetics: { visibleTraits: { skinTone: 0.14, skinUndertone: 'cool_pink', hairColor: 'blonde',      hairTexture: 'straight', eyeColor: 'blue',  buildType: 'lean',     height: 'average',       facialStructure: 'oval'    }, genderRatioModifier: 0.5, extendedFertility: false },
-  },
-  // 1 – Aldric Vane, farmer 28 — weathered and broad-shouldered
-  {
-    firstName: 'Aldric', familyName: 'Vane', role: 'farmer', age: 28,
-    traits: ['strong', 'patient'],
-    genetics: { visibleTraits: { skinTone: 0.22, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'wavy',     eyeColor: 'grey',  buildType: 'athletic', height: 'tall',          facialStructure: 'broad'   }, genderRatioModifier: 0.5, extendedFertility: false },
-  },
-  // 2 – Corvin Ashby, farmer 31 — stocky, blunt-featured
-  {
-    firstName: 'Corvin', familyName: 'Ashby', role: 'farmer', age: 31,
-    traits: ['strong', 'proud'],
-    genetics: { visibleTraits: { skinTone: 0.19, skinUndertone: 'cool_pink', hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'blue',  buildType: 'stocky',   height: 'below_average', facialStructure: 'angular' }, genderRatioModifier: 0.5, extendedFertility: false },
-  },
-  // 3 – Leofric Morrow, farmer 25 — lean, narrow-faced, green-eyed
-  {
-    firstName: 'Leofric', familyName: 'Morrow', role: 'farmer', age: 25,
-    traits: ['clever', 'content'],
-    genetics: { visibleTraits: { skinTone: 0.16, skinUndertone: 'neutral',   hairColor: 'light_brown', hairTexture: 'wavy',     eyeColor: 'green', buildType: 'lean',     height: 'average',       facialStructure: 'narrow'  }, genderRatioModifier: 0.5, extendedFertility: false },
-  },
-  // 4 – Hawthorn Crale, farmer 30 — tall, grey-eyed, round features
-  {
-    firstName: 'Hawthorn', familyName: 'Crale', role: 'farmer', age: 30,
-    traits: ['robust', 'brave'],
-    genetics: { visibleTraits: { skinTone: 0.25, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'grey',  buildType: 'athletic', height: 'tall',          facialStructure: 'round'   }, genderRatioModifier: 0.5, extendedFertility: false },
-  },
-  // 5 – Oswyn Dunmore, farmer 27 — fair and blue-eyed, wavy blonde
-  {
-    firstName: 'Oswyn', familyName: 'Dunmore', role: 'farmer', age: 27,
-    traits: ['gregarious', 'honest'],
-    genetics: { visibleTraits: { skinTone: 0.13, skinUndertone: 'cool_pink', hairColor: 'blonde',      hairTexture: 'wavy',     eyeColor: 'blue',  buildType: 'lean',     height: 'tall',          facialStructure: 'oval'    }, genderRatioModifier: 0.5, extendedFertility: false },
-  },
-  // 6 – Bastian Thorn, farmer 60 — the old hand, heavyset and weathered
-  {
-    firstName: 'Bastian', familyName: 'Thorn', role: 'farmer', age: 60,
-    traits: ['traditional', 'veteran'],
-    genetics: { visibleTraits: { skinTone: 0.26, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'grey',  buildType: 'heavyset', height: 'average',       facialStructure: 'broad'   }, genderRatioModifier: 0.5, extendedFertility: false },
-  },
-  // 7 – Idris Halven, trader 24 — presentable, sharp green eyes
-  {
-    firstName: 'Idris', familyName: 'Halven', role: 'trader', age: 24,
-    traits: ['gregarious', 'deceitful'],
-    genetics: { visibleTraits: { skinTone: 0.17, skinUndertone: 'cool_pink', hairColor: 'light_brown', hairTexture: 'wavy',     eyeColor: 'green', buildType: 'lean',     height: 'tall',          facialStructure: 'narrow'  }, genderRatioModifier: 0.5, extendedFertility: false },
-  },
-  // 8 – Ren Coalwick, trader 29 — unremarkable face, watchful grey eyes
-  {
-    firstName: 'Ren', familyName: 'Coalwick', role: 'trader', age: 29,
-    traits: ['clever', 'greedy'],
-    genetics: { visibleTraits: { skinTone: 0.21, skinUndertone: 'neutral',   hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'grey',  buildType: 'athletic', height: 'average',       facialStructure: 'angular' }, genderRatioModifier: 0.5, extendedFertility: false },
-  },
-  // 9 – Callum Marsh, guard 33 — broad, blue-eyed, built to intimidate
-  {
-    firstName: 'Callum', familyName: 'Marsh', role: 'guard', age: 33,
-    traits: ['brave', 'strong'],
-    genetics: { visibleTraits: { skinTone: 0.23, skinUndertone: 'cool_pink', hairColor: 'dark_brown',  hairTexture: 'straight', eyeColor: 'blue',  buildType: 'stocky',   height: 'tall',          facialStructure: 'broad'   }, genderRatioModifier: 0.5, extendedFertility: false },
-  },
+/** Standard Imanian sex-ratio modifier: equal probability of male/female offspring. */
+const IMANIAN_GENDER_RATIO = 0.5;
+
+/** Role and age-range configuration for each male founding settler. */
+const FOUNDER_ROLES: ReadonlyArray<{ role: WorkRole; ageMin: number; ageMax: number }> = [
+  { role: 'farmer', ageMin: 17, ageMax: 23 },
+  { role: 'farmer', ageMin: 22, ageMax: 32 },
+  { role: 'farmer', ageMin: 22, ageMax: 35 },
+  { role: 'farmer', ageMin: 25, ageMax: 40 },
+  { role: 'farmer', ageMin: 25, ageMax: 40 },
+  { role: 'farmer', ageMin: 30, ageMax: 45 },
+  { role: 'farmer', ageMin: 45, ageMax: 65 },
+  { role: 'trader', ageMin: 22, ageMax: 32 },
+  { role: 'trader', ageMin: 22, ageMax: 32 },
+  { role: 'guard',  ageMin: 25, ageMax: 42 },
 ];
+
+/**
+ * Curated pool of traits that can appear on a founding colonist.
+ * Covers virtues, flaws, and aptitudes — no earned, relationship, or
+ * mental-state traits.
+ */
+const FOUNDER_TRAIT_POOL: readonly TraitId[] = [
+  'brave', 'craven', 'patient', 'clever', 'strong', 'proud', 'gregarious',
+  'honest', 'traditional', 'humble', 'content', 'ambitious', 'loyal', 'kind',
+  'generous', 'curious', 'sanguine', 'trusting', 'protective', 'welcoming',
+  'shy', 'stubborn', 'melancholic', 'deceitful', 'greedy', 'suspicious',
+  'jealous', 'wrathful', 'fickle', 'reckless', 'devout', 'cynical',
+  'green_thumb', 'keen_hunter', 'gifted_speaker', 'mentor_hearted', 'folklorist',
+];
+
+/** Returns true if two traits directly conflict with each other. */
+function traitsConflict(a: TraitId, b: TraitId): boolean {
+  return TRAIT_CONFLICTS.some(([ca, cb]) => (ca === a && cb === b) || (ca === b && cb === a));
+}
+
+/**
+ * Picks 2 non-conflicting traits from the founder pool using the seeded RNG.
+ * Falls back to a single trait if no valid pair is found within 20 attempts.
+ */
+function pickFounderTraits(rng: SeededRNG): TraitId[] {
+  const pool = FOUNDER_TRAIT_POOL;
+  const firstIdx = rng.nextInt(0, pool.length - 1);
+  const first = pool[firstIdx]!;
+  let second = first;
+  for (let i = 0; i < 20; i++) {
+    const candidate = pool[rng.nextInt(0, pool.length - 1)]!;
+    if (candidate !== first && !traitsConflict(first, candidate)) {
+      second = candidate;
+      break;
+    }
+  }
+  return second === first ? [first] : [first, second];
+}
+
+/**
+ * Samples a GeneticProfile from the Imanian ethnic distribution.
+ * Gives each founding settler a physically distinct but ethnically appropriate appearance.
+ */
+function sampleImanianGenetics(rng: SeededRNG): Person['genetics'] {
+  const d = IMANIAN_TRAITS;
+  return {
+    visibleTraits: {
+      skinTone:        clamp(rng.gaussian(d.skinTone.mean, Math.sqrt(d.skinTone.variance)), 0, 1),
+      skinUndertone:   rng.weightedPick(d.skinUndertone.weights),
+      hairColor:       rng.weightedPick(d.hairColor.weights),
+      hairTexture:     rng.weightedPick(d.hairTexture.weights),
+      eyeColor:        rng.weightedPick(d.eyeColor.weights),
+      buildType:       rng.weightedPick(d.buildType.weights),
+      height:          rng.weightedPick(d.height.weights),
+      facialStructure: rng.weightedPick(d.facialStructure.weights),
+    },
+    genderRatioModifier: IMANIAN_GENDER_RATIO,
+    extendedFertility: false,
+  };
+}
 
 // ─── Council seeding ─────────────────────────────────────────────────────────
 
@@ -365,18 +253,6 @@ function seedCouncil(people: Map<string, Person>): string[] {
 
 // ─── Initial game state factory ───────────────────────────────────────────────
 
-/**
- * Returns the key with the highest weight from a partial weight map.
- * Used to pick the most typical visible trait for a given ethnic distribution.
- */
-function dominantTrait<T extends string>(
-  weights: Partial<Record<T, number>>,
-  fallback: T,
-): T {
-  const top = (Object.entries(weights) as [T, number][]).sort((a, b) => b[1] - a[1])[0];
-  return top?.[0] ?? fallback;
-}
-
 function createInitialState(config: GameConfig, settlementName: string, seed?: number): GameState {
   // Generate a high-quality seed via the Web Crypto API when none is provided.
   // This avoids Math.random() (forbidden by Hard Rule #1) while still allowing
@@ -385,8 +261,10 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
   const rng = createRNG(resolvedSeed);
   const people = new Map<string, Person>();
 
-  FOUNDING_SETTLERS.forEach(settler => {
-    const { firstName, familyName, role, age, traits, genetics } = settler;
+  // Generate founding male settlers — names, appearance, and traits are all seeded
+  // from the game's RNG so every play-through starts with a different group.
+  for (const { role, ageMin, ageMax } of FOUNDER_ROLES) {
+    const { firstName, familyName } = generateName('male', 'ansberite', '', '', rng);
     // Traders arrive with a working knowledge of Tradetalk — it would be
     // absurd to seek trade contacts without any common tongue.
     const languages: Person['languages'] = role === 'trader'
@@ -397,15 +275,15 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
       firstName,
       familyName,
       sex: 'male',
-      age,
+      age: rng.nextInt(ageMin, ageMax),
       role,
       socialStatus: 'founding_member',
       languages,
-      genetics,
-      traits,
+      genetics: sampleImanianGenetics(rng),
+      traits: pickFounderTraits(rng),
     }, rng);
     people.set(person.id, person);
-  });
+  }
 
   // Optional founding Sauromatian women (enable via GameConfig.includeSauromatianWomen).
   if (config.includeSauromatianWomen) {
@@ -415,17 +293,11 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
     const sauroGroup = firstPreset?.ethnicGroup ?? 'kiswani_riverfolk';
     const sauroTraitDist = ETHNIC_DISTRIBUTIONS[sauroGroup];
 
-    // Ages spread across 18–26 to give variety; names generated from the correct
-    // ethnic naming pool so they match the tribe the player selected.
-    const SAURO_FOUNDING_AGES: number[] = [18, 22, 26];
-    // Each woman has a distinctive personality to make them memorable from the start.
-    const SAURO_FOUNDING_TRAITS: Person['traits'][] = [
-      ['brave', 'traditional'],
-      ['clever', 'welcoming'],
-      ['robust', 'proud'],
-    ];
+    // Three women join per starting configuration; names, appearance, and traits
+    // are seeded from the game RNG for variety across play-throughs.
+    const SAURO_AGE_RANGES = [[18, 22], [22, 27], [27, 33]] as const;
 
-    for (const [womanIndex, womanAge] of SAURO_FOUNDING_AGES.entries()) {
+    for (const [ageMin, ageMax] of SAURO_AGE_RANGES) {
       const { firstName, familyName } = generateName(
         'female',
         ETHNIC_GROUP_CULTURE[sauroGroup],
@@ -433,23 +305,24 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
         '',
         rng,
       );
-      const woman = createPerson({
+      const d = sauroTraitDist;
+      const newWoman = createPerson({
         firstName,
         familyName,
         sex: 'female',
-        age: womanAge,
+        age: rng.nextInt(ageMin, ageMax),
         role: 'unassigned',
         socialStatus: 'newcomer',
         genetics: {
           visibleTraits: {
-            skinTone: sauroTraitDist.skinTone.mean,
-            skinUndertone: dominantTrait(sauroTraitDist.skinUndertone.weights, 'warm'  as Person['genetics']['visibleTraits']['skinUndertone']),
-            hairColor:     dominantTrait(sauroTraitDist.hairColor.weights,     'black' as Person['genetics']['visibleTraits']['hairColor']),
-            hairTexture:   dominantTrait(sauroTraitDist.hairTexture.weights,   'coily' as Person['genetics']['visibleTraits']['hairTexture']),
-            eyeColor:      dominantTrait(sauroTraitDist.eyeColor.weights,      'brown' as Person['genetics']['visibleTraits']['eyeColor']),
-            buildType:     dominantTrait(sauroTraitDist.buildType.weights,     'athletic' as Person['genetics']['visibleTraits']['buildType']),
-            height:        dominantTrait(sauroTraitDist.height.weights,        'average' as Person['genetics']['visibleTraits']['height']),
-            facialStructure: dominantTrait(sauroTraitDist.facialStructure.weights, 'oval' as Person['genetics']['visibleTraits']['facialStructure']),
+            skinTone:        clamp(rng.gaussian(d.skinTone.mean, Math.sqrt(d.skinTone.variance)), 0, 1),
+            skinUndertone:   rng.weightedPick(d.skinUndertone.weights),
+            hairColor:       rng.weightedPick(d.hairColor.weights),
+            hairTexture:     rng.weightedPick(d.hairTexture.weights),
+            eyeColor:        rng.weightedPick(d.eyeColor.weights),
+            buildType:       rng.weightedPick(d.buildType.weights),
+            height:          rng.weightedPick(d.height.weights),
+            facialStructure: rng.weightedPick(d.facialStructure.weights),
           },
           genderRatioModifier: 0.14, // Pure Sauromatian
           extendedFertility: true,
@@ -467,9 +340,9 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
           { language: 'tradetalk', fluency: 0.3 },
         ],
         religion: 'sacred_wheel',
-        traits: SAURO_FOUNDING_TRAITS[womanIndex] ?? [],
+        traits: pickFounderTraits(rng),
       }, rng);
-      people.set(woman.id, woman);
+      people.set(newWoman.id, newWoman);
     }
   }
 
@@ -511,7 +384,7 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
   const company: CompanyRelation = {
     standing: 60,
     annualQuotaGold: 20,
-    annualQuotaTradeGoods: 5,
+    annualQuotaGoods: 5,
     consecutiveFailures: 0,
     supportLevel: 'standard',
     yearsActive: 0,
@@ -526,8 +399,7 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
     if (preset) {
       const tribe = createTribe(preset);
       // Starting tribes are known contacts — trade is available immediately.
-      tribe.contactEstablished = true;
-      tribes.set(tribe.id, tribe);
+      tribes.set(tribe.id, { ...tribe, contactEstablished: true });
     }
   }
 
@@ -763,6 +635,15 @@ export const useGameStore = create<GameStore>((set, get) => {
       const drawCount = 1 + rng.nextInt(0, 2);
       const hasTradingPost = hasBuilding(stateAfterDrain.settlement.buildings, 'trading_post');
       const weightBoosts: Record<string, number> = hasTradingPost ? { 'eco_passing_merchant': 2 } : {};
+      // Apply per-category boosts derived from the settlement's trait composition
+      if (dawnResult.traitCategoryBoosts) {
+        for (const event of eligible) {
+          const boost = dawnResult.traitCategoryBoosts[event.category as keyof typeof dawnResult.traitCategoryBoosts];
+          if (boost !== undefined) {
+            weightBoosts[event.id] = (weightBoosts[event.id] ?? 1) * boost;
+          }
+        }
+      }
       const drawn     = drawEvents(eligible, drawCount, rng, weightBoosts);
 
       // Bind actors to each drawn event using the seeded RNG.
@@ -870,6 +751,9 @@ export const useGameStore = create<GameStore>((set, get) => {
       const { gameState } = get();
       if (!gameState) return;
 
+      if (!_pendingProduction || !_pendingConsumption) {
+        console.error('[Palusteria] endTurn() called without a preceding startTurn() — production and consumption will be zero.');
+      }
       const production = _pendingProduction ?? emptyResourceStock();
       const consumption = _pendingConsumption ?? emptyResourceStock();
 

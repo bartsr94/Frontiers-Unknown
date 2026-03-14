@@ -30,11 +30,12 @@ import type {
   HeightClass,
   FacialStructure,
 } from './traits';
-import type { Person, BloodlineEntry, EthnicGroup } from '../population/person';
+import type { Person, BloodlineEntry, EthnicGroup, TraitId } from '../population/person';
 import type { SeededRNG } from '../../utils/rng';
 import { clamp } from '../../utils/math';
 import { ETHNIC_DISTRIBUTIONS } from '../../data/ethnic-distributions';
 import { resolveGenderRatio } from './gender-ratio';
+import { TRAIT_DEFINITIONS } from '../../data/trait-definitions';
 
 // ─── Bloodline Averaging ──────────────────────────────────────────────────────
 
@@ -372,4 +373,49 @@ export function resolveInheritance(
   const extendedFertility = mother.genetics.extendedFertility;
 
   return { visibleTraits, genderRatioModifier, extendedFertility };
+}
+
+// ─── Aptitude Trait Inheritance ───────────────────────────────────────────────
+
+/**
+ * Determines which aptitude personality-traits a child may inherit from their parents.
+ *
+ * Only traits with `inheritWeight > 0` in TRAIT_DEFINITIONS are eligible.
+ * For each eligible trait:
+ *   - Both parents have it  → child rolls against inheritWeight × 1.5
+ *   - One parent has it     → child rolls against inheritWeight
+ *   - Neither parent has it → no roll
+ *
+ * Returns the list of TraitIds the child should receive.
+ * Called by the fertility system during birth resolution.
+ *
+ * @param mother - Mother person.
+ * @param father - Father person.
+ * @param rng    - Seeded PRNG for this birth event.
+ */
+export function inheritAptitudeTraits(
+  mother: Person,
+  father: Person,
+  rng: SeededRNG,
+): TraitId[] {
+  const inherited: TraitId[] = [];
+
+  for (const [traitId, def] of Object.entries(TRAIT_DEFINITIONS)) {
+    if (!def.inheritWeight || def.inheritWeight <= 0) continue;
+
+    const motherHas = mother.traits.includes(traitId as TraitId);
+    const fatherHas = father.traits.includes(traitId as TraitId);
+
+    if (!motherHas && !fatherHas) continue;
+
+    const baseWeight = def.inheritWeight;
+    const roll = rng.next();
+    const threshold = (motherHas && fatherHas) ? baseWeight * 1.5 : baseWeight;
+
+    if (roll < Math.min(threshold, 0.95)) {
+      inherited.push(traitId as TraitId);
+    }
+  }
+
+  return inherited;
 }

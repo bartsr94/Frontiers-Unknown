@@ -26,6 +26,7 @@ import type { EthnicGroup, HouseholdRole } from '../../simulation/population/per
 import { getSkillRating, getDerivedSkill } from '../../simulation/population/person';
 import type { SkillId, DerivedSkillId, SkillRating } from '../../simulation/population/person';
 import type { TraitId } from '../../simulation/personality/traits';
+import { TRAIT_DEFINITIONS } from '../../data/trait-definitions';
 import { ROLE_LABELS, ROLE_COLORS } from '../shared/role-display';
 import { getAmbitionLabel, getAmbitionIntensityClass } from '../../simulation/population/ambitions';
 import { computeOpinionBreakdown, getEffectiveOpinion } from '../../simulation/population/opinions';
@@ -54,74 +55,31 @@ const GROUP_LABELS: Record<EthnicGroup, string> = {
   hanjoda_emrasi:       'Hanjoda (Emrasi)',
 };
 
-// ─── Trait badge colours ──────────────────────────────────────────────────────
+// ─── Trait badge display ─────────────────────────────────────────────────────
 
-const TRAIT_COLORS: Record<string, string> = {
-  // Positive personality — Or (gold)
-  ambitious:   'bg-amber-900/70 text-amber-200',
-  brave:       'bg-amber-900/70 text-amber-200',
-  kind:        'bg-amber-900/70 text-amber-200',
-  generous:    'bg-amber-900/70 text-amber-200',
-  patient:     'bg-amber-900/70 text-amber-200',
-  honest:      'bg-amber-900/70 text-amber-200',
-  humble:      'bg-amber-900/70 text-amber-200',
-  gregarious:  'bg-amber-900/70 text-amber-200',
-  // Negative personality — Gules (red)
-  cruel:       'bg-red-950/70 text-red-300',
-  craven:      'bg-red-950/70 text-red-300',
-  greedy:      'bg-red-950/70 text-red-300',
-  deceitful:   'bg-red-950/70 text-red-300',
-  wrathful:    'bg-red-950/70 text-red-300',
-  proud:       'bg-red-950/70 text-red-300',
-  shy:         'bg-red-950/70 text-red-300',
-  content:     'bg-red-950/70 text-red-300',
-  lustful:     'bg-red-950/70 text-red-300',
-  chaste:      'bg-red-950/70 text-red-300',
-  coward:      'bg-red-950/70 text-red-300',
-  // Aptitude — Azure (blue)
-  strong:      'bg-blue-950/70 text-blue-300',
-  weak:        'bg-blue-950/70 text-blue-300',
-  clever:      'bg-blue-950/70 text-blue-300',
-  slow:        'bg-blue-950/70 text-blue-300',
-  beautiful:   'bg-blue-950/70 text-blue-300',
-  plain:       'bg-blue-950/70 text-blue-300',
-  robust:      'bg-blue-950/70 text-blue-300',
-  sickly:      'bg-blue-950/70 text-blue-300',
-  fertile:     'bg-blue-950/70 text-blue-300',
-  barren:      'bg-blue-950/70 text-blue-300',
-  // Cultural — Sable (stone)
-  traditional: 'bg-stone-700/80 text-stone-300',
-  cosmopolitan:'bg-stone-700/80 text-stone-300',
-  devout:      'bg-stone-700/80 text-stone-300',
-  skeptical:   'bg-stone-700/80 text-stone-300',
-  xenophobic:  'bg-stone-700/80 text-stone-300',
-  welcoming:   'bg-stone-700/80 text-stone-300',
-  // Earned — Vert (green)
-  veteran:          'bg-emerald-950/70 text-emerald-300',
-  scarred:          'bg-emerald-950/70 text-emerald-300',
-  respected_elder:  'bg-emerald-950/70 text-emerald-300',
-  hero:             'bg-emerald-950/70 text-emerald-300',
-  wealthy:          'bg-emerald-950/70 text-emerald-300',
-  scandal:          'bg-red-950/70 text-red-300',
-  oath_breaker:     'bg-red-950/70 text-red-300',
-  indebted:         'bg-red-950/70 text-red-300',
+/** CSS classes per trait category. */
+const CATEGORY_COLORS: Record<string, string> = {
+  personality:   'bg-amber-900/70 text-amber-200',
+  aptitude:      'bg-blue-950/70 text-blue-300',
+  cultural:      'bg-stone-700/80 text-stone-300',
+  earned:        'bg-emerald-950/70 text-emerald-300',
+  relationship:  'bg-violet-950/70 text-violet-300',
+  mental_state:  'bg-yellow-900/70 text-yellow-200',
 };
 
-const TRAIT_LABELS: Record<TraitId, string> = {
-  ambitious: 'Ambitious', content: 'Content', gregarious: 'Gregarious', shy: 'Shy',
-  brave: 'Brave', craven: 'Craven', cruel: 'Cruel', kind: 'Kind',
-  greedy: 'Greedy', generous: 'Generous', lustful: 'Lustful', chaste: 'Chaste',
-  wrathful: 'Wrathful', patient: 'Patient', deceitful: 'Deceitful', honest: 'Honest',
-  proud: 'Proud', humble: 'Humble',
-  strong: 'Strong', weak: 'Weak', clever: 'Clever', slow: 'Slow',
-  beautiful: 'Beautiful', plain: 'Plain', robust: 'Robust', sickly: 'Sickly',
-  fertile: 'Fertile', barren: 'Barren',
-  traditional: 'Traditional', cosmopolitan: 'Cosmopolitan', devout: 'Devout',
-  skeptical: 'Skeptical', xenophobic: 'Xenophobic', welcoming: 'Welcoming',
-  veteran: 'Veteran', scarred: 'Scarred', respected_elder: 'Respected Elder',
-  scandal: 'Scandal', oath_breaker: 'Oath-Breaker', hero: 'Hero',
-  coward: 'Coward', wealthy: 'Wealthy', indebted: 'Indebted',
-};
+/** Returns the display label for a trait, falling back to a title-cased ID. */
+function traitLabel(id: TraitId): string {
+  const def = TRAIT_DEFINITIONS[id];
+  if (def) return def.name;
+  // Fallback: replace underscores with spaces and title-case each word.
+  return id.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/** Returns the CSS colour classes for a trait badge. */
+function traitColor(id: TraitId): string {
+  const category = TRAIT_DEFINITIONS[id]?.category;
+  return CATEGORY_COLORS[category ?? ''] ?? 'bg-stone-700 text-stone-300';
+}
 // ─── Skill display helpers ───────────────────────────────────────────────────────
 
 const BASE_SKILLS: Array<{ id: SkillId; label: string }> = [
@@ -434,9 +392,10 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
             {person.traits.map(traitId => (
               <span
                 key={traitId}
-                className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${TRAIT_COLORS[traitId] ?? 'bg-stone-700 text-stone-300'}`}
+                className={`inline-block px-2 py-0.5 rounded text-xs font-medium cursor-help ${traitColor(traitId)}`}
+                title={TRAIT_DEFINITIONS[traitId]?.description}
               >
-                {TRAIT_LABELS[traitId] ?? traitId}
+                {traitLabel(traitId)}
               </span>
             ))}
           </div>
@@ -568,7 +527,8 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
           ]);
           const opinionEntries = Array.from(allTargetIds)
             .map(id => ({ id, score: getEffectiveOpinion(person, id) }))
-            .filter(e => e.score !== 0);
+            .filter(e => e.score !== 0)
+            .filter(e => nameOf(e.id) !== 'Unknown');
 
           const positives = opinionEntries
             .filter(e => e.score > 0)

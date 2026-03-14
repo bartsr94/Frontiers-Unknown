@@ -17,7 +17,7 @@ function makeCompany(overrides: Partial<CompanyRelation> = {}): CompanyRelation 
   return {
     standing: 60,
     annualQuotaGold: 0,
-    annualQuotaTradeGoods: 0,
+    annualQuotaGoods: 0,
     consecutiveFailures: 0,
     supportLevel: 'standard',
     yearsActive: 1,

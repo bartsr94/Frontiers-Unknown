@@ -32,7 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'events',      emoji: '📜', label: 'Events'     },
   { id: 'settlement',  emoji: '🏘', label: 'Settlement' },
   { id: 'trade',       emoji: '🔀', label: 'Trade'      },
-  { id: 'diplomacy',   emoji: '🤝', label: 'Diplomacy',  stub: true },
+  { id: 'diplomacy',   emoji: '🤝', label: 'Diplomacy'            },
   { id: 'map',         emoji: '🗺', label: 'Map',        stub: true },
   { id: 'chronicle',   emoji: '📖', label: 'Chronicle',  stub: true },
 ];

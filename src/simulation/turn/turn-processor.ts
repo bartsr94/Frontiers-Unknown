@@ -64,6 +64,8 @@ import {
 } from '../population/ambitions';
 import { processIdentityPressure } from '../culture/identity-pressure';
 import type { IdentityPressureResult } from '../culture/identity-pressure';
+import { computeTraitCategoryBoosts, applyTraitOpinionEffects, getTraitSkillGrowthBonuses } from '../personality/trait-behavior';
+import { applyTemporaryTraitExpiry, checkEarnedTraitAcquisition } from '../personality/assignment';
 
 // ─── Result Types ─────────────────────────────────────────────────────────────
 
@@ -150,6 +152,13 @@ export interface DawnResult {
   shouldFireHiddenWheelEvent: boolean;
   /** Result of cultural identity pressure computation for this dawn. */
   identityPressureResult: IdentityPressureResult;
+  /** Trait gains and expirations that occurred this dawn. */
+  traitChanges: Array<{ personId: string; gained?: string; lost?: string }>;
+  /**
+   * Per-EventCategory multipliers driven by the settlement's social/personality
+   * composition. Passed to drawEvents() as weightBoosts in the store.
+   */
+  traitCategoryBoosts: Partial<Record<import('../events/engine').EventCategory, number>>;
 }
 
 /** Data returned by processDusk(). The store applies these to GameState. */
@@ -282,42 +291,51 @@ function toGraveyardEntry(person: Person, deathYear: number, cause: string): Gra
 
 // ─── Dawn Phase ───────────────────────────────────────────────────────────────
 
+/** How often (in turns) baseline opinions and new ambitions are (re-)seeded. */
+const OPINION_INIT_INTERVAL = 8;
+
+// ─── Dawn helper: people-update merging ──────────────────────────────────────
+
 /**
- * Processes the Dawn Phase of a turn.
+ * Merges changed-person entries from `updates` into the working `target` map.
  *
- * Operations (in order):
- *   1.  Age all people by 0.25 years (one season).
- *   2.  Resolve due pregnancies → births + potential maternal deaths.
- *   2b. Attempt conception for married couples.
- *   3.  Process natural death (age-based probability, modified by traits + overcrowding).
- *   4.  Process child mortality (under-5, reduced by medicine stock, buildings, overcrowding).
- *   4.5 Advance construction projects; complete buildings; free workers.
- *   5.  Calculate resource production (role-based + building bonuses − overcrowding penalty).
- *   6.  Calculate resource consumption.
- *   7.  Apply language drift (multiplied by Gathering Hall if present).
- *   8.  Apply cultural drift (community + spouse + building culture pull).
- *   8b. Recalculate settlement language metrics.
- *   8.5 Apply skill growth bonuses from buildings.
- *   9.  Recalculate cultural blend and religion distribution.
+ * Most social sub-systems (opinions, cultural drift, ambitions) return only the
+ * entries they modified rather than a full copy of the people map. This helper
+ * applies those partial results back to the working map in a single loop.
  */
-export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
+function mergePeopleUpdates(
+  target: Map<string, Person>,
+  updates: Map<string, Person>,
+): void {
+  for (const [id, person] of updates) {
+    target.set(id, person);
+  }
+}
+
+// ─── Dawn helper: demographic phase (births, conception, death) ───────────────
+
+interface DemographicsResult {
+  births: BirthNotification[];
+  newGraveyardEntries: GraveyardEntry[];
+}
+
+/**
+ * Resolves births, conception attempts, natural death, and child mortality.
+ * Mutates `updatedPeople` in-place (adds newborns, removes the deceased).
+ *
+ * @returns Births and graveyard entries for notification and history logging.
+ */
+function processDemographicPhase(
+  updatedPeople: Map<string, Person>,
+  overcrowdingMortality: ReturnType<typeof getOvercrowdingMortalityModifiers>,
+  buildingChildMortalityModifier: number,
+  state: GameState,
+  rng: SeededRNG,
+): DemographicsResult {
   const newGraveyardEntries: GraveyardEntry[] = [];
   const births: BirthNotification[] = [];
 
-  // 1. Clone people Map and age each person by one season (0.25 years).
-  const updatedPeople = new Map<string, Person>();
-  for (const [id, person] of state.people) {
-    updatedPeople.set(id, { ...person, age: person.age + 0.25 });
-  }
-
-  // Compute overcrowding ratio early — used by mortality steps below.
-  const overcrowdingRatio = getOvercrowdingRatio(
-    updatedPeople.size,
-    state.settlement.buildings ?? [],
-  );
-  const overcrowdingMortality = getOvercrowdingMortalityModifiers(overcrowdingRatio);
-
-  // 2. Resolve due pregnancies.
+  // Resolve due pregnancies.
   const birthResults = processPregnancies(
     updatedPeople,
     state.turnNumber,
@@ -333,7 +351,6 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
       ? updatedPeople.get(mother.health.pregnancy.fatherId)
       : undefined;
 
-    // Generate a culturally appropriate name for the child.
     const { firstName, familyName } = generateName(
       result.child.sex,
       result.child.heritage.primaryCulture,
@@ -343,16 +360,13 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     );
 
     const namedChild: Person = { ...result.child, firstName, familyName };
-
-    // Add newborn to map.
     updatedPeople.set(namedChild.id, namedChild);
 
-    // Update mother: clear pregnancy, apply health delta, add child.
     if (result.motherDied) {
       newGraveyardEntries.push(toGraveyardEntry(mother, state.currentYear, 'childbirth'));
       updatedPeople.delete(mother.id);
     } else {
-      const updatedMother: Person = {
+      updatedPeople.set(mother.id, {
         ...mother,
         health: {
           ...mother.health,
@@ -360,17 +374,14 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
           currentHealth: Math.max(0, mother.health.currentHealth + result.motherHealthDelta),
         },
         childrenIds: [...mother.childrenIds, namedChild.id],
-      };
-      updatedPeople.set(mother.id, updatedMother);
+      });
     }
 
-    // Update father's childrenIds if he is still alive.
     if (father) {
-      const updatedFather: Person = {
+      updatedPeople.set(father.id, {
         ...father,
         childrenIds: [...father.childrenIds, namedChild.id],
-      };
-      updatedPeople.set(father.id, updatedFather);
+      });
     }
 
     births.push({
@@ -382,32 +393,24 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     });
   }
 
-  // 2b. Attempt conception for all married women who are not already pregnant.
+  // Attempt conception for all married women not already pregnant.
   for (const woman of Array.from(updatedPeople.values())) {
     if (woman.sex !== 'female' || woman.health.pregnancy) continue;
-
     for (const spouseId of woman.spouseIds) {
       const man = updatedPeople.get(spouseId);
       if (!man || man.sex !== 'male') continue;
-
       const pregnancy = attemptConception(woman, man, state.turnNumber, state.currentSeason, rng);
       if (pregnancy) {
-        updatedPeople.set(woman.id, {
-          ...woman,
-          health: { ...woman.health, pregnancy },
-        });
-        break; // one conception attempt per woman per season
+        updatedPeople.set(woman.id, { ...woman, health: { ...woman.health, pregnancy } });
+        break;
       }
     }
   }
 
-  // 3. Process natural deaths (age-based, elderly overcrowding modifier).
+  // Natural deaths (age-based, overcrowding multiplier for elderly).
   for (const person of Array.from(updatedPeople.values())) {
     let deathChance = calculateNaturalDeathChance(person);
-    // Overcrowding worsens chances for the elderly (60+).
-    if (person.age >= 60) {
-      deathChance *= overcrowdingMortality.elderlyDeathMultiplier;
-    }
+    if (person.age >= 60) deathChance *= overcrowdingMortality.elderlyDeathMultiplier;
     deathChance = clamp(deathChance, 0, 0.95);
     if (deathChance > 0 && rng.next() < deathChance) {
       newGraveyardEntries.push(toGraveyardEntry(person, state.currentYear, 'old_age'));
@@ -415,14 +418,12 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     }
   }
 
-  // 4. Process child mortality (under-5).
-  // Building modifier (Healer's Hut) and overcrowding modifier both apply.
+  // Child mortality (under-5, building modifier + overcrowding modifier).
   const medicineStock = state.settlement.resources.medicine;
-  const buildingChildModifier = getChildMortalityModifier(state.settlement.buildings ?? []);
   for (const person of Array.from(updatedPeople.values())) {
     if (person.age >= 5) continue;
     let deathChance = calculateChildMortalityChance(person, medicineStock);
-    deathChance *= buildingChildModifier;
+    deathChance *= buildingChildMortalityModifier;
     deathChance *= overcrowdingMortality.childMortalityMultiplier;
     deathChance = clamp(deathChance, 0, 0.50);
     if (deathChance > 0 && rng.next() < deathChance) {
@@ -431,87 +432,29 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     }
   }
 
-  // 4.5. Advance construction projects.
-  const constructionResult = processConstruction(
-    state.settlement.constructionQueue ?? [],
-    updatedPeople,
-    state.turnNumber,
-    rng,
-  );
-  // Reset completed workers to 'unassigned'.
-  for (const workerId of constructionResult.completedWorkerIds) {
-    const w = updatedPeople.get(workerId);
-    if (w) updatedPeople.set(workerId, { ...w, role: 'unassigned' });
-  }
+  return { births, newGraveyardEntries };
+}
 
-  // Updated buildings list (completed buildings added, replaced ones removed).
-  let currentBuildings = [...(state.settlement.buildings ?? [])];
-  for (const removedId of constructionResult.removedBuildingIds) {
-    currentBuildings = currentBuildings.filter(b => b.defId !== removedId);
-  }
-  currentBuildings = [...currentBuildings, ...constructionResult.completedBuildings];
+// ─── Dawn helper: Ashka-Melathi household bond formation ─────────────────────
 
-  // 5 & 6. Calculate production and consumption using updated buildings + overcrowding.
-  const updatedSettlementForProduction = {
-    ...state.settlement,
-    buildings: currentBuildings,
-    constructionQueue: constructionResult.updatedQueue,
-  };
-  const production = calculateProduction(
-    updatedPeople,
-    updatedSettlementForProduction,
-    state.currentSeason,
-    overcrowdingRatio,
-  );
-  const consumption = calculateConsumption(updatedPeople);
+interface HouseholdBondResult {
+  updatedHouseholds: Map<string, Household>;
+  newAshkaMelathiBonds: Array<[string, string, string]>;
+}
 
-  // 7. Apply language drift — each survivor gains incremental fluency in
-  //    community languages based on age and the settlement's current distribution.
-  //    Gathering Hall multiplies the drift rate.
-  const langDriftMultiplier = getLanguageDriftMultiplier(currentBuildings);
-  const currentLangFractions = state.culture.languages;
-  for (const [id, person] of updatedPeople) {
-    const updatedLanguages = applyLanguageDrift(
-      person,
-      currentLangFractions,
-      langDriftMultiplier,
-    );
-    updatedPeople.set(id, { ...person, languages: updatedLanguages });
-  }
-
-  // 8. Apply cultural drift — community pull + spouse bonds + building culture pull.
-  const buildingCulturePull = getBuildingCulturePull(currentBuildings);
-  const culturallyDrifted = processCulturalDrift(updatedPeople, rng, buildingCulturePull);
-  for (const [id, person] of culturallyDrifted) {
-    updatedPeople.set(id, person);
-  }
-
-  // 8b. Recalculate settlement language distribution from the updated population.
-  const updatedLanguageFractions = updateSettlementLanguages(updatedPeople);
-  const newLanguageTension = updateLanguageTension(updatedLanguageFractions);
-  const newLanguageDiversityTurns = updateLanguageDiversityTurns(
-    updatedLanguageFractions,
-    state.culture.languageDiversityTurns,
-  );
-
-  // 8.5. Apply skill growth bonuses from buildings.
-  for (const [id, person] of updatedPeople) {
-    const bonuses = getSkillGrowthBonuses(currentBuildings, person, state.councilMemberIds);
-    const skillKeys = Object.keys(bonuses) as SkillId[];
-    if (skillKeys.length > 0) {
-      const newSkills = { ...person.skills };
-      for (const skill of skillKeys) {
-        newSkills[skill] = Math.min(100, (newSkills[skill] ?? 0) + (bonuses[skill] ?? 0));
-      }
-      updatedPeople.set(id, { ...person, skills: newSkills });
-    }
-  }
-
-  // 8.75. Form Ashka-Melathi bonds between co-wives sharing a household.
+/**
+ * Checks all multi-wife households for new Ashka-Melathi bond formation (~15%/season).
+ * Mutates `updatedPeople` in-place when bonds are formed (updates ashkaMelathiPartnerIds).
+ */
+function processHouseholdBonds(
+  updatedPeople: Map<string, Person>,
+  households: Map<string, Household>,
+  rng: SeededRNG,
+): HouseholdBondResult {
   const updatedHouseholds = new Map<string, Household>();
   const newAshkaMelathiBonds: Array<[string, string, string]> = [];
 
-  for (const household of (state.households ?? new Map<string, Household>()).values()) {
+  for (const household of households.values()) {
     const wives = household.memberIds
       .map(id => updatedPeople.get(id))
       .filter(
@@ -538,7 +481,6 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
           updatedHousehold.ashkaMelathiBonds.push([wA.id, wB.id]);
           newAshkaMelathiBonds.push([household.id, wA.id, wB.id]);
           changed = true;
-          // Mirror on each person's ashkaMelathiPartnerIds.
           const pA = updatedPeople.get(wA.id);
           const pB = updatedPeople.get(wB.id);
           if (pA && !pA.ashkaMelathiPartnerIds.includes(wB.id)) {
@@ -560,56 +502,215 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     if (changed) updatedHouseholds.set(household.id, updatedHousehold);
   }
 
-  // 8.8. Opinions — per-turn cultural/language drift, then decay toward neutral;
-  // initialize new pairs every 8 turns (O(n²), guarded by OPINION_TRACK_CAP).
-  const opinionsDrifted = applyOpinionDrift(updatedPeople);
-  for (const [id, person] of opinionsDrifted) {
-    updatedPeople.set(id, person);
-  }
-  const opinionsDecayed = decayOpinions(updatedPeople);
-  for (const [id, person] of opinionsDecayed) {
-    updatedPeople.set(id, person);
-  }
-  const modifiersDecayed = decayOpinionModifiers(updatedPeople);
-  for (const [id, person] of modifiersDecayed) {
-    updatedPeople.set(id, person);
-  }
+  return { updatedHouseholds, newAshkaMelathiBonds };
+}
 
-  const OPINION_INIT_INTERVAL = 8;
-  if (state.turnNumber % OPINION_INIT_INTERVAL === 0) {
-    const opinionsInitialized = initializeBaselineOpinions(updatedPeople);
-    for (const [id, person] of opinionsInitialized) {
-      updatedPeople.set(id, person);
-    }
-  }
+// ─── Dawn helper: opinion social systems ─────────────────────────────────────
 
-  // 8.9. Ambitions — tick intensity; evaluate fulfillment; generate new ones every 8 turns.
+/**
+ * Applies per-turn opinion drift, decay, modifier decay, and (every 8 turns)
+ * baseline re-seeding for any new settler pairs.
+ * Mutates `updatedPeople` in-place.
+ */
+function processOpinionSystems(
+  updatedPeople: Map<string, Person>,
+  turnNumber: number,
+): void {
+  mergePeopleUpdates(updatedPeople, applyOpinionDrift(updatedPeople));
+  mergePeopleUpdates(updatedPeople, decayOpinions(updatedPeople));
+  mergePeopleUpdates(updatedPeople, decayOpinionModifiers(updatedPeople));
+  if (turnNumber % OPINION_INIT_INTERVAL === 0) {
+    mergePeopleUpdates(updatedPeople, initializeBaselineOpinions(updatedPeople));
+  }
+}
+
+// ─── Dawn helper: ambition systems ───────────────────────────────────────────
+
+/**
+ * Ticks ambition intensity, evaluates fulfillment, and (every 8 turns) generates
+ * new ambitions for eligible settlers without one.
+ * Mutates `updatedPeople` in-place.
+ */
+function processAmbitionSystems(
+  updatedPeople: Map<string, Person>,
+  state: GameState,
+  rng: SeededRNG,
+  turnNumber: number,
+): void {
   for (const [id, person] of updatedPeople) {
     let p = tickAmbitionIntensity(person);
 
     if (p.ambition) {
       const outcome = evaluateAmbition(p, { ...state, people: updatedPeople });
-      if (outcome !== 'ongoing') {
-        p = clearAmbition(p);
-      }
+      if (outcome !== 'ongoing') p = clearAmbition(p);
     }
 
-    if (!p.ambition && state.turnNumber % OPINION_INIT_INTERVAL === 0) {
+    if (!p.ambition && turnNumber % OPINION_INIT_INTERVAL === 0) {
       const newAmbition = generateAmbition(p, { ...state, people: updatedPeople }, rng);
-      if (newAmbition) {
-        p = { ...p, ambition: newAmbition };
-      }
+      if (newAmbition) p = { ...p, ambition: newAmbition };
     }
 
-    if (p !== person) {
-      updatedPeople.set(id, p);
+    if (p !== person) updatedPeople.set(id, p);
+  }
+}
+
+// ─── processDawn ──────────────────────────────────────────────────────────────
+
+/**
+ * Processes the Dawn Phase of a turn.
+ *
+ * Delegates each major concern to a focused helper; this function is an
+ * orchestrator that sequences them and collects their outputs into DawnResult.
+ *
+ * Sub-system call order:
+ *   1.  Age all people by 0.25 years (one season).
+ *   2–4. Demographics: births, conception, natural death, child mortality.
+ *   4.5  Construction progress; buildings completed; workers freed.
+ *   5–6. Production and consumption deltas.
+ *   7.   Language drift.
+ *   8.   Cultural drift + building culture pull.
+ *   8b.  Settlement language metrics recalculated.
+ *   8.5  Skill growth bonuses from buildings.
+ *   8.75 Ashka-Melathi household bond formation.
+ *   8.8  Opinion drift, decay, and baseline re-seeding.
+ *   8.9  Ambition tick, evaluation, and generation.
+ *   9.   Cultural blend, religion distribution, religious tension, hidden wheel.
+ *   9.6  Cultural identity pressure.
+ */
+export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
+  // 1. Clone people Map and age each person by one season (0.25 years).
+  const updatedPeople = new Map<string, Person>();
+  for (const [id, person] of state.people) {
+    updatedPeople.set(id, { ...person, age: person.age + 0.25 });
+  }
+
+  // Compute overcrowding ratio early — used by mortality steps below.
+  const overcrowdingRatio = getOvercrowdingRatio(
+    updatedPeople.size,
+    state.settlement.buildings ?? [],
+  );
+  const overcrowdingMortality = getOvercrowdingMortalityModifiers(overcrowdingRatio);
+
+  const buildingChildModifier = getChildMortalityModifier(state.settlement.buildings ?? []);
+
+  // 2–4. Demographics: births, conception, natural death, child mortality.
+  const { births, newGraveyardEntries } = processDemographicPhase(
+    updatedPeople,
+    overcrowdingMortality,
+    buildingChildModifier,
+    state,
+    rng,
+  );
+
+  // 4.5. Advance construction projects; complete buildings; free workers.
+  const constructionResult = processConstruction(
+    state.settlement.constructionQueue ?? [],
+    updatedPeople,
+    state.turnNumber,
+    rng,
+  );
+  for (const workerId of constructionResult.completedWorkerIds) {
+    const w = updatedPeople.get(workerId);
+    if (w) updatedPeople.set(workerId, { ...w, role: 'unassigned' });
+  }
+  let currentBuildings = [...(state.settlement.buildings ?? [])];
+  for (const removedId of constructionResult.removedBuildingIds) {
+    currentBuildings = currentBuildings.filter(b => b.defId !== removedId);
+  }
+  currentBuildings = [...currentBuildings, ...constructionResult.completedBuildings];
+
+  // 5–6. Production and consumption.
+  const production = calculateProduction(
+    updatedPeople,
+    { ...state.settlement, buildings: currentBuildings, constructionQueue: constructionResult.updatedQueue },
+    state.currentSeason,
+    overcrowdingRatio,
+  );
+  const consumption = calculateConsumption(updatedPeople);
+
+  // 7. Language drift (multiplied by Gathering Hall if present).
+  const langDriftMultiplier = getLanguageDriftMultiplier(currentBuildings);
+  for (const [id, person] of updatedPeople) {
+    updatedPeople.set(id, {
+      ...person,
+      languages: applyLanguageDrift(person, state.culture.languages, langDriftMultiplier),
+    });
+  }
+
+  // 8. Cultural drift (community + spouse bonds + building culture pull).
+  mergePeopleUpdates(
+    updatedPeople,
+    processCulturalDrift(updatedPeople, rng, getBuildingCulturePull(currentBuildings)),
+  );
+
+  // 8b. Settlement language metrics.
+  const updatedLanguageFractions = updateSettlementLanguages(updatedPeople);
+  const newLanguageTension = updateLanguageTension(updatedLanguageFractions);
+  const newLanguageDiversityTurns = updateLanguageDiversityTurns(
+    updatedLanguageFractions,
+    state.culture.languageDiversityTurns,
+  );
+
+  // 8.5. Skill growth from buildings.
+  for (const [id, person] of updatedPeople) {
+    const bonuses = getSkillGrowthBonuses(currentBuildings, person, state.councilMemberIds);
+    const traitBonuses = getTraitSkillGrowthBonuses(person);
+    const allSkillKeys = new Set<SkillId>([
+      ...(Object.keys(bonuses) as SkillId[]),
+      ...(Object.keys(traitBonuses) as SkillId[]),
+    ]);
+    if (allSkillKeys.size > 0) {
+      const newSkills = { ...person.skills };
+      for (const skill of allSkillKeys) {
+        const buildingBonus = bonuses[skill] ?? 0;
+        const traitBonus = traitBonuses[skill] ?? 0;
+        newSkills[skill] = Math.min(100, Math.max(1, (newSkills[skill] ?? 0) + buildingBonus + traitBonus));
+      }
+      updatedPeople.set(id, { ...person, skills: newSkills });
     }
   }
 
-  // 9. Recalculate cultural blend and religion distribution from the updated population.
-  const updatedCultureBlend = computeCulturalBlend(updatedPeople);  const updatedReligions = computeReligionDistribution(updatedPeople);
+  // 8.75. Ashka-Melathi household bond formation.
+  const { updatedHouseholds, newAshkaMelathiBonds } = processHouseholdBonds(
+    updatedPeople,
+    state.households ?? new Map<string, Household>(),
+    rng,
+  );
 
-  // 9.5. Religious tension and Hidden Wheel divergence tracking.
+  // 8.8–8.9. Social systems: opinions and ambitions.
+  processOpinionSystems(updatedPeople, state.turnNumber);
+  processAmbitionSystems(updatedPeople, state, rng, state.turnNumber);
+
+  // 8.85. Trait-driven opinion drift (jealousy, envy, charm etc.)
+  mergePeopleUpdates(updatedPeople, applyTraitOpinionEffects(updatedPeople));
+
+  // 8.9. Trait expiry and earned trait acquisition.
+  const traitChanges: Array<{ personId: string; gained?: string; lost?: string }> = [];
+  const currentBuiltBuildingIds = new Set(currentBuildings.map(b => b.defId));
+  const settlementHasBuilding = (id: string) => currentBuiltBuildingIds.has(id as import('../../simulation/buildings/building-definitions').BuildingId);
+
+  // Expiry pass
+  mergePeopleUpdates(updatedPeople, applyTemporaryTraitExpiry(updatedPeople, state.turnNumber));
+
+  // Earned-trait acquisition pass (once per 4 turns per person to keep it gradual)
+  if (state.turnNumber % 4 === 0) {
+    for (const [id, person] of updatedPeople) {
+      const result = checkEarnedTraitAcquisition(person, settlementHasBuilding, rng);
+      if (result) {
+        const expiryTurn = result.expiryTurn;
+        const newTraits = [...person.traits, result.traitId];
+        const newExpiry = expiryTurn !== undefined
+          ? { ...person.traitExpiry, [result.traitId]: expiryTurn }
+          : person.traitExpiry;
+        updatedPeople.set(id, { ...person, traits: newTraits, traitExpiry: newExpiry });
+        traitChanges.push({ personId: id, gained: result.traitId });
+      }
+    }
+  }
+
+  // 9. Cultural blend, religion distribution, tension, and hidden wheel divergence.
+  const updatedCultureBlend = computeCulturalBlend(updatedPeople);
+  const updatedReligions = computeReligionDistribution(updatedPeople);
   const updatedReligiousTension = computeReligiousTension(updatedReligions);
   const divergenceResult = computeHiddenWheelDivergence(
     state.culture.hiddenWheelDivergenceTurns,
@@ -618,19 +719,17 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     state.settlement.religiousPolicy,
   );
 
-  // 9.6. Cultural identity pressure — passive standing/disposition deltas and
-  //      pressure counter updates that gate identity events.
+  // 9.6. Cultural identity pressure counters and passive standing/disposition deltas.
   const identityPressureResult = processIdentityPressure(
     updatedCultureBlend,
     state.identityPressure ?? { companyPressureTurns: 0, tribalPressureTurns: 0 },
     state.tribes,
   );
 
-  // Check if creole just emerged (first turn where diversity threshold was reached
-  // and the counter crosses 20). The store uses this flag to fire a one-time notice.
-  const creoleEmerged =
-    newLanguageDiversityTurns >= 20 &&
-    state.culture.languageDiversityTurns < 20;
+  const creoleEmerged = newLanguageDiversityTurns >= 20 && state.culture.languageDiversityTurns < 20;
+
+  // 9.7. Trait-driven event deck shaping (computed last; used by the store's drawEvents call).
+  const traitCategoryBoosts = computeTraitCategoryBoosts(updatedPeople);
 
   return {
     updatedPeople,
@@ -661,6 +760,8 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     updatedHiddenWheelSuppressedTurns: divergenceResult.updatedSuppressedTurns,
     shouldFireHiddenWheelEvent: divergenceResult.shouldFireEvent,
     identityPressureResult,
+    traitChanges,
+    traitCategoryBoosts,
   };
 }
 

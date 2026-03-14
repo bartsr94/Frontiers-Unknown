@@ -1,6 +1,6 @@
 # Palusteria: Children of the Ashmark — Architecture & Implementation Guide
 
-**Version:** 1.7 (updated after Phase 3.8 — Cultural Identity Pressure)  
+**Version:** 1.8 (updated after Phase 3.9 — Trait Expansion)  
 **Document Type:** Technical Architecture (How)  
 **Companion Document:** `PALUSTERIA_GAME_DESIGN.md` (What & Why)  
 **Stack:** React 19 + TypeScript (strict) + Vite + Zustand + Tailwind CSS
@@ -57,8 +57,9 @@ palusteria-game/
 │   │   │   └── relationships.ts        # (placeholder — opinion logic lives in opinions.ts)
 │   │   │
 │   │   ├── personality/
-│   │   │   ├── traits.ts               # Trait definitions and mechanical effects
-│   │   │   ├── assignment.ts           # Birth trait assignment, earned trait logic
+│   │   │   ├── traits.ts               # TraitId union + IMANIAN_TRAITS constant ✅
+│   │   │   ├── trait-behavior.ts       # computeTraitCategoryBoosts, applyTraitOpinionEffects, getTraitSkillGrowthBonuses ✅
+│   │   │   ├── assignment.ts           # applyTemporaryTraitExpiry, checkEarnedTraitAcquisition, grantTrait ✅
 │   │   │   └── state.ts                # PersonState stub (future mood/needs slot)
 │   │   │
 │   │   ├── economy/
@@ -141,9 +142,9 @@ palusteria-game/
 │   │       └── GameSetup.tsx           # New game configuration screen
 │   │
 │   ├── data/
-│   │   ├── ethnic-distributions.ts     # All ethnic trait distributions (constants)
-│   │   ├── trait-affinities.ts         # TRAIT_CONFLICTS (8 pairs) + TRAIT_SHARED_BONUS (7 traits) ✅
-│   │   ├── trait-definitions.ts        # All personality trait definitions
+│   │   ├── ethnic-distributions.ts     # All ethnic trait distributions (constants) ✅
+│   │   ├── trait-affinities.ts         # TRAIT_CONFLICTS (21 pairs) + TRAIT_SHARED_BONUS (15 entries) ✅
+│   │   ├── trait-definitions.ts        # TRAIT_DEFINITIONS catalog (~80 entries); TEMPORARY_TRAITS; APTITUDE_TRAITS ✅
 │   │   ├── name-lists.ts              # Names organized by culture and gender
 │   │   ├── cultural-practices.ts       # Practice definitions and effects
 │   │   └── starting-scenarios.ts       # Pre-built game configurations
@@ -207,6 +208,14 @@ palusteria-game/
     │   ├── language-acquisition.test.ts # Language drift and child acquisition ✅
     │   ├── religion.test.ts            # computeReligiousTension, computeHiddenWheelDivergence, computeCompanyReligiousPressure ✅
     │   └── identity-pressure.test.ts  # processIdentityPressure — all zones, counters, trait multipliers, multi-tribe ✅
+    ├── personality/
+    │   ├── trait-behavior.test.ts      # computeTraitCategoryBoosts, applyTraitOpinionEffects, getTraitSkillGrowthBonuses ✅
+    │   └── assignment.test.ts          # applyTemporaryTraitExpiry, checkEarnedTraitAcquisition, grantTrait ✅
+    ├── genetics/
+    │   ├── inheritance.test.ts         # Trait blending ranges ✅
+    │   ├── gender-ratio.test.ts        # Ratio math matches lore values ✅
+    │   ├── fertility.test.ts           # Fertility window edge cases ✅
+    │   └── aptitude-inheritance.test.ts # inheritAptitudeTraits — probability, both-parents boost, personality exclusion ✅
     └── utils/
         └── rng.test.ts                 # Deterministic output from known seeds ✅
 
@@ -264,7 +273,8 @@ interface Person {
   religion: ReligionId;
   // NOTE: culturalIdentity accessed via heritage.primaryCulture
 
-  traits: TraitId[];                 // 2–4 from trait-definitions.ts
+  traits: TraitId[];                 // 2–4 at birth; up to 6 via earned/mental trait acquisition
+  traitExpiry?: Partial<Record<TraitId, number>>; // turn number at which to remove each temporary trait
   skills: PersonSkills;              // Base skill scores — integers 1–100
   portraitVariant: number;           // 1-indexed; stable across life stages; assigned at birth
   
@@ -446,11 +456,12 @@ type HealthCondition =
 interface TraitDefinition {
   id: TraitId;
   name: string;
-  category: 'personality' | 'aptitude' | 'cultural' | 'earned';
+  category: 'personality' | 'aptitude' | 'cultural' | 'earned' | 'relationship' | 'mental_state';
   description: string;
   conflicts: TraitId[];              // Cannot coexist with these
   effects: TraitEffect[];
-  inheritWeight?: number;            // Chance of passing to children (aptitude traits)
+  isTemporary?: boolean;             // true = mental_state traits; expiry stored in Person.traitExpiry
+  inheritWeight?: number;            // 0.0–1.0 chance of passing to children (aptitude traits only)
 }
 
 interface TraitEffect {
@@ -465,10 +476,20 @@ type TraitEffectTarget =
   | 'farming'
   | 'fertility_modifier'
   | 'health_modifier'
+  | 'disease_chance'
+  | 'skill_bargaining'
+  | 'skill_combat'
+  | 'skill_plants'
+  | 'skill_leadership'
+  | 'skill_custom'
+  | 'skill_animals'
   | 'opinion_same_trait'             // Opinion of people with the same trait
   | 'opinion_conflicting_trait'      // Opinion of people with conflicting traits
   | 'cultural_resistance'            // Resistance to cultural assimilation
-  | 'cultural_openness';             // Speed of cultural adoption
+  | 'cultural_openness'              // Speed of cultural adoption
+  | 'event_weight_domestic'
+  | 'event_weight_cultural'
+  | 'event_weight_economic';
 ```
 
 ### 4.7 Economy

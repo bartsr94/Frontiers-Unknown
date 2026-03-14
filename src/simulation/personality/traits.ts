@@ -36,6 +36,28 @@ export type TraitId =
   | 'honest'
   | 'proud'
   | 'humble'
+  // ── Personality (new) ─────────────────────────────────────────────────────
+  | 'vengeful'
+  | 'forgiving'
+  | 'melancholic'
+  | 'sanguine'
+  | 'zealous'
+  | 'cynical'
+  | 'curious'
+  | 'stubborn'
+  | 'charming'
+  | 'suspicious'
+  | 'trusting'
+  | 'reckless'
+  | 'envious'
+  | 'protective'
+  // ── Social / relationship ─────────────────────────────────────────────────
+  | 'devoted'
+  | 'jealous'
+  | 'fickle'
+  | 'clingy'
+  | 'mentor_hearted'
+  | 'contrarian'
   // ── Aptitude (physical and mental capacities) ─────────────────────────────
   | 'strong'
   | 'weak'
@@ -47,6 +69,12 @@ export type TraitId =
   | 'sickly'
   | 'fertile'
   | 'barren'
+  // ── Aptitude (new) ───────────────────────────────────────────────────────
+  | 'gifted_speaker'
+  | 'green_thumb'
+  | 'keen_hunter'
+  | 'iron_constitution'
+  | 'fleet_footed'
   // ── Cultural (relationship to culture and community) ──────────────────────
   | 'traditional'
   | 'cosmopolitan'
@@ -54,6 +82,12 @@ export type TraitId =
   | 'skeptical'
   | 'xenophobic'
   | 'welcoming'
+  // ── Cultural (new) ───────────────────────────────────────────────────────
+  | 'syncretist'
+  | 'folklorist'
+  | 'linguist'
+  | 'honor_bound'
+  | 'company_man'
   // ── Earned (gained through life events) ──────────────────────────────────
   | 'veteran'
   | 'scarred'
@@ -63,10 +97,28 @@ export type TraitId =
   | 'hero'
   | 'coward'
   | 'wealthy'
-  | 'indebted';
+  | 'indebted'
+  // ── Earned (new) ─────────────────────────────────────────────────────────
+  | 'healer'
+  | 'midwife'
+  | 'storyteller'
+  | 'negotiator'
+  | 'outcast'
+  | 'kinslayer'
+  | 'exile'
+  | 'ghost_touched'
+  | 'blessed_birth'
+  | 'bereaved'
+  | 'wheel_blessed'
+  // ── Mental state (temporary) ─────────────────────────────────────────────
+  | 'grieving'
+  | 'inspired'
+  | 'restless'
+  | 'traumatized'
+  | 'homesick';
 
-/** The four categories a trait can belong to. */
-export type TraitCategory = 'personality' | 'aptitude' | 'cultural' | 'earned';
+/** The five categories a trait can belong to. */
+export type TraitCategory = 'personality' | 'aptitude' | 'cultural' | 'earned' | 'mental_state';
 
 // ─── Trait Effects ────────────────────────────────────────────────────────────
 
@@ -88,7 +140,35 @@ export type TraitEffectTarget =
   /** Resistance to cultural assimilation (positive = harder to assimilate). */
   | 'cultural_resistance'
   /** Speed of adopting new cultural practices (positive = faster adoption). */
-  | 'cultural_openness';
+  | 'cultural_openness'
+  // ── Extended targets ─────────────────────────────────────────────────────
+  /** Multiplier on language learning rate (e.g. 1.5 = 50% faster). */
+  | 'language_learning_rate'
+  /** Bonus added to every skill growth tick from buildings (+N per season). */
+  | 'skill_growth_all'
+  | 'skill_growth_combat'
+  | 'skill_growth_plants'
+  | 'skill_growth_bargaining'
+  | 'skill_growth_leadership'
+  /** Multiplier on personal resource production (e.g. 1.10 = +10%). */
+  | 'production_modifier'
+  /** Multiplier on per-season disease chance (e.g. 0.3 = −70%). */
+  | 'disease_chance_modifier'
+  /** Multiplier on natural-death probability (e.g. 0.5 = −50%). */
+  | 'mortality_modifier'
+  /** Additive boost to domestic event weight pool. */
+  | 'event_weight_domestic'
+  | 'event_weight_cultural'
+  | 'event_weight_religious'
+  | 'event_weight_economic'
+  /** Flat shift to initial baseline opinions others form of this person. */
+  | 'opinion_baseline_from_others'
+  /** Multiplier on how fast this person's own opinion entries decay (< 1 = slower). */
+  | 'opinion_decay_rate'
+  /** Per-turn opinion delta this person gives toward their spouses. */
+  | 'opinion_drift_spouse'
+  /** Multiplier on ambition intensity growth rate (e.g. 1.6 = faster). */
+  | 'ambition_intensity_growth';
 
 /**
  * A single mechanical effect applied by a trait.
@@ -130,4 +210,10 @@ export interface TraitDefinition {
    * which are not directly inherited.
    */
   inheritWeight?: number;
+  /**
+   * If true, this is a temporary mental-state trait. It is paired with a
+   * `traitExpiry` entry on Person and removed automatically on that turn.
+   * Default: false.
+   */
+  isTemporary?: boolean;
 }

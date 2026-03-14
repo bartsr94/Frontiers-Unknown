@@ -1,6 +1,6 @@
 # Palusteria: Children of the Ashmark — Game Design Document
 
-**Version:** 1.4 (updated after Phase 3.8 — Cultural Identity Pressure)  
+**Version:** 1.5 (updated after Phase 3.9 — Trait Expansion)  
 **Document Type:** Game Design (What & Why)  
 **Companion Document:** `PALUSTERIA_ARCHITECTURE.md` (How)  
 **Setting:** The Ashmark region of Palusteria
@@ -188,15 +188,21 @@ Visible traits drive a procedural portrait system. Phase 1 uses text description
 
 Each person has 2–4 permanent personality traits assigned at birth or earned through life events. Traits follow the Crusader Kings model: named labels with mechanical effects on behavior, events, and relationships.
 
-**Personality traits:** Ambitious, Content, Gregarious, Shy, Brave, Craven, Cruel, Kind, Greedy, Generous, Lustful, Chaste, Wrathful, Patient, Deceitful, Honest, Proud, Humble.
+**Personality traits:** Ambitious, Content, Gregarious, Shy, Brave, Craven, Cruel, Kind, Greedy, Generous, Lustful, Chaste, Wrathful, Patient, Deceitful, Honest, Proud, Humble, Vengeful, Forgiving, Melancholic, Sanguine, Zealous, Cynical, Curious, Stubborn, Charming, Suspicious, Trusting, Reckless, Envious, Protective.
 
-**Aptitude traits:** Strong, Weak, Clever, Slow, Beautiful, Plain, Robust, Sickly, Fertile, Barren.
+**Social / relationship traits:** Devoted, Jealous, Fickle, Clingy, Mentor-Hearted, Contrarian.
 
-**Cultural traits:** Traditional (resists cultural change), Cosmopolitan (embraces mixing), Devout (strong religious conviction), Skeptical (questions all faiths), Xenophobic (hostile to outsiders), Welcoming (open to strangers).
+**Aptitude traits:** Strong, Weak, Clever, Slow, Beautiful, Plain, Robust, Sickly, Fertile, Barren, Gifted Speaker, Green Thumb, Keen Hunter, Iron Constitution, Fleet-Footed.
 
-**Earned traits** (gained through events): Veteran, Scarred, Respected Elder, Scandal, Oath-Breaker, Hero, Coward, Wealthy, Indebted.
+**Cultural traits:** Traditional (resists cultural change), Cosmopolitan (embraces mixing), Devout (strong religious conviction), Skeptical (questions all faiths), Xenophobic (hostile to outsiders), Welcoming (open to strangers), Syncretist, Folklorist, Linguist, Honor-Bound, Company Man.
 
-Some traits conflict — a person cannot be both Brave and Craven, or both Kind and Cruel. Certain trait combinations create emergent personality archetypes (Ambitious + Cruel = a dangerous schemer; Kind + Brave = a natural leader).
+**Earned traits** (acquired through events or autonomous play): Veteran, Scarred, Respected Elder, Healer, Negotiator, Storyteller, Midwife, Scandal, Oath-Breaker, Outcast, Kinslayer, Exile, Hero, Coward, Wealthy, Indebted, Ghost-Touched, Blessed Birth, Bereaved.
+
+**Mental state traits** (temporary — expire after a set number of turns): Grieving (8t), Inspired (6t), Restless (12t), Traumatized (12t), Homesick (16t), Bereaved (8t as mental state).
+
+Some traits conflict — a person cannot be both Brave and Craven, or both Kind and Cruel. Certain trait combinations create emergent personality archetypes (Ambitious + Cruel = a dangerous schemer; Kind + Brave = a natural leader; Jealous + Devoted = a faithful but volatile spouse).
+
+Each turn, traits create visible autonomous behaviour: a Jealous wife's opinion of her husband's concubine drifts down by 1 per turn. A Suspicious man's opinions of everyone drift down. A Charming woman's reputation among all settlers slowly improves. An Inspired artist's skills grow faster than normal, but the inspiration fades after six seasons. This makes personality differences observable and consequential without requiring the player to manually track each person's state.
 
 ### 6.2 Opinions
 

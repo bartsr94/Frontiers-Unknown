@@ -575,3 +575,49 @@ describe('computeOpinionBreakdown with timed modifiers', () => {
     });
   });
 });
+
+// ─── decayOpinions — stale target IDs (Unknown-name regression) ───────────────
+
+describe('decayOpinions — stale target IDs', () => {
+  // Regression: opinion entries can reference IDs from people who died before
+  // the graveyard was introduced. Those IDs aren't in `people`, so nameOf()
+  // falls through to 'Unknown'. decayOpinions must still decay these entries
+  // normally so they eventually disappear — the root-cause cleanup path.
+
+  it('decays an opinion whose target ID is not in the people map', () => {
+    const a = makePerson('a', { relationships: new Map([['stale_id', 10]]) });
+    const people = new Map([['a', a]]); // 'stale_id' is NOT in people
+    const result = decayOpinions(people);
+    expect(result.get('a')!.relationships.get('stale_id')).toBe(9);
+  });
+
+  it('decays a negative stale opinion toward 0', () => {
+    const a = makePerson('a', { relationships: new Map([['stale_id', -8]]) });
+    const people = new Map([['a', a]]);
+    const result = decayOpinions(people);
+    expect(result.get('a')!.relationships.get('stale_id')).toBe(-7);
+  });
+
+  it('removes a stale opinion entry once it reaches 0 after repeated decay steps', () => {
+    const a = makePerson('a', { relationships: new Map([['stale_id', 3]]) });
+    let people = new Map<string, ReturnType<typeof makePerson>>([['a', a]]);
+    for (let i = 0; i < 3; i++) {
+      const delta = decayOpinions(people);
+      for (const [id, person] of delta) people.set(id, person);
+    }
+    expect(people.get('a')!.relationships.has('stale_id')).toBe(false);
+  });
+
+  it('does not add or modify any other relationship entry while decaying a stale one', () => {
+    const a = makePerson('a', {
+      relationships: new Map([['stale_id', 5], ['live_id', 20]]),
+    });
+    const b = makePerson('live_id');
+    const people = new Map([['a', a], ['live_id', b]]);
+    const result = decayOpinions(people);
+    // Stale entry decayed
+    expect(result.get('a')!.relationships.get('stale_id')).toBe(4);
+    // Live entry also decayed by 1 as normal
+    expect(result.get('a')!.relationships.get('live_id')).toBe(19);
+  });
+});

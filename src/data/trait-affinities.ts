@@ -16,14 +16,30 @@ import type { TraitId } from '../simulation/personality/traits';
  * The check is symmetric: [a has traitOnA and b has traitOnB] OR vice versa.
  */
 export const TRAIT_CONFLICTS: Array<[TraitId, TraitId, number]> = [
-  ['cruel',        'kind',          -20],
-  ['honest',       'deceitful',     -20],
-  ['xenophobic',   'welcoming',     -20],
-  ['brave',        'craven',        -15],
-  ['greedy',       'generous',      -15],
-  ['traditional',  'cosmopolitan',  -15],
-  ['proud',        'humble',        -10],
-  ['wrathful',     'patient',       -10],
+  // Existing pairs
+  ['cruel',          'kind',            -20],
+  ['honest',         'deceitful',       -20],
+  ['xenophobic',     'welcoming',       -20],
+  ['brave',          'craven',          -15],
+  ['greedy',         'generous',        -15],
+  ['traditional',    'cosmopolitan',    -15],
+  ['proud',          'humble',          -10],
+  ['wrathful',       'patient',         -10],
+  // New pairs from expanded trait set
+  ['vengeful',       'forgiving',       -15],
+  ['zealous',        'cynical',         -15],
+  ['zealous',        'skeptical',       -12],
+  ['suspicious',     'trusting',        -12],
+  ['devout',         'cynical',         -12],
+  ['fickle',         'devoted',         -10],
+  ['stubborn',       'curious',         -10],
+  ['reckless',       'patient',          -8],
+  ['envious',        'generous',         -8],
+  ['contrarian',     'humble',           -8],
+  ['honor_bound',    'oath_breaker',    -25],
+  ['kinslayer',      'honor_bound',     -20],
+  ['outcast',        'gregarious',       -8],
+  ['company_man',    'xenophobic',       -8],
 ];
 
 /**
@@ -32,11 +48,22 @@ export const TRAIT_CONFLICTS: Array<[TraitId, TraitId, number]> = [
  * who also carry that trait.
  */
 export const TRAIT_SHARED_BONUS: Partial<Record<TraitId, number>> = {
-  gregarious:  12,
-  devout:      10,
-  honest:      10,
-  kind:         8,
-  generous:     8,
-  brave:        8,
-  traditional:  8,
+  // Existing shared bonuses
+  gregarious:      12,
+  devout:          10,
+  honest:          10,
+  kind:             8,
+  generous:         8,
+  brave:            8,
+  traditional:      8,
+  // New shared bonuses
+  zealous:         10,
+  honor_bound:     10,
+  curious:          8,
+  protective:       8,
+  mentor_hearted:   6,
+  folklorist:       6,
+  sanguine:         6,
+  cosmopolitan:     6,
+  welcoming:        6,
 };

@@ -16,6 +16,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 | Phase 3.6 — Opinions & Autonomy | ✅ Complete | Opinion scores ✅ · Trait affinities/clashes ✅ · Per-turn drift & decay ✅ · Marriage opinion gate ✅ · `modify_opinion` consequence ✅ · `computeOpinionBreakdown()` tooltip ✅ · `PersonAmbition` (5 types) ✅ · Autonomous events ✅ · Ambition badge UI ✅ · Key Opinions UI ✅ · Decaying `OpinionModifier` ✅ · `modify_opinion_pair` / `modify_opinion_labeled` ✅ · Auto co-actor bond ✅ |
 | Phase 3.7 — Religion System | ✅ Complete | Three faiths (`imanian_orthodox`, `sacred_wheel`, `syncretic_hidden_wheel`) ✅ · Hidden Wheel divergence counter ✅ · Religious tension formula ✅ · Company religious pressure drain ✅ · `ReligiousPolicy` (4 values) ✅ · 7 religion events ✅ · Priesthood roles (`priest_solar`, `wheel_singer`, `voice_of_wheel`) ✅ · Religion UI panel ✅ · 19 new tests ✅ |
 | Phase 3.8 — Cultural Identity Pressure | ✅ Complete | `IdentityPressure` counters ✅ · Five-zone blend scale ✅ · Passive Company standing + tribe disposition deltas ✅ · 6 identity events ✅ · `modify_cultural_blend` / `modify_all_tribe_dispositions` consequences ✅ · `sauromatianHeritage` actor criterion ✅ · `IdentityScale` UI widget ✅ · 35 new tests ✅ |
+| Phase 3.9 — Trait Expansion | ✅ Complete | `TraitDefinition` catalog (~80 traits) ✅ · 6 trait categories incl. `mental_state` ✅ · Temporary traits with `traitExpiry` map ✅ · Expanded `TRAIT_CONFLICTS` (21 pairs) + `TRAIT_SHARED_BONUS` (15 entries) ✅ · `computeTraitCategoryBoosts` event-deck shaping ✅ · `applyTraitOpinionEffects` per-turn autonomous drift ✅ · `getTraitSkillGrowthBonuses` ✅ · `applyTemporaryTraitExpiry` + earned trait acquisition ✅ · `inheritAptitudeTraits()` at birth ✅ · 128 new tests ✅ |
 | Phase 4 — Polish | 🔲 Not started | — |
 ---
 
@@ -77,7 +78,7 @@ If the exact age stage has no portraits yet, the resolver tries: `adult` → `yo
 
 ```bash
 npm run dev          # Vite dev server → http://localhost:5173
-npm test             # Run Vitest (853 passing across 27 test files)
+npm test             # Run Vitest (981 passing across 32 test files)
 npx tsc --noEmit     # Type-check without building
 ```
 
@@ -132,15 +133,18 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/culture/identity-pressure.ts` | `IDENTITY_THRESHOLDS`, `IdentityPressureResult`, `processIdentityPressure(blend, currentPressure, tribes)` — pure logic; no RNG; no React |
 | `src/simulation/population/culture.ts` | `CULTURE_LABELS`, `SAUROMATIAN_CULTURE_IDS`, `deriveCulture`, `processCulturalDrift`, `buildSettlementCultureDistribution`, `computeCulturalBlend` |
 | `src/simulation/genetics/gender-ratio.ts` | `getSauromatianFraction`, `getImanianFraction`, `resolveGenderRatio`, `determineSex` |
-| `src/simulation/genetics/inheritance.ts` | `resolveInheritance()` pipeline: `averageBloodlines`, `blendTraitDistributions`, `sampleContinuous`, `sampleDiscrete` |
-| `src/simulation/genetics/fertility.ts` | `BirthResult`, `createFertilityProfile`, `getFertilityChance`, `attemptConception`, `processPregnancies` |
+| `src/simulation/genetics/inheritance.ts` | `resolveInheritance()` pipeline: `averageBloodlines`, `blendTraitDistributions`, `sampleContinuous`, `sampleDiscrete`; `inheritAptitudeTraits(mother, father, rng)` — samples aptitude traits based on `inheritWeight` in `TRAIT_DEFINITIONS` |
+| `src/simulation/genetics/fertility.ts` | `BirthResult`, `createFertilityProfile`, `getFertilityChance`, `attemptConception`, `processPregnancies`; calls `inheritAptitudeTraits()` at birth and passes result as child's initial `traits` |
 | `src/simulation/population/person.ts` | `Person` interface + `createPerson(options, rng?)` factory; heritage/bloodline types; `SkillId`, `PersonSkills`, `getSkillRating()`, `getDerivedSkill()`, `generatePersonSkills()` |
 | `src/simulation/population/naming.ts` | `generateName(sex, culture, motherFamilyName, fatherFamilyName, rng)` — 3 culture pools |
 | `src/simulation/population/marriage.ts` | `canMarry`, `performMarriage`, `getMarriageability`, `formConcubineRelationship`, `InformalUnionStyle` — Sauromatian/Imanian rules; household auto-formation on marriage |
 | `src/simulation/population/household.ts` | `createHousehold`, `addToHousehold`, `removeFromHousehold`, `getHouseholdMembers`, `getHouseholdByPerson`, `getSeniorWife`, `countWives`, `countConcubines`, `dissolveHousehold`, `HOUSEHOLD_ROLE_LABELS`, `HOUSEHOLD_ROLE_COLORS` |
 | `src/simulation/population/opinions.ts` | `computeBaselineOpinion`, `computeTraitOpinion`, `computeOpinionBreakdown`, `initializeBaselineOpinions`, `applyOpinionDrift`, `decayOpinions`, `decayOpinionModifiers`, `getOpinion`, `getEffectiveOpinion`, `setOpinion`, `adjustOpinion`, `addOpinionModifier`, `getModifierSummary`, `applyMarriageOpinionFloor`, `OPINION_TRACK_CAP` |
 | `src/simulation/population/ambitions.ts` | `tickAmbitionIntensity`, `evaluateAmbition`, `determineAmbitionType`, `generateAmbition`, `clearAmbition`, `getAmbitionLabel`, `getAmbitionIntensityClass`, `AMBITION_FIRING_THRESHOLD` |
-| `src/data/trait-affinities.ts` | `TRAIT_CONFLICTS` (8 conflicting pairs with penalties) · `TRAIT_SHARED_BONUS` (7 shared-trait bonuses) |
+| `src/data/trait-definitions.ts` | `TRAIT_DEFINITIONS` — authoritative catalog of all ~80 `TraitDefinition` entries; `TEMPORARY_TRAITS: ReadonlySet<string>`; `APTITUDE_TRAITS: ReadonlySet<string>` |
+| `src/data/trait-affinities.ts` | `TRAIT_CONFLICTS` (21 conflicting pairs with penalties) · `TRAIT_SHARED_BONUS` (15 shared-trait bonuses) |
+| `src/simulation/personality/trait-behavior.ts` | `computeTraitCategoryBoosts(people)` — geometric-mean event-deck multipliers; `applyTraitOpinionEffects(people)` — per-turn jealous/envious/suspicious/trusting/charming deltas; `getTraitSkillGrowthBonuses(person)` — green_thumb/keen_hunter/gifted_speaker/mentor_hearted/inspired/bereaved skill deltas |
+| `src/simulation/personality/assignment.ts` | `applyTemporaryTraitExpiry(people, currentTurn)` — removes expired temporary traits (delta-map contract); `checkEarnedTraitAcquisition(person, settlementHasBuildingId, rng)` — probabilistic acquisition pipeline (respected_elder/veteran/healer/negotiator/storyteller); `grantTrait(person, traitId, expiryTurn?, currentTurn?)` — immutable trait addition helper |
 | `src/simulation/world/tribes.ts` | `createTribe`, `TRIBE_PRESETS` (16 presets), `updateTribeDisposition` |
 | `src/stores/game-store.ts` | Zustand store — full turn lifecycle, council, `arrangeMarriage`, `arrangeInformalUnion`, `assignKethThara`, tribe init; `households` Map serialised as `[string, Household][]` |
 | `src/ui/layout/LeftNav.tsx` | Left nav with phase-aware End Turn / Confirm Turn button |
@@ -516,6 +520,101 @@ interface OpinionModifier {
 
 ---
 
+## Phase 3.9 — Trait Expansion Notes
+
+### Trait Catalog
+
+- **`TRAIT_DEFINITIONS`** in `src/data/trait-definitions.ts` — authoritative record for all ~80 `TraitId` values
+- **6 trait categories**: `personality` · `aptitude` · `cultural` · `earned` · `relationship` · `mental_state`
+- **`isTemporary: boolean`** — `mental_state` traits are temporary; expiry stored in `Person.traitExpiry`
+- **`inheritWeight?: number`** — consumed by `inheritAptitudeTraits()` at birth; aptitude traits only
+
+### `TraitDefinition` Fields
+
+```typescript
+interface TraitDefinition {
+  id: TraitId;
+  name: string;
+  category: 'personality' | 'aptitude' | 'cultural' | 'earned' | 'relationship' | 'mental_state';
+  description: string;
+  conflicts: TraitId[];
+  effects: TraitEffect[];
+  isTemporary?: boolean;    // true = mental_state traits; stored in traitExpiry, auto-removed
+  inheritWeight?: number;   // 0.0–1.0 probability at birth (aptitude traits only)
+}
+```
+
+### Temporary Traits & `traitExpiry`
+
+- **`traitExpiry?: Partial<Record<TraitId, number>>`** on `Person` — maps trait ID → turn number on which to remove it
+- Default durations: `grieving` 8t · `inspired` 6t · `restless` 12t · `traumatized` 12t · `homesick` 16t · `bereaved` 8t
+- `applyTemporaryTraitExpiry(people, currentTurn)` — runs each dawn; returns delta map of changed persons only
+- `grantTrait(person, traitId, expiryTurn?, currentTurn?)` — immutable helper; auto-computes expiry from durations when `currentTurn` provided
+
+### Earned Trait Acquisition
+
+`checkEarnedTraitAcquisition(person, settlementHasBuildingId, rng)` — called every 4 turns per living person during `processDawn()`. Priority order:
+
+| Trait | Qualifications | Probability/turn |
+|-------|---------------|-----------------|
+| `respected_elder` | age ≥ 55, no negative earned traits | 12% |
+| `veteran` | combat ≥ 63 + `brave` or `strong` | 8% |
+| `healer` | plants ≥ 46 + `healers_hut` built | 10% |
+| `negotiator` | bargaining ≥ 63 | 8% |
+| `storyteller` | custom ≥ 46 + `folklorist`/`sanguine`/`gregarious` | 6% |
+
+### Aptitude Trait Inheritance
+
+`inheritAptitudeTraits(mother, father, rng)` — called from `processPregnancies()` at birth:
+- Iterates `TRAIT_DEFINITIONS` for entries with `inheritWeight > 0`
+- One parent holds the trait → roll against `inheritWeight`
+- Both parents hold it → roll against `min(inheritWeight × 1.5, 0.95)`
+- Returns `TraitId[]` passed as initial `traits` to `createPerson()`
+
+### Event Deck Shaping
+
+`computeTraitCategoryBoosts(people)` — called at end of each dawn; result flows into `drawEvents()` via `weightBoosts` in the store:
+- Geometric mean across all persons; normalised by pop size; floor 0.2
+- Only categories deviating > 1% from baseline are returned
+- Trait-to-category mapping: `event_weight_domestic → domestic`, `event_weight_cultural → cultural`, `event_weight_economic → economic`
+
+### Autonomous Trait Opinion Effects
+
+`applyTraitOpinionEffects(people)` — runs each dawn after skill growth:
+- `jealous`: −1/turn toward non-spouse opposite-sex partners in existing relationships
+- `envious`: −1/turn toward the wealthiest/most-heroic person
+- `suspicious`: −1/turn toward all others
+- `trusting`: +1/turn toward all others
+- `charming`: +1/turn *from* all others toward this person
+
+### Trait Skill Growth Bonuses
+
+`getTraitSkillGrowthBonuses(person)` — merges into per-person skill delta in step 8.5 of `processDawn()`:
+
+| Trait | Bonus |
+|-------|-------|
+| `green_thumb` | +2 plants/season |
+| `keen_hunter` | +1 combat/season |
+| `gifted_speaker` | +1 bargaining, +1 leadership/season |
+| `mentor_hearted` | +1 leadership/season |
+| `inspired` | +1 all six skills/season |
+| `bereaved` / `grieving` | −1 all six skills/season |
+
+### Trait Expansion Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/data/trait-definitions.ts` | Full ~80-entry catalog; `TEMPORARY_TRAITS`; `APTITUDE_TRAITS` |
+| `src/data/trait-affinities.ts` | `TRAIT_CONFLICTS` (21 pairs) · `TRAIT_SHARED_BONUS` (15 entries) |
+| `src/simulation/personality/trait-behavior.ts` | `computeTraitCategoryBoosts`, `applyTraitOpinionEffects`, `getTraitSkillGrowthBonuses` |
+| `src/simulation/personality/assignment.ts` | `applyTemporaryTraitExpiry`, `checkEarnedTraitAcquisition`, `grantTrait` |
+| `src/simulation/genetics/inheritance.ts` | `inheritAptitudeTraits()` |
+| `tests/personality/trait-behavior.test.ts` | 15 tests |
+| `tests/personality/assignment.test.ts` | 18 tests |
+| `tests/genetics/aptitude-inheritance.test.ts` | 6 tests |
+
+---
+
 ## Ethnic Group Reference (Phase 2 genetics input)
 
 | Group | Skin (0–1) | Undertone | Hair | Eyes | Build / Height |
@@ -600,4 +699,9 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/population/ambitions.test.ts` — 30/30 passing (tickAmbitionIntensity, evaluateAmbition, determineAmbitionType, generateAmbition, clearAmbition, label/intensity helpers, AMBITION_FIRING_THRESHOLD)
 - `tests/culture/religion.test.ts` — 19/19 passing (`computeReligiousTension` variants, `computeCompanyReligiousPressure` variants + policy modifiers, `computeHiddenWheelDivergence` variants including 20-turn emergence and suppression)
 - `tests/culture/identity-pressure.test.ts` — 35/35 passing (counter increment/reset per zone, company standing delta all 5 zones, boundary values, safe-zone produces no tribe deltas, single-trait and multi-trait tribe deltas, multiple tribes independent deltas)
-- **Total: 853/853 passing**
+- `tests/personality/trait-behavior.test.ts` — 15/15 passing (`computeTraitCategoryBoosts` normalisation, `applyTraitOpinionEffects` per-trait deltas, `getTraitSkillGrowthBonuses` all modifiers)
+- `tests/personality/assignment.test.ts` — 18/18 passing (`applyTemporaryTraitExpiry` expiry/retention logic, `checkEarnedTraitAcquisition` all 5 pathways, `grantTrait` with/without expiry)
+- `tests/genetics/aptitude-inheritance.test.ts` — 6/6 passing (`inheritAptitudeTraits` no-parents baseline, single-parent probability, both-parents boosted probability, determinism, personality-traits excluded)
+- `tests/turn/dusk.test.ts` — 19/19 passing
+- `tests/world/tribes.test.ts` — (existing suite)
+- **Total: 981/981 passing across 32 test files**

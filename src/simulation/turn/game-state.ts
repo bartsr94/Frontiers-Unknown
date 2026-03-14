@@ -71,7 +71,7 @@ export interface CompanyRelation {
   /** Gold required to meet the current annual quota. Increases over time. */
   annualQuotaGold: number;
   /** Trade goods required to meet the current annual quota. Increases over time. */
-  annualQuotaTradeGoods: number;
+  annualQuotaGoods: number;
   /**
    * Number of consecutive annual quotas missed. Resets to 0 on a successful year.
    * Drive the Company's escalating consequences.
@@ -233,6 +233,7 @@ export interface SettlementCulture {
    */
   culturalBlend: number;
   /** Cultural practices currently active in the settlement. */
+  // NOTE: Populated at game start but not yet mechanically consumed. Planned for Phase 4.
   practices: CulturalPracticeId[];
   /** The governance model currently in effect. */
   governance: GovernanceStyle;

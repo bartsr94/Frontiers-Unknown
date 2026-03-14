@@ -406,22 +406,33 @@ export function getPersonSkillScore(person: Person, skill: SkillId | DerivedSkil
 
 /** Additive bonuses applied to specific base skills based on a person's traits. */
 const SKILL_TRAIT_BONUSES: Partial<Record<TraitId, Partial<PersonSkills>>> = {
-  brave:           { combat: 15, leadership: 5 },
-  cruel:           { combat: 10 },
-  strong:          { combat: 15, animals: 10 },
-  clever:          { custom: 15, leadership: 12 },
-  ambitious:       { leadership: 12 },
-  gregarious:      { bargaining: 12 },
-  patient:         { plants: 10, animals: 8 },
-  deceitful:       { bargaining: 12 },
-  greedy:          { bargaining: 10 },
-  proud:           { leadership: 8 },
-  robust:          { animals: 10, plants: 8 },
-  veteran:         { combat: 20 },
-  hero:            { combat: 15, leadership: 10 },
-  respected_elder: { leadership: 15, custom: 10 },
-  traditional:     { custom: 10 },
-  cosmopolitan:    { bargaining: 8 },
+  brave:             { combat: 15, leadership: 5 },
+  cruel:             { combat: 10 },
+  strong:            { combat: 15, animals: 10 },
+  clever:            { custom: 15, leadership: 12 },
+  ambitious:         { leadership: 12 },
+  gregarious:        { bargaining: 12 },
+  patient:           { plants: 10, animals: 8 },
+  deceitful:         { bargaining: 12 },
+  greedy:            { bargaining: 10 },
+  proud:             { leadership: 8 },
+  robust:            { animals: 10, plants: 8 },
+  veteran:           { combat: 20 },
+  hero:              { combat: 15, leadership: 10 },
+  respected_elder:   { leadership: 15, custom: 10 },
+  traditional:       { custom: 10 },
+  cosmopolitan:      { bargaining: 8 },
+  // New aptitude traits
+  gifted_speaker:    { bargaining: 10, leadership: 10 },
+  green_thumb:       { plants: 15 },
+  keen_hunter:       { animals: 10, combat: 10 },
+  fleet_footed:      { combat: 5 },
+  // New social/personality traits
+  charming:          { bargaining: 8 },
+  mentor_hearted:    { leadership: 12, custom: 6 },
+  negotiator:        { bargaining: 12 },
+  healer:            { plants: 10, custom: 8 },
+  storyteller:       { custom: 12, leadership: 6 },
 };
 
 const ALL_SKILL_IDS: SkillId[] = ['animals', 'bargaining', 'combat', 'custom', 'leadership', 'plants'];
@@ -590,6 +601,15 @@ export interface Person {
    * Evaluated and potentially updated each turn by the ambitions engine.
    */
   ambition: PersonAmbition | null;
+
+  /**
+   * Expiry turns for temporary mental-state traits.
+   * Key: TraitId of a mental/temporary trait.
+   * Value: Turn number on which the trait should be automatically removed.
+   * Only populated when the person holds one or more temporary traits.
+   * Serialised as a plain object — no Map handling needed.
+   */
+  traitExpiry?: Partial<Record<TraitId, number>>;
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
@@ -698,5 +718,6 @@ export function createPerson(options: CreatePersonOptions = {}, rng?: SeededRNG)
     householdRole: options.householdRole ?? null,
     ashkaMelathiPartnerIds: options.ashkaMelathiPartnerIds ?? [],
     ambition: options.ambition ?? null,
+    traitExpiry: options.traitExpiry,
   };
 }

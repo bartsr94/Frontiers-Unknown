@@ -134,7 +134,7 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
     case 'has_person_with_ambition': {
       const ambitionId = prereq.params.ambitionId as string | undefined;
       return Array.from(state.people.values()).some(person => {
-        if (!person.alive) return false;
+        // Dead persons are deleted from state.people — no alive check needed here.
         if (!person.ambition) return false;
         if (person.ambition.intensity < AMBITION_FIRING_THRESHOLD) return false;
         if (ambitionId && person.ambition.type !== ambitionId) return false;

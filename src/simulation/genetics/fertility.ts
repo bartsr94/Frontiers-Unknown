@@ -21,7 +21,7 @@ import { createPerson } from '../population/person';
 import type { Season } from '../turn/game-state';
 import type { SeededRNG } from '../../utils/rng';
 import { clamp } from '../../utils/math';
-import { resolveInheritance, averageBloodlines } from './inheritance';
+import { resolveInheritance, averageBloodlines, inheritAptitudeTraits } from './inheritance';
 import { determineSex } from './gender-ratio';
 import { deriveCulture } from '../population/culture';
 import { resolveChildLanguages } from '../culture/language-acquisition';
@@ -285,6 +285,7 @@ export function processPregnancies(
     // RNG call here rather than passing rng into createPerson, so newborns keep
     // default skills (they can't work yet) and the RNG stream stays predictable.
     const portraitVariant = rng.nextInt(1, 3);
+    const aptitudeTraits = inheritAptitudeTraits(mother, father, rng);
 
     const child = createPerson({
       sex,
@@ -298,6 +299,7 @@ export function processPregnancies(
       socialStatus: 'settler',
       isPlayerControlled: false,
       portraitVariant,
+      traits: aptitudeTraits.length > 0 ? aptitudeTraits : undefined,
     });
 
     results.push({ motherId: mother.id, child, motherDied, motherHealthDelta });

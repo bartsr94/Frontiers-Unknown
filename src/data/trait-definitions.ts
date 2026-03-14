@@ -1,0 +1,864 @@
+/**
+ * Authoritative catalog of all personality trait definitions.
+ *
+ * Every entry in the TraitId union must appear here exactly once.
+ * Consumed by: UI tooltips, council advice, event authoring, and the
+ * autonomous behaviour engine.
+ *
+ * Design rules:
+ *   - descriptions are lore-flavoured, ≤2 sentences
+ *   - effects[] documents the primary mechanical expression
+ *   - conflict arrays are symmetric (both sides declare each other)
+ *   - mental_state traits set isTemporary: true
+ */
+
+import type { TraitDefinition } from '../simulation/personality/traits';
+
+export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
+
+  // ── Personality — core ────────────────────────────────────────────────────
+
+  ambitious: {
+    id: 'ambitious',
+    name: 'Ambitious',
+    category: 'personality',
+    description: 'Sets their sights high and chafes at limitation. Will not rest content with what they have.',
+    conflicts: ['content'],
+    effects: [{ target: 'ambition_intensity_growth', modifier: 1.2 }],
+  },
+  content: {
+    id: 'content',
+    name: 'Content',
+    category: 'personality',
+    description: 'Finds peace in the life they have. Neither ambition nor restlessness disturbs their sleep.',
+    conflicts: ['ambitious'],
+    effects: [{ target: 'ambition_intensity_growth', modifier: 0.0 }],
+  },
+  gregarious: {
+    id: 'gregarious',
+    name: 'Gregarious',
+    category: 'personality',
+    description: 'Drawn to company like a flame to tallow. Others warm to them almost against their will.',
+    conflicts: ['shy'],
+    effects: [
+      { target: 'opinion_baseline_from_others', modifier: 8 },
+      { target: 'skill_growth_bargaining', modifier: 1 },
+    ],
+  },
+  shy: {
+    id: 'shy',
+    name: 'Shy',
+    category: 'personality',
+    description: 'Retreats from crowded spaces and easy conversation. Their inner world is rich; the outer world is loud.',
+    conflicts: ['gregarious'],
+    effects: [{ target: 'opinion_baseline_from_others', modifier: -5 }],
+  },
+  brave: {
+    id: 'brave',
+    name: 'Brave',
+    category: 'personality',
+    description: 'Does not falter when others would. Danger sharpens them where it blunts the rest.',
+    conflicts: ['craven'],
+    effects: [{ target: 'combat_strength', modifier: 0.15 }],
+  },
+  craven: {
+    id: 'craven',
+    name: 'Craven',
+    category: 'personality',
+    description: 'The first to list the reasons not to act. Fear speaks louder than duty.',
+    conflicts: ['brave'],
+    effects: [{ target: 'combat_strength', modifier: -0.15 }],
+  },
+  cruel: {
+    id: 'cruel',
+    name: 'Cruel',
+    category: 'personality',
+    description: 'Takes satisfaction in others\' suffering — or at least shows no discomfort at it.',
+    conflicts: ['kind'],
+    effects: [{ target: 'combat_strength', modifier: 0.10 }],
+  },
+  kind: {
+    id: 'kind',
+    name: 'Kind',
+    category: 'personality',
+    description: 'Acts with genuine care for those around them. People remember kindness.',
+    conflicts: ['cruel'],
+    effects: [{ target: 'opinion_same_trait', modifier: 8 }],
+  },
+  greedy: {
+    id: 'greedy',
+    name: 'Greedy',
+    category: 'personality',
+    description: 'Counts what belongs to them twice and eyes what belongs to others.',
+    conflicts: ['generous'],
+    effects: [{ target: 'trade_skill', modifier: 0.10 }],
+  },
+  generous: {
+    id: 'generous',
+    name: 'Generous',
+    category: 'personality',
+    description: 'Open-handed with their resources. The community notices.',
+    conflicts: ['greedy'],
+    effects: [{ target: 'opinion_same_trait', modifier: 8 }],
+  },
+  lustful: {
+    id: 'lustful',
+    name: 'Lustful',
+    category: 'personality',
+    description: 'Drawn to physical pleasure and the company of those who offer it.',
+    conflicts: ['chaste'],
+    effects: [{ target: 'fertility_modifier', modifier: 0.1 }],
+  },
+  chaste: {
+    id: 'chaste',
+    name: 'Chaste',
+    category: 'personality',
+    description: 'Keeps their connections to the spiritual and intellectual. The body is a tool, not a master.',
+    conflicts: ['lustful'],
+    effects: [],
+  },
+  wrathful: {
+    id: 'wrathful',
+    name: 'Wrathful',
+    category: 'personality',
+    description: 'Their anger arrives fast and leaves structures standing but relationships in rubble.',
+    conflicts: ['patient'],
+    effects: [{ target: 'event_weight_domestic', modifier: 1.5 }],
+  },
+  patient: {
+    id: 'patient',
+    name: 'Patient',
+    category: 'personality',
+    description: 'Waits for the right moment. Rarely surprised because they were watching all along.',
+    conflicts: ['wrathful', 'reckless'],
+    effects: [],
+  },
+  deceitful: {
+    id: 'deceitful',
+    name: 'Deceitful',
+    category: 'personality',
+    description: 'Bends the truth the way a river bends around stone — always finding the easier path.',
+    conflicts: ['honest'],
+    effects: [{ target: 'trade_skill', modifier: 0.12 }],
+  },
+  honest: {
+    id: 'honest',
+    name: 'Honest',
+    category: 'personality',
+    description: 'Their word costs them sometimes. They give it anyway.',
+    conflicts: ['deceitful'],
+    effects: [{ target: 'opinion_same_trait', modifier: 10 }],
+  },
+  proud: {
+    id: 'proud',
+    name: 'Proud',
+    category: 'personality',
+    description: 'Carries their accomplishments like armour. Insults penetrate anyway, and deeper.',
+    conflicts: ['humble'],
+    effects: [],
+  },
+  humble: {
+    id: 'humble',
+    name: 'Humble',
+    category: 'personality',
+    description: 'Lets others take the credit. Their satisfaction is internal and therefore unassailable.',
+    conflicts: ['proud', 'contrarian'],
+    effects: [],
+  },
+
+  // ── Personality — new ─────────────────────────────────────────────────────
+
+  vengeful: {
+    id: 'vengeful',
+    name: 'Vengeful',
+    category: 'personality',
+    description: 'Remembers every slight in fine detail. Forgiving is not in the vocabulary, though waiting is.',
+    conflicts: ['forgiving'],
+    effects: [{ target: 'opinion_decay_rate', modifier: 0.25 }],
+  },
+  forgiving: {
+    id: 'forgiving',
+    name: 'Forgiving',
+    category: 'personality',
+    description: 'Releases grudges before they can take root. Some call it strength; some call it weakness.',
+    conflicts: ['vengeful'],
+    effects: [{ target: 'opinion_decay_rate', modifier: 2.0 }],
+  },
+  melancholic: {
+    id: 'melancholic',
+    name: 'Melancholic',
+    category: 'personality',
+    description: 'Carries a weight that does not lift even in good seasons. Loss, when it comes, cuts to the bone.',
+    conflicts: ['sanguine'],
+    effects: [{ target: 'event_weight_domestic', modifier: 1.0 }],
+  },
+  sanguine: {
+    id: 'sanguine',
+    name: 'Sanguine',
+    category: 'personality',
+    description: 'Finds reasons to continue even when the facts don\'t support them. Contagiously so.',
+    conflicts: ['melancholic'],
+    effects: [{ target: 'opinion_baseline_from_others', modifier: 5 }],
+  },
+  zealous: {
+    id: 'zealous',
+    name: 'Zealous',
+    category: 'personality',
+    description: 'Faith is not a private matter. They intend to make sure everyone in earshot understands why.',
+    conflicts: ['skeptical', 'cynical'],
+    effects: [
+      { target: 'event_weight_religious', modifier: 2.0 },
+      { target: 'opinion_same_trait', modifier: 10 },
+    ],
+  },
+  cynical: {
+    id: 'cynical',
+    name: 'Cynical',
+    category: 'personality',
+    description: 'Has seen enough promises and rituals to know what they\'re worth. Not much, in their experience.',
+    conflicts: ['devout', 'zealous'],
+    effects: [{ target: 'event_weight_religious', modifier: -1.0 }],
+  },
+  curious: {
+    id: 'curious',
+    name: 'Curious',
+    category: 'personality',
+    description: 'Asks questions before they know if the answers are welcome. The world is interesting and that\'s that.',
+    conflicts: ['stubborn'],
+    effects: [
+      { target: 'language_learning_rate', modifier: 1.5 },
+      { target: 'event_weight_cultural', modifier: 2.0 },
+    ],
+  },
+  stubborn: {
+    id: 'stubborn',
+    name: 'Stubborn',
+    category: 'personality',
+    description: 'Does not move from a position once it is taken. Sometimes this is wisdom. Sometimes it is not.',
+    conflicts: ['curious'],
+    effects: [{ target: 'cultural_resistance', modifier: 0.5 }],
+  },
+  charming: {
+    id: 'charming',
+    name: 'Charming',
+    category: 'personality',
+    description: 'Puts others at ease without apparent effort. A dangerous quality in the wrong hands.',
+    conflicts: [],
+    effects: [{ target: 'opinion_baseline_from_others', modifier: 8 }],
+  },
+  suspicious: {
+    id: 'suspicious',
+    name: 'Suspicious',
+    category: 'personality',
+    description: 'Assumes the worst of intentions until proven otherwise, and sometimes even then.',
+    conflicts: ['trusting'],
+    effects: [{ target: 'opinion_same_trait', modifier: -8 }],
+  },
+  trusting: {
+    id: 'trusting',
+    name: 'Trusting',
+    category: 'personality',
+    description: 'Extends good faith until it is violated. The betrayals, when they come, are remembered.',
+    conflicts: ['suspicious'],
+    effects: [{ target: 'opinion_baseline_from_others', modifier: 5 }],
+  },
+  reckless: {
+    id: 'reckless',
+    name: 'Reckless',
+    category: 'personality',
+    description: 'Acts before the thought has fully formed. Spectacular when it works. Costly when it doesn\'t.',
+    conflicts: ['patient'],
+    effects: [{ target: 'combat_strength', modifier: 0.05 }],
+  },
+  envious: {
+    id: 'envious',
+    name: 'Envious',
+    category: 'personality',
+    description: 'Measures their worth against others\' possessions. The wealthy always seem to have more than they deserve.',
+    conflicts: ['generous'],
+    effects: [],
+  },
+  protective: {
+    id: 'protective',
+    name: 'Protective',
+    category: 'personality',
+    description: 'Puts themselves between their people and whatever threatens them. Does not wait to be asked.',
+    conflicts: [],
+    effects: [
+      { target: 'opinion_same_trait', modifier: 8 },
+      { target: 'opinion_drift_spouse', modifier: 1 },
+    ],
+  },
+
+  // ── Social / relationship ──────────────────────────────────────────────────
+
+  devoted: {
+    id: 'devoted',
+    name: 'Devoted',
+    category: 'personality',
+    description: 'Their loyalty, once given, does not move. The people they love are loved completely.',
+    conflicts: ['fickle'],
+    effects: [
+      { target: 'opinion_decay_rate', modifier: 0.3 },
+      { target: 'opinion_drift_spouse', modifier: 2 },
+    ],
+  },
+  jealous: {
+    id: 'jealous',
+    name: 'Jealous',
+    category: 'personality',
+    description: 'Watches what belongs to them with a sharp eye. Rivals are noticed before introductions are made.',
+    conflicts: [],
+    effects: [],
+  },
+  fickle: {
+    id: 'fickle',
+    name: 'Fickle',
+    category: 'personality',
+    description: 'Affections come and go like seasons. They are not insincere — they simply feel everything at full volume and then stop.',
+    conflicts: ['devoted'],
+    effects: [
+      { target: 'opinion_decay_rate', modifier: 2.0 },
+      { target: 'ambition_intensity_growth', modifier: 1.6 },
+    ],
+  },
+  clingy: {
+    id: 'clingy',
+    name: 'Clingy',
+    category: 'personality',
+    description: 'Attachment runs deep and a little too tight. Absence is not peacefully endured.',
+    conflicts: [],
+    effects: [{ target: 'opinion_drift_spouse', modifier: 1 }],
+  },
+  mentor_hearted: {
+    id: 'mentor_hearted',
+    name: 'Mentor-Hearted',
+    category: 'personality',
+    description: 'Naturally draws out the potential in others. Finds meaning in watching someone else become capable.',
+    conflicts: [],
+    effects: [{ target: 'skill_growth_leadership', modifier: 1 }],
+  },
+  contrarian: {
+    id: 'contrarian',
+    name: 'Contrarian',
+    category: 'personality',
+    description: 'The opposing view is reflexively interesting. Consensus feels like surrender.',
+    conflicts: ['humble'],
+    effects: [],
+  },
+
+  // ── Aptitude — existing ───────────────────────────────────────────────────
+
+  strong: {
+    id: 'strong',
+    name: 'Strong',
+    category: 'aptitude',
+    description: 'Built for physical labour and capable of it. The kind of person you want when the work is heavy.',
+    conflicts: ['weak'],
+    effects: [{ target: 'combat_strength', modifier: 0.15 }],
+    inheritWeight: 0.25,
+  },
+  weak: {
+    id: 'weak',
+    name: 'Weak',
+    category: 'aptitude',
+    description: 'A slight frame or a constitution that has never quite caught up with the work required.',
+    conflicts: ['strong'],
+    effects: [{ target: 'combat_strength', modifier: -0.15 }],
+    inheritWeight: 0.25,
+  },
+  clever: {
+    id: 'clever',
+    name: 'Clever',
+    category: 'aptitude',
+    description: 'Sees patterns quickly. Solutions present themselves before the problem has finished forming.',
+    conflicts: ['slow'],
+    effects: [],
+    inheritWeight: 0.30,
+  },
+  slow: {
+    id: 'slow',
+    name: 'Slow-Witted',
+    category: 'aptitude',
+    description: 'The world moves faster than they do, or at least it seems that way from the outside.',
+    conflicts: ['clever'],
+    effects: [],
+    inheritWeight: 0.30,
+  },
+  beautiful: {
+    id: 'beautiful',
+    name: 'Beautiful',
+    category: 'aptitude',
+    description: 'Draws attention effortlessly. Whether this is a gift depends entirely on who is watching.',
+    conflicts: ['plain'],
+    effects: [{ target: 'opinion_baseline_from_others', modifier: 8 }],
+    inheritWeight: 0.20,
+  },
+  plain: {
+    id: 'plain',
+    name: 'Plain',
+    category: 'aptitude',
+    description: 'Nothing remarkable in the face. People look for other things to recommend them, and usually find them.',
+    conflicts: ['beautiful'],
+    effects: [],
+    inheritWeight: 0.20,
+  },
+  robust: {
+    id: 'robust',
+    name: 'Robust',
+    category: 'aptitude',
+    description: 'A constitution that shrugs off what lays others low. Good company during hard winters.',
+    conflicts: ['sickly'],
+    effects: [
+      { target: 'health_modifier', modifier: 0.15 },
+      { target: 'mortality_modifier', modifier: 0.5 },
+    ],
+    inheritWeight: 0.35,
+  },
+  sickly: {
+    id: 'sickly',
+    name: 'Sickly',
+    category: 'aptitude',
+    description: 'Illness finds them easily and stays long. Each winter is a negotiation.',
+    conflicts: ['robust', 'iron_constitution'],
+    effects: [
+      { target: 'health_modifier', modifier: -0.15 },
+      { target: 'mortality_modifier', modifier: 2.0 },
+    ],
+    inheritWeight: 0.30,
+  },
+  fertile: {
+    id: 'fertile',
+    name: 'Fertile',
+    category: 'aptitude',
+    description: 'Conceives easily and carries well. A blessing on the frontier where every new life matters.',
+    conflicts: ['barren'],
+    effects: [{ target: 'fertility_modifier', modifier: 0.3 }],
+    inheritWeight: 0.20,
+  },
+  barren: {
+    id: 'barren',
+    name: 'Barren',
+    category: 'aptitude',
+    description: 'Cannot conceive, or does not carry to term. In a settlement that needs growth, a quiet grief.',
+    conflicts: ['fertile'],
+    effects: [{ target: 'fertility_modifier', modifier: -1.0 }],
+    inheritWeight: 0.20,
+  },
+
+  // ── Aptitude — new ────────────────────────────────────────────────────────
+
+  gifted_speaker: {
+    id: 'gifted_speaker',
+    name: 'Gifted Speaker',
+    category: 'aptitude',
+    description: 'Words come easily, and the right ones at the right time. People listen even when they meant not to.',
+    conflicts: ['shy'],
+    effects: [
+      { target: 'skill_growth_bargaining', modifier: 1 },
+      { target: 'skill_growth_leadership', modifier: 1 },
+    ],
+    inheritWeight: 0.20,
+  },
+  green_thumb: {
+    id: 'green_thumb',
+    name: 'Green Thumb',
+    category: 'aptitude',
+    description: 'Has a feel for living things — what they need and when. The fields produce better in their care.',
+    conflicts: [],
+    effects: [{ target: 'skill_growth_plants', modifier: 2 }],
+    inheritWeight: 0.20,
+  },
+  keen_hunter: {
+    id: 'keen_hunter',
+    name: 'Keen Hunter',
+    category: 'aptitude',
+    description: 'Patient in the field, precise in the moment. Reads animal behaviour like a second language.',
+    conflicts: [],
+    effects: [
+      { target: 'skill_growth_combat', modifier: 1 },
+      { target: 'farming', modifier: 0.10 },
+    ],
+    inheritWeight: 0.20,
+  },
+  iron_constitution: {
+    id: 'iron_constitution',
+    name: 'Iron Constitution',
+    category: 'aptitude',
+    description: 'Disease slides off them. They have walked away from things that would have felled a lesser body.',
+    conflicts: ['sickly'],
+    effects: [
+      { target: 'disease_chance_modifier', modifier: 0.3 },
+      { target: 'mortality_modifier', modifier: 0.7 },
+    ],
+    inheritWeight: 0.35,
+  },
+  fleet_footed: {
+    id: 'fleet_footed',
+    name: 'Fleet-Footed',
+    category: 'aptitude',
+    description: 'Fast over distance, quick in a bad situation. The first to arrive and the last to be caught.',
+    conflicts: [],
+    effects: [],
+    inheritWeight: 0.15,
+  },
+
+  // ── Cultural — existing ───────────────────────────────────────────────────
+
+  traditional: {
+    id: 'traditional',
+    name: 'Traditional',
+    category: 'cultural',
+    description: 'Believes the old ways carried people this far for a reason. Novelty is treated with exactly the suspicion it deserves.',
+    conflicts: ['cosmopolitan'],
+    effects: [
+      { target: 'cultural_resistance', modifier: 0.3 },
+      { target: 'opinion_same_trait', modifier: 8 },
+    ],
+  },
+  cosmopolitan: {
+    id: 'cosmopolitan',
+    name: 'Cosmopolitan',
+    category: 'cultural',
+    description: 'Finds the foreign interesting rather than threatening. The world is large and they intend to understand it.',
+    conflicts: ['traditional'],
+    effects: [
+      { target: 'cultural_openness', modifier: 0.3 },
+      { target: 'trade_skill', modifier: 0.08 },
+    ],
+  },
+  devout: {
+    id: 'devout',
+    name: 'Devout',
+    category: 'cultural',
+    description: 'Their faith is not a doctrine but a practice. It shows in their daily life.',
+    conflicts: ['skeptical', 'cynical'],
+    effects: [{ target: 'opinion_same_trait', modifier: 10 }],
+  },
+  skeptical: {
+    id: 'skeptical',
+    name: 'Skeptical',
+    category: 'cultural',
+    description: 'Waits for evidence before accepting what they are told, including what the priests are saying.',
+    conflicts: ['devout', 'zealous'],
+    effects: [],
+  },
+  xenophobic: {
+    id: 'xenophobic',
+    name: 'Xenophobic',
+    category: 'cultural',
+    description: 'Distrusts the unfamiliar on principle. Outsiders are problems wearing faces.',
+    conflicts: ['welcoming'],
+    effects: [
+      { target: 'cultural_resistance', modifier: 0.5 },
+      { target: 'opinion_baseline_from_others', modifier: -5 },
+    ],
+  },
+  welcoming: {
+    id: 'welcoming',
+    name: 'Welcoming',
+    category: 'cultural',
+    description: 'Extends hospitality before questions are asked. The community grows because of people like this.',
+    conflicts: ['xenophobic'],
+    effects: [
+      { target: 'cultural_openness', modifier: 0.3 },
+      { target: 'opinion_baseline_from_others', modifier: 5 },
+    ],
+  },
+
+  // ── Cultural — new ────────────────────────────────────────────────────────
+
+  syncretist: {
+    id: 'syncretist',
+    name: 'Syncretist',
+    category: 'cultural',
+    description: 'Sees no contradiction between the old faith and the new. Most people who hold this view are discreet about it.',
+    conflicts: ['zealous'],
+    effects: [{ target: 'event_weight_religious', modifier: -0.5 }],
+  },
+  folklorist: {
+    id: 'folklorist',
+    name: 'Folklorist',
+    category: 'cultural',
+    description: 'Collects stories the way others collect debts. The community\'s memory lives in them.',
+    conflicts: [],
+    effects: [{ target: 'event_weight_cultural', modifier: 1.5 }],
+  },
+  linguist: {
+    id: 'linguist',
+    name: 'Linguist',
+    category: 'cultural',
+    description: 'Picks up languages with unsettling ease. By the time others have learned hello, they are making jokes.',
+    conflicts: [],
+    effects: [{ target: 'language_learning_rate', modifier: 2.0 }],
+  },
+  honor_bound: {
+    id: 'honor_bound',
+    name: 'Honor-Bound',
+    category: 'cultural',
+    description: 'Holds to a code of reciprocal obligation that predates the Company\'s charter by generations. Debt and pledge are serious things.',
+    conflicts: ['oath_breaker'],
+    effects: [{ target: 'opinion_same_trait', modifier: 10 }],
+  },
+  company_man: {
+    id: 'company_man',
+    name: 'Company Man',
+    category: 'cultural',
+    description: 'The Ansberite Company is not just an employer — it is identity. Its success is personal; its failure is shame.',
+    conflicts: [],
+    effects: [],
+  },
+
+  // ── Earned — existing ─────────────────────────────────────────────────────
+
+  veteran: {
+    id: 'veteran',
+    name: 'Veteran',
+    category: 'earned',
+    description: 'Has seen real fighting and come back changed — more precise, less loud about it.',
+    conflicts: [],
+    effects: [{ target: 'combat_strength', modifier: 0.20 }],
+  },
+  scarred: {
+    id: 'scarred',
+    name: 'Scarred',
+    category: 'earned',
+    description: 'Carries the marks of something that nearly ended them. The memory is always close.',
+    conflicts: [],
+    effects: [],
+  },
+  respected_elder: {
+    id: 'respected_elder',
+    name: 'Respected Elder',
+    category: 'earned',
+    description: 'Age has brought a gravity that people listen to. They have been here long enough that no one doubts it.',
+    conflicts: [],
+    effects: [
+      { target: 'opinion_baseline_from_others', modifier: 10 },
+      { target: 'skill_growth_leadership', modifier: 1 },
+    ],
+  },
+  scandal: {
+    id: 'scandal',
+    name: 'Scandal',
+    category: 'earned',
+    description: 'Something happened, and the settlement knows about it even if the details are blurry.',
+    conflicts: [],
+    effects: [{ target: 'opinion_baseline_from_others', modifier: -10 }],
+  },
+  oath_breaker: {
+    id: 'oath_breaker',
+    name: 'Oath-Breaker',
+    category: 'earned',
+    description: 'Broke a pledge that mattered. People who cared about the old obligations have not forgotten.',
+    conflicts: ['honor_bound'],
+    effects: [{ target: 'opinion_baseline_from_others', modifier: -15 }],
+  },
+  hero: {
+    id: 'hero',
+    name: 'Hero',
+    category: 'earned',
+    description: 'Did something remarkable when it counted. The story gets told and retold and grows slightly with each telling.',
+    conflicts: [],
+    effects: [
+      { target: 'combat_strength', modifier: 0.15 },
+      { target: 'opinion_baseline_from_others', modifier: 12 },
+    ],
+  },
+  coward: {
+    id: 'coward',
+    name: 'Coward',
+    category: 'earned',
+    description: 'When the moment came, they did not rise to it. The community noticed.',
+    conflicts: [],
+    effects: [
+      { target: 'combat_strength', modifier: -0.15 },
+      { target: 'opinion_baseline_from_others', modifier: -10 },
+    ],
+  },
+  wealthy: {
+    id: 'wealthy',
+    name: 'Wealthy',
+    category: 'earned',
+    description: 'Has accumulated more than their share. Useful to have on your side; uncomfortable to be in debt to.',
+    conflicts: ['indebted'],
+    effects: [{ target: 'trade_skill', modifier: 0.10 }],
+  },
+  indebted: {
+    id: 'indebted',
+    name: 'Indebted',
+    category: 'earned',
+    description: 'Owes more than they have. The interest accumulates.',
+    conflicts: ['wealthy'],
+    effects: [],
+  },
+
+  // ── Earned — new ─────────────────────────────────────────────────────────
+
+  healer: {
+    id: 'healer',
+    name: 'Healer',
+    category: 'earned',
+    description: 'Has learned the body\'s demands and how to negotiate with them. The sick are brought to their door before the physician\'s.',
+    conflicts: [],
+    effects: [{ target: 'health_modifier', modifier: 0.15 }],
+  },
+  midwife: {
+    id: 'midwife',
+    name: 'Midwife',
+    category: 'earned',
+    description: 'Has guided enough lives into the world to know how it ought to be done. The mothers trust them.',
+    conflicts: [],
+    effects: [],
+  },
+  storyteller: {
+    id: 'storyteller',
+    name: 'Storyteller',
+    category: 'earned',
+    description: 'The keeper of the community\'s memory. Stories change depending on who is telling them, but they remain true.',
+    conflicts: [],
+    effects: [{ target: 'event_weight_cultural', modifier: 1.0 }],
+  },
+  negotiator: {
+    id: 'negotiator',
+    name: 'Negotiator',
+    category: 'earned',
+    description: 'Has brokered enough difficult agreements to know where the give actually is.',
+    conflicts: [],
+    effects: [{ target: 'trade_skill', modifier: 0.15 }],
+  },
+  outcast: {
+    id: 'outcast',
+    name: 'Outcast',
+    category: 'earned',
+    description: 'The community has stepped back from them, collectively, in a way that does not need to be stated aloud.',
+    conflicts: [],
+    effects: [
+      { target: 'opinion_baseline_from_others', modifier: -20 },
+      { target: 'production_modifier', modifier: 0.9 },
+    ],
+  },
+  kinslayer: {
+    id: 'kinslayer',
+    name: 'Kinslayer',
+    category: 'earned',
+    description: 'Blood was spilled that should not have been. Some things cannot be explained away.',
+    conflicts: [],
+    effects: [{ target: 'opinion_baseline_from_others', modifier: -25 }],
+  },
+  exile: {
+    id: 'exile',
+    name: 'Exile',
+    category: 'earned',
+    description: 'Did not choose to come here. The circumstances of their departure from the last place are not discussed.',
+    conflicts: [],
+    effects: [{ target: 'cultural_resistance', modifier: 0.3 }],
+  },
+  ghost_touched: {
+    id: 'ghost_touched',
+    name: 'Ghost-Touched',
+    category: 'earned',
+    description: 'Has walked the threshold the Sacred Wheel describes and returned carrying something. The Wheel singers recognize it.',
+    conflicts: [],
+    effects: [{ target: 'event_weight_religious', modifier: 1.0 }],
+  },
+  blessed_birth: {
+    id: 'blessed_birth',
+    name: 'Blessed Birth',
+    category: 'earned',
+    description: 'Arrived under auspicious signs. The Sauromatian women who attended the birth remember.',
+    conflicts: [],
+    effects: [{ target: 'opinion_baseline_from_others', modifier: 5 }],
+  },
+  bereaved: {
+    id: 'bereaved',
+    name: 'Bereaved',
+    category: 'earned',
+    description: 'Carries a fresh loss. The world is the same size as before and somehow much emptier.',
+    conflicts: [],
+    effects: [
+      { target: 'production_modifier', modifier: 0.85 },
+      { target: 'skill_growth_all', modifier: -1 },
+    ],
+    isTemporary: true,
+  },
+  wheel_blessed: {
+    id: 'wheel_blessed',
+    name: 'Wheel-Blessed',
+    category: 'earned',
+    description: 'Received the blessing of the Sacred Wheel at a moment of sincere convergence. The wheel turns for them.',
+    conflicts: [],
+    effects: [],
+  },
+
+  // ── Mental state (temporary) ──────────────────────────────────────────────
+
+  grieving: {
+    id: 'grieving',
+    name: 'Grieving',
+    category: 'mental_state',
+    description: 'In the hollow aftermath of loss. The work continues but the heart is elsewhere.',
+    conflicts: [],
+    effects: [
+      { target: 'production_modifier', modifier: 0.85 },
+      { target: 'skill_growth_all', modifier: -1 },
+    ],
+    isTemporary: true,
+  },
+  inspired: {
+    id: 'inspired',
+    name: 'Inspired',
+    category: 'mental_state',
+    description: 'Something has clicked — a fulfilled goal, a new possibility. They move with unusual purpose.',
+    conflicts: [],
+    effects: [
+      { target: 'production_modifier', modifier: 1.15 },
+      { target: 'skill_growth_all', modifier: 2 },
+    ],
+    isTemporary: true,
+  },
+  restless: {
+    id: 'restless',
+    name: 'Restless',
+    category: 'mental_state',
+    description: 'Cannot settle. The current arrangement chafes even if nothing is specifically wrong with it.',
+    conflicts: [],
+    effects: [{ target: 'ambition_intensity_growth', modifier: 1.5 }],
+    isTemporary: true,
+  },
+  traumatized: {
+    id: 'traumatized',
+    name: 'Traumatized',
+    category: 'mental_state',
+    description: 'Still flinching. Whatever happened has not finished happening in their mind.',
+    conflicts: [],
+    effects: [
+      { target: 'combat_strength', modifier: -0.10 },
+      { target: 'production_modifier', modifier: 0.9 },
+    ],
+    isTemporary: true,
+  },
+  homesick: {
+    id: 'homesick',
+    name: 'Homesick',
+    category: 'mental_state',
+    description: 'The smell of somewhere else, the faces that are not here. An ache without a cure in reach.',
+    conflicts: [],
+    effects: [{ target: 'language_learning_rate', modifier: 0.7 }],
+    isTemporary: true,
+  },
+} satisfies Readonly<Record<string, TraitDefinition>>;
+
+/** All trait IDs that are temporary (mental state traits that expire after N turns). */
+export const TEMPORARY_TRAITS: ReadonlySet<string> = new Set(
+  Object.values(TRAIT_DEFINITIONS)
+    .filter(t => t.isTemporary)
+    .map(t => t.id),
+);
+
+/** All trait IDs for aptitude traits (eligible for inheritance). */
+export const APTITUDE_TRAITS: ReadonlySet<string> = new Set(
+  Object.values(TRAIT_DEFINITIONS)
+    .filter(t => t.category === 'aptitude')
+    .map(t => t.id),
+);

@@ -65,7 +65,7 @@ function makeState(overrides: {
     company: {
       standing: overrides.standing ?? 60,
       annualQuotaGold: 0,
-      annualQuotaTradeGoods: 0,
+      annualQuotaGoods: 0,
       consecutiveFailures: overrides.consecutiveFailures ?? 0,
       supportLevel: overrides.supportLevel ?? 'standard',
       yearsActive: 0,

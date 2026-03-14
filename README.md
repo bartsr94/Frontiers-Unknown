@@ -42,6 +42,7 @@ npx tsc --noEmit   # Type-check
 | 3.6 | Opinions & Autonomy — Characters of Will | ✅ Complete |
 | 3.7 | Religion System — Faiths of the Ashmark | ✅ Complete |
 | 3.8 | Cultural Identity Pressure | ✅ Complete |
+| 3.9 | Trait Expansion — Character Agency | ✅ Complete |
 | 4 | Polish — The Ashmark Remembers | 🔲 Planned |
 
 **Phase 3 progress:** Language acquisition engine ✅ · Cultural identity & drift system ✅ · Founder character variety ✅ · Skills & experience tracking ✅ · Council voice system ✅ · Character portrait system ✅ · Event `add_person` consequence ✅ · Settlement buildings & construction system ✅ · Event character binding (named actors, `{slot}` interpolation, portrait strip) ✅ · Economy system (Company quota, tribe trade, spoilage, crafting) ✅ · Generic task roles (Forager, Quarrier, Lumberjack) ✅ · Tilled Fields building ✅ · Clickable role assignment ✅
@@ -52,9 +53,11 @@ npx tsc --noEmit   # Type-check
 
 **Phase 3.7 progress:** Three faiths (`imanian_orthodox`, `sacred_wheel`, `syncretic_hidden_wheel`) ✅ · `ReligiousPolicy` (4 values: tolerant, orthodox_enforced, wheel_permitted, hidden_wheel_recognized) ✅ · Hidden Wheel divergence counter (20-turn / 5-year emergence mechanic) ✅ · Religious tension formula (damped by Hidden Wheel spread) ✅ · Company religious pressure drain (annual standing penalty scaled by Wheel fraction) ✅ · 7 religion events (2 programmatic-injection, 5 player-facing) ✅ · Priesthood roles (`priest_solar`, `wheel_singer`, `voice_of_wheel`) ✅ · `ReligionPanel` in SettlementView (faith bars, tension indicator, Hidden Wheel progress, policy dropdown) ✅ · 19 new tests ✅
 
-**Phase 3.8 progress:** Five-zone cultural blend identity scale (Extreme/Soft Imanian → Safe → Soft/Extreme Native) ✅ · `IdentityPressure` counters (`companyPressureTurns` / `tribalPressureTurns`) ✅ · `processIdentityPressure()` pure logic — company standing delta per zone, tribe trait-weighted disposition deltas ✅ · 6 identity events (`ident_company_cultural_concern`, `ident_company_inspector_dispatched`, `ident_company_pleased`, `ident_tribal_leader_invitation`, `ident_tribal_champion_recognised`, `ident_settlers_feel_foreign`) ✅ · `modify_cultural_blend` and `modify_all_tribe_dispositions` consequences ✅ · `sauromatianHeritage` actor criterion ✅ · `IdentityScale` widget (five-zone bar, tick mark, pressure badges) mounted in SettlementView Religion sidebar ✅ · 35 new tests ✅
+**Phase 3.8 progress:** Five-zone cultural blend identity scale (Extreme/Soft Imanian → Safe → Soft/Extreme Native) ✅ · `IdentityPressure` counters (`companyPressureTurns` / `tribalPressureTurns`) ✅ · `processIdentityPressure()` pure logic — company standing delta per zone, tribe trait-weighted disposition deltas ✅ · 6 identity events ✅ · `modify_cultural_blend` and `modify_all_tribe_dispositions` consequences ✅ · `sauromatianHeritage` actor criterion ✅ · `IdentityScale` widget (five-zone bar, tick mark, pressure badges) mounted in SettlementView Religion sidebar ✅ · 35 new tests ✅
 
-**853/853 tests across 27 test files — zero compile errors.**
+**Phase 3.9 progress:** `TraitDefinition` catalog (~80 traits across 6 categories) ✅ · `mental_state` temporary traits with `traitExpiry` map ✅ · Expanded `TRAIT_CONFLICTS` (21 pairs) + `TRAIT_SHARED_BONUS` (15 entries) ✅ · `computeTraitCategoryBoosts` event-deck shaping ✅ · `applyTraitOpinionEffects` per-turn autonomous opinion drift ✅ · `getTraitSkillGrowthBonuses` per-turn skill deltas ✅ · `applyTemporaryTraitExpiry` + 5-pathway earned trait acquisition ✅ · `inheritAptitudeTraits()` called at birth ✅ · Event deck shaped by trait composition each dawn ✅ · 128 new tests ✅
+
+**981/981 tests across 32 test files — zero compile errors.**
 
 ---
 
