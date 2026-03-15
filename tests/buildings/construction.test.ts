@@ -26,7 +26,7 @@ function makeSettlement(overrides: Partial<Settlement> = {}): Settlement {
   return {
     name: 'Test',
     location: 'test',
-    buildings: [{ defId: 'camp', instanceId: 'camp_0', builtTurn: 0, style: null }],
+    buildings: [{ defId: 'camp', instanceId: 'camp_0', builtTurn: 0, style: null, claimedByPersonIds: [] }],
     constructionQueue: [],
     resources: {
       ...emptyResourceStock(),
@@ -92,8 +92,8 @@ describe('canBuild', () => {
   it('allows great_hall when longhouse is present', () => {
     const settlement = makeSettlement({
       buildings: [
-        { defId: 'camp',      instanceId: 'camp_0',      builtTurn: 0, style: null },
-        { defId: 'longhouse', instanceId: 'longhouse_0', builtTurn: 1, style: null },
+        { defId: 'camp',      instanceId: 'camp_0',      builtTurn: 0, style: null, claimedByPersonIds: [] },
+        { defId: 'longhouse', instanceId: 'longhouse_0', builtTurn: 1, style: null, claimedByPersonIds: [] },
       ],
       resources: {
         ...emptyResourceStock(),

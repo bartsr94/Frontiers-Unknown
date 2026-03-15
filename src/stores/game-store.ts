@@ -366,7 +366,7 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
   const settlement: Settlement = {
     name: settlementName,
     location: config.startingLocation,
-    buildings: [{ defId: 'camp', instanceId: 'camp_0', builtTurn: 0, style: null }],
+    buildings: [{ defId: 'camp', instanceId: 'camp_0', builtTurn: 0, style: null, claimedByPersonIds: [] }],
     constructionQueue: [],
     resources: initialResources,
     populationCount: people.size,
@@ -529,6 +529,10 @@ export const useGameStore = create<GameStore>((set, get) => {
 
       const rng = createRNG(gameState.seed + gameState.turnNumber);
       const dawnResult = processDawn(gameState, rng);
+      // Compute whether the mass-desertion warning should fire this turn before building postDawnState.
+      const shouldFireDesertion =
+        dawnResult.desertionCandidateIds.length >= 3 &&
+        !(gameState.massDesertionWarningFired ?? false);
 
       const postDawnState: GameState = {
         ...gameState,
@@ -664,6 +668,14 @@ export const useGameStore = create<GameStore>((set, get) => {
           return combined.slice(-30); // FIFO cap
         })(),
         factions: dawnResult.updatedFactions,
+        lastSettlementMorale: dawnResult.settlementMorale,
+        lowMoraleTurns: dawnResult.newLowMoraleTurns,
+        // Lock the mass-desertion flag for the current crisis episode; reset when morale recovers.
+        massDesertionWarningFired: shouldFireDesertion
+          ? true
+          : dawnResult.newLowMoraleTurns === 0
+            ? false
+            : (gameState.massDesertionWarningFired ?? false),
       };
 
       // Drain any deferred events whose turn has arrived, and prepend them
@@ -758,8 +770,43 @@ export const useGameStore = create<GameStore>((set, get) => {
         })
         .filter((e): e is BoundEvent => e !== null);
 
+      // Inject happiness crisis events.
+      const happinessBoundEvents: BoundEvent[] = [];
+
+      // Individual desertion — fire once when lowHappinessTurns first hits 3.
+      for (const candidateId of dawnResult.desertionCandidateIds) {
+        const candidate = stateAfterDrain.people.get(candidateId);
+        if (!candidate) continue;
+        if (candidate.lowHappinessTurns !== 3) continue; // only on the turn they cross the threshold
+        const ev = getEventById('hap_settler_considers_leaving');
+        if (!ev) continue;
+        happinessBoundEvents.push({ ...ev, boundActors: { settler: candidateId } } as BoundEvent);
+      }
+
+      // Settlement morale warning — fires when lowMoraleTurns first reaches 4.
+      if (dawnResult.newLowMoraleTurns === 4) {
+        const ev = getEventById('hap_low_morale_warning');
+        if (ev) happinessBoundEvents.push({ ...ev, boundActors: {} } as BoundEvent);
+      }
+
+      // Mass desertion warning — fires once per crisis episode (gated by massDesertionWarningFired).
+      if (shouldFireDesertion) {
+        const ev = getEventById('hap_desertion_imminent');
+        if (ev) {
+          const actorSlots = ev.actorRequirements ?? [];
+          const actors = actorSlots.length > 0 ? resolveActors(actorSlots, stateAfterDrain, rng) : {};
+          happinessBoundEvents.push({ ...ev, boundActors: actors ?? {} } as BoundEvent);
+        }
+      }
+
+      // Company happiness inquiry — fires when lowMoraleTurns first reaches 8.
+      if (dawnResult.newLowMoraleTurns === 8) {
+        const ev = getEventById('hap_company_happiness_inquiry');
+        if (ev) happinessBoundEvents.push({ ...ev, boundActors: {} } as BoundEvent);
+      }
+
       // Deferred events are prepended so they resolve before new draws.
-      const allPending: BoundEvent[] = [...deferredBoundEvents, ...schemeBoundEvents, ...factionBoundEvents, ...boundDrawn];
+      const allPending: BoundEvent[] = [...deferredBoundEvents, ...schemeBoundEvents, ...factionBoundEvents, ...happinessBoundEvents, ...boundDrawn];
 
       // One-time creole emergence notification.
       const showCreoleNotification =

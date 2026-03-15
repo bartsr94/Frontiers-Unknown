@@ -10,6 +10,7 @@ import { useGameStore } from '../../stores/game-store';
 import { calculateProduction, calculateConsumption, addResourceStocks } from '../../simulation/economy/resources';
 import type { ResourceType } from '../../simulation/turn/game-state';
 import { ALL_RESOURCES } from '../shared/resource-display';
+import { getHappinessLabel, getHappinessColor, getSettlementMoraleLabel } from '../../simulation/population/happiness';
 
 // Display only the six resources shown in the bottom bar summary strip.
 const BOTTOM_BAR_KEYS: ReadonlySet<ResourceType> = new Set(
@@ -23,6 +24,7 @@ export default function BottomBar() {
   const people    = gameState?.people;
   const season    = gameState?.currentSeason ?? 'spring';
   const settlement = gameState?.settlement;
+  const morale    = gameState?.lastSettlementMorale ?? 0;
 
   // All entries in the people Map are living — dead people move to the graveyard.
   const pop = people ? people.size : 0;
@@ -67,6 +69,20 @@ export default function BottomBar() {
         <span className="font-semibold text-amber-200">{pop}</span>
         <span className="text-stone-500 text-xs hidden sm:inline">Pop</span>
       </span>
+
+      {/* Morale */}
+      {gameState && (
+        <span
+          className="flex items-center gap-1.5 ml-1"
+          title={`Settlement Morale: ${morale} — ${getSettlementMoraleLabel(morale)}`}
+        >
+          <span className="text-base leading-none">🧡</span>
+          <span className={`font-semibold ${getHappinessColor(morale)}`}>{morale}</span>
+          <span className={`text-xs hidden sm:inline ${getHappinessColor(morale)}`}>
+            {getHappinessLabel(morale)}
+          </span>
+        </span>
+      )}
     </footer>
   );
 }

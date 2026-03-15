@@ -30,6 +30,7 @@ import { TRAIT_DEFINITIONS } from '../../data/trait-definitions';
 import { ROLE_LABELS, ROLE_COLORS } from '../shared/role-display';
 import { getAmbitionLabel, getAmbitionIntensityClass } from '../../simulation/population/ambitions';
 import { computeOpinionBreakdown, getEffectiveOpinion } from '../../simulation/population/opinions';
+import { computeHappiness, computeHappinessFactors, getHappinessLabel, getHappinessColor } from '../../simulation/population/happiness';
 
 // ─── Bloodline colours ────────────────────────────────────────────────────────
 
@@ -189,6 +190,7 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
   const graveyard = useGameStore(s => s.gameState?.graveyard ?? []);
   const people    = useGameStore(s => s.gameState?.people);
   const households = useGameStore(s => s.gameState?.households);
+  const gameState = useGameStore(s => s.gameState);
   const currentPhase = useGameStore(s => s.currentPhase);
   const assignKethThara = useGameStore(s => s.assignKethThara);
 
@@ -555,6 +557,41 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
             <Divider />
           </>
         )}
+
+        {/* Happiness */}
+        {gameState && (() => {
+          const score   = computeHappiness(person, gameState);
+          const factors = computeHappinessFactors(person, gameState).filter(f => f.delta !== 0);
+          factors.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+          const tooltip = factors.length > 0
+            ? factors.map(f => `${f.label}: ${f.delta > 0 ? '+' : ''}${f.delta}`).join('\n')
+            : 'No factors';
+          return (
+            <>
+              <SectionHeading>Happiness</SectionHeading>
+              <div className="flex items-center gap-2 mb-2">
+                <span
+                  className={`font-bold text-sm cursor-help ${getHappinessColor(score)}`}
+                  title={tooltip}
+                >
+                  {score > 0 ? '+' : ''}{score}
+                </span>
+                <span
+                  className={`text-xs cursor-help ${getHappinessColor(score)}`}
+                  title={tooltip}
+                >
+                  {getHappinessLabel(score)}
+                </span>
+                {person.lowHappinessTurns > 0 && (
+                  <span className="text-xs text-red-400 ml-auto" title="Consecutive turns at crisis level">
+                    ⚠ {person.lowHappinessTurns}t at crisis
+                  </span>
+                )}
+              </div>
+              <Divider />
+            </>
+          );
+        })()}
 
         {/* Key Opinions */}
         {(() => {

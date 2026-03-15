@@ -348,7 +348,7 @@ describe('processFactions — faction formation', () => {
     const people = new Map([['a', a], ['b', b], ['c', c]]);
 
     const state = makeState(people, {
-      buildings: [{ defId: 'trading_post', instanceId: 'tp_0', builtTurn: 0, style: null }],
+      buildings: [{ defId: 'trading_post', instanceId: 'tp_0', builtTurn: 0, style: null, claimedByPersonIds: [] }],
     });
 
     const result = processFactions(state, 1);
@@ -375,7 +375,7 @@ describe('processFactions — faction formation', () => {
     const people = new Map([['a', a], ['b', b]]);
 
     const state = makeState(people, {
-      buildings: [{ defId: 'trading_post', instanceId: 'tp_0', builtTurn: 0, style: null }],
+      buildings: [{ defId: 'trading_post', instanceId: 'tp_0', builtTurn: 0, style: null, claimedByPersonIds: [] }],
     });
 
     const result = processFactions(state, 1);
@@ -410,7 +410,7 @@ describe('processFactions — faction dissolution', () => {
 
     const state = makeState(people, {
       factions: [existingFaction],
-      buildings: [{ defId: 'trading_post', instanceId: 'tp_0', builtTurn: 0, style: null }],
+      buildings: [{ defId: 'trading_post', instanceId: 'tp_0', builtTurn: 0, style: null, claimedByPersonIds: [] }],
     });
 
     const result = processFactions(state, 10);
@@ -441,7 +441,7 @@ describe('processFactions — demand generation', () => {
 
     const state = makeState(people, {
       factions: [existingFaction],
-      buildings: [{ defId: 'trading_post', instanceId: 'tp_0', builtTurn: 0, style: null }],
+      buildings: [{ defId: 'trading_post', instanceId: 'tp_0', builtTurn: 0, style: null, claimedByPersonIds: [] }],
     });
 
     const result = processFactions(state, 25);
@@ -472,7 +472,7 @@ describe('processFactions — demand generation', () => {
 
     const state = makeState(people, {
       factions: [existingFaction],
-      buildings: [{ defId: 'trading_post', instanceId: 'tp_0', builtTurn: 0, style: null }],
+      buildings: [{ defId: 'trading_post', instanceId: 'tp_0', builtTurn: 0, style: null, claimedByPersonIds: [] }],
     });
 
     const result = processFactions(state, 30); // only 5 turns since last demand (need 20)

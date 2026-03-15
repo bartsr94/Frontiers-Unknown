@@ -32,6 +32,7 @@ import { RELIGIOUS_EVENTS }     from './definitions/religious';
 import { IDENTITY_EVENTS }      from './definitions/identity';
 import { SCHEME_EVENTS }        from './definitions/schemes';
 import { FACTION_EVENTS }       from './definitions/factions';
+import { HAPPINESS_EVENTS }     from './definitions/happiness';
 
 // ─── Master event deck ────────────────────────────────────────────────────────
 
@@ -50,6 +51,7 @@ export const ALL_EVENTS: GameEvent[] = [
   ...IDENTITY_EVENTS,
   ...SCHEME_EVENTS,
   ...FACTION_EVENTS,
+  ...HAPPINESS_EVENTS,
 ];
 
 // ─── Prerequisite checking ────────────────────────────────────────────────────

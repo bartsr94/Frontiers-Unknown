@@ -18,6 +18,8 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 | Phase 3.8 — Cultural Identity Pressure | ✅ Complete | `IdentityPressure` counters ✅ · Five-zone blend scale ✅ · Passive Company standing + tribe disposition deltas ✅ · 6 identity events ✅ · `modify_cultural_blend` / `modify_all_tribe_dispositions` consequences ✅ · `sauromatianHeritage` actor criterion ✅ · `IdentityScale` UI widget ✅ · 35 new tests ✅ |
 | Phase 3.9 — Trait Expansion | ✅ Complete | `TraitDefinition` catalog (~80 traits) ✅ · 6 trait categories incl. `mental_state` ✅ · Temporary traits with `traitExpiry` map ✅ · Expanded `TRAIT_CONFLICTS` (21 pairs) + `TRAIT_SHARED_BONUS` (15 entries) ✅ · `computeTraitCategoryBoosts` event-deck shaping ✅ · `applyTraitOpinionEffects` per-turn autonomous drift ✅ · `getTraitSkillGrowthBonuses` ✅ · `applyTemporaryTraitExpiry` + earned trait acquisition ✅ · `inheritAptitudeTraits()` at birth ✅ · 128 new tests ✅ |
 | Phase 4.0 — Character Autonomy | ✅ Complete | Named relationships (friend/rival/nemesis/confidant/mentor/student) ✅ · Scheme engine (5 types, progress-based event firing) ✅ · Faction system (6 types, membership/strength/demands) ✅ · Activity log (30-entry rolling feed, 11 entry types) ✅ · Community tab (bonds, factions, feed) ✅ · Shared-role opinion drift ✅ · 135 new tests ✅ |
+| Phase 4.1 — Happiness System | ✅ Complete | Per-person happiness score (4 categories: material/social/purpose/trait) ✅ · Settlement morale ✅ · `lowHappinessTurns` streak → desertion gate ✅ · `happinessMultipliers` wired into production ✅ · `getDepartingFamily` ✅ · 99 new tests ✅ |
+| Misc — Genetics Variation | ✅ Complete | `averageBloodlines` now samples ±1–3% biologic split via `Gaussian(0.5, σ=0.015)` clamped to [0.44, 0.56] ✅ · 6 new `TraitId` values (`optimistic`, `hot_tempered`, `cowardly`, `romantic`, `lonely`, `solitary`) + catalog entries ✅ |
 | Phase 4 — Polish | 🔲 Not started | — |
 ---
 
@@ -135,7 +137,7 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/culture/identity-pressure.ts` | `IDENTITY_THRESHOLDS`, `IdentityPressureResult`, `processIdentityPressure(blend, currentPressure, tribes)` — pure logic; no RNG; no React |
 | `src/simulation/population/culture.ts` | `CULTURE_LABELS`, `SAUROMATIAN_CULTURE_IDS`, `deriveCulture`, `processCulturalDrift`, `buildSettlementCultureDistribution`, `computeCulturalBlend` |
 | `src/simulation/genetics/gender-ratio.ts` | `getSauromatianFraction`, `getImanianFraction`, `resolveGenderRatio`, `determineSex` |
-| `src/simulation/genetics/inheritance.ts` | `resolveInheritance()` pipeline: `averageBloodlines`, `blendTraitDistributions`, `sampleContinuous`, `sampleDiscrete`; `inheritAptitudeTraits(mother, father, rng)` — samples aptitude traits based on `inheritWeight` in `TRAIT_DEFINITIONS` |
+| `src/simulation/genetics/inheritance.ts` | `resolveInheritance()` pipeline: `averageBloodlines(mother, father, rng?)`, `blendTraitDistributions`, `sampleContinuous`, `sampleDiscrete`; `inheritAptitudeTraits(mother, father, rng)` — samples aptitude traits based on `inheritWeight` in `TRAIT_DEFINITIONS`; bloodline split is `Gaussian(0.5, 0.015)` clamped [0.44, 0.56] when RNG provided |
 | `src/simulation/genetics/fertility.ts` | `BirthResult`, `createFertilityProfile`, `getFertilityChance`, `attemptConception`, `processPregnancies`; calls `inheritAptitudeTraits()` at birth and passes result as child's initial `traits` |
 | `src/simulation/population/person.ts` | `Person` interface + `createPerson(options, rng?)` factory; heritage/bloodline types; `SkillId`, `PersonSkills`, `getSkillRating()`, `getDerivedSkill()`, `generatePersonSkills()` |
 | `src/simulation/population/naming.ts` | `generateName(sex, culture, motherFamilyName, fatherFamilyName, rng)` — 3 culture pools |
@@ -146,7 +148,8 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/population/named-relationships.ts` | Named relationship formation/dissolution; `processNamedRelationships()`, `seedFoundingRelationships()`; `NamedRelationshipType` (friend/rival/nemesis/confidant/mentor/student); `FRIEND_OPINION_THRESHOLD = 50`, `FRIEND_SUSTAIN_TURNS = 4` |
 | `src/simulation/personality/scheme-engine.ts` | `processSchemes()`, `generateScheme()`; 5 scheme types (`scheme_court_person`, `scheme_convert_faith`, `scheme_befriend_person`, `scheme_undermine_person`, `scheme_tutor_person`); `SCHEME_GENERATE_INTERVAL = 12`; fires climax events at scheme completion |
 | `src/simulation/world/factions.ts` | `processFactions()`, `computeFactionStrength()`, `isEligibleMember()`; 6 faction types (`cultural_preservationists`, `company_loyalists`, `orthodox_faithful`, `wheel_devotees`, `community_elders`, `merchant_bloc`); `FACTION_MIN_MEMBERS = 3`, `DEMAND_STRENGTH_THRESHOLD = 0.45` |
-| `src/data/trait-definitions.ts` | `TRAIT_DEFINITIONS` — authoritative catalog of all ~80 `TraitDefinition` entries; `TEMPORARY_TRAITS: ReadonlySet<string>`; `APTITUDE_TRAITS: ReadonlySet<string>` |
+| `src/simulation/population/happiness.ts` | `computeHappinessFactors(person, state)` → `HappinessFactor[]`; `computeHappiness` (−100–+100); `computeSettlementMorale`; `applyHappinessTracking` (delta map + multipliers + desertion candidates); `getDepartingFamily`; `getHappinessProductionMultiplier`; `isDesertionEligible` — pure TS, no RNG, no React |
+| `src/data/trait-definitions.ts` | `TRAIT_DEFINITIONS` — authoritative catalog of all ~86 `TraitDefinition` entries (includes `optimistic`, `hot_tempered`, `cowardly`, `romantic`, `lonely`, `solitary`); `TEMPORARY_TRAITS: ReadonlySet<string>`; `APTITUDE_TRAITS: ReadonlySet<string>` |
 | `src/data/trait-affinities.ts` | `TRAIT_CONFLICTS` (21 conflicting pairs with penalties) · `TRAIT_SHARED_BONUS` (15 shared-trait bonuses) |
 | `src/simulation/personality/trait-behavior.ts` | `computeTraitCategoryBoosts(people)` — geometric-mean event-deck multipliers; `applyTraitOpinionEffects(people)` — per-turn jealous/envious/suspicious/trusting/charming deltas; `getTraitSkillGrowthBonuses(person)` — green_thumb/keen_hunter/gifted_speaker/mentor_hearted/inspired/bereaved skill deltas |
 | `src/simulation/personality/assignment.ts` | `applyTemporaryTraitExpiry(people, currentTurn)` — removes expired temporary traits (delta-map contract); `checkEarnedTraitAcquisition(person, settlementHasBuildingId, rng)` — probabilistic acquisition pipeline (respected_elder/veteran/healer/negotiator/storyteller); `grantTrait(person, traitId, expiryTurn?, currentTurn?)` — immutable trait addition helper |
@@ -697,6 +700,54 @@ interface TraitDefinition {
 
 ---
 
+## Phase 4.1 — Happiness System Notes
+
+- **4 factor categories**: `material` (food, overcrowding, shelter) · `social` (named relationships, religion, opinion climate) · `purpose` (work role fit) · `trait` (personality modifiers)
+- **Score range**: −100 to +100; labelled Thriving (≥60) → Content → Settled → Restless → Discontent → Miserable → Desperate (<−60)
+- **`lowHappinessTurns`** on `Person` — streak counter incremented when score < −50; reset to 0 otherwise; persists in save file
+- **`isDesertionEligible(person)`**: returns true when `lowHappinessTurns ≥ 3`; used by desertion events
+- **`getDepartingFamily(primaryId, people)`**: spouses depart if their own `lowHappinessTurns ≥ 1` OR `effectiveOpinion(primaryId) ≥ 25`; children under 16 always follow
+- **`applyHappinessTracking(people, state)`**: full tracking pass each dawn — returns `{ updatedPeople, settlementMorale, desertionCandidateIds, happinessMultipliers, newLowMoraleTurns }`
+- **`happinessMultipliers`**: production-role multipliers (Thriving ×1.15, Content ×1.07, Settled ×1.00, Restless ×0.95, Discontent ×0.88, Miserable ×0.78, Desperate ×0.65); guards/away/keth_thara always ×1.0
+- **`lowMoraleTurns`** and **`lastSettlementMorale`** on `GameState` — track morale trend; `lowMoraleTurns` increments when settlement morale < −20, resets otherwise
+- **Devout amplification**: when `devout` trait + religion suppression factor present, adds `Math.floor(suppressionDelta × 0.5)` further penalty
+- **Pure TS**: no RNG, no React — all functions are deterministic given the same inputs
+- **PersonDetail happiness UI**: score + label shown as compact chip; factor breakdown (sorted by |delta|, `+N`/`−N` prefixed) visible on hover via native `title` tooltip with `cursor-help`; crisis warning (`⚠ Nt at crisis`) shown inline when `lowHappinessTurns > 0`
+
+### Happiness Key Files
+
+| File | Purpose |
+|------|--------|
+| `src/simulation/population/happiness.ts` | All happiness functions; `HappinessFactor`, `HappinessTrackingResult` types |
+| `src/simulation/events/definitions/happiness.ts` | 4 crisis events: `hap_settler_considers_leaving`, `hap_low_morale_warning`, `hap_desertion_imminent`, `hap_company_happiness_inquiry`; all injected programmatically |
+| `tests/population/happiness.test.ts` | 99 tests — all factor categories, edge cases, desertion gate, family departure |
+
+---
+
+## Misc — Genetics Variation & Trait Expansion Notes
+
+### Bloodline Variation (added March 2026)
+
+`averageBloodlines(motherBloodline, fatherBloodline, rng?)` — when `rng` is provided (every real birth via `resolveInheritance`), samples `maternalWeight = Gaussian(0.5, σ=0.015)` clamped to `[0.44, 0.56]`:
+- ~68% of children: 48.5–51.5% from each parent
+- ~95% of children: 47–53% (the ±3% biological variation)
+- Without `rng`: exactly 50/50 (unit tests, legacy call-sites)
+
+### 6 New TraitId Values
+
+Added to `TraitId` union (`src/simulation/personality/traits.ts`) in the personality section:
+
+| TraitId | Name | Key effect |
+|---------|------|------------|
+| `optimistic` | Optimistic | Resilient; happiness +10 |
+| `hot_tempered` | Hot-Tempered | `event_weight_domestic` +1.3; happiness −5 |
+| `cowardly` | Cowardly | `combat_strength` −0.10; happiness −5 |
+| `romantic` | Romantic | `opinion_drift_spouse` +2; happiness ±15 depending on spouse |
+| `lonely` | Lonely | Happiness ±20 depending on named relationships |
+| `solitary` | Solitary | Conflicts `gregarious`; happiness ±10 depending on overcrowding |
+
+---
+
 ## Ethnic Group Reference (Phase 2 genetics input)
 
 | Group | Skin (0–1) | Undertone | Hair | Eyes | Build / Height |
@@ -790,4 +841,5 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/population/named-relationships.test.ts` — 13/13 passing (formation gates, dissolution, seed logic, sustain-turn gating)
 - `tests/personality/scheme-engine.test.ts` — 63/63 passing (scheme generation, trait weighting, progress ticking, climax event firing, SCHEME_GENERATE_INTERVAL)
 - `tests/world/factions.test.ts` — 35/35 passing (eligibility by type, strength formula, DEMAND_STRENGTH_THRESHOLD, formation/dissolution)
-- **Total: 1116/1116 passing across 36 test files**
+- `tests/population/happiness.test.ts` — 99/99 passing (all factor categories, material/social/purpose/trait, devout amplification, desertion gate, family departure, settlement morale)
+- **Total: 1231/1231 passing across 37 test files**

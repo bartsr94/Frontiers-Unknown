@@ -78,6 +78,9 @@ export function deserializePerson(s: SerialPerson): Person {
     activeScheme: s.activeScheme ?? null,
     roleAssignedTurn: s.roleAssignedTurn ?? 0,
     opinionSustainedSince: s.opinionSustainedSince ?? {},
+    // Phase 5 happiness fields — not present in pre-Phase-5 saves.
+    lowHappinessTurns: (s as Partial<typeof s>).lowHappinessTurns ?? 0,
+    claimedBuildingId: (s as Partial<typeof s>).claimedBuildingId ?? null,
   };
 }
 
@@ -154,5 +157,9 @@ export function deserializeGameState(json: string): GameState {
     factions:       (s as unknown as Partial<GameState>).factions       ?? [],
     activityLog:    (s as unknown as Partial<GameState>).activityLog    ?? [],
     debugSettings:  (s as unknown as Partial<GameState>).debugSettings  ?? defaultDebugSettings(),
+    // Phase 5 happiness fields.
+    lowMoraleTurns:            (s as unknown as Partial<GameState>).lowMoraleTurns            ?? 0,
+    massDesertionWarningFired: (s as unknown as Partial<GameState>).massDesertionWarningFired ?? false,
+    lastSettlementMorale:      (s as unknown as Partial<GameState>).lastSettlementMorale      ?? 0,
   };
 }

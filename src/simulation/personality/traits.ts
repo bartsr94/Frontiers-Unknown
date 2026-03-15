@@ -51,6 +51,12 @@ export type TraitId =
   | 'reckless'
   | 'envious'
   | 'protective'
+  | 'optimistic'
+  | 'hot_tempered'
+  | 'cowardly'
+  | 'romantic'
+  | 'lonely'
+  | 'solitary'
   // ── Social / relationship ─────────────────────────────────────────────────
   | 'devoted'
   | 'jealous'

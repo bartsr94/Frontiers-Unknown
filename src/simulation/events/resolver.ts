@@ -607,6 +607,22 @@ function applyConsequence(
       return { ...state, people: updatedPeople };
     }
 
+    case 'reset_low_happiness': {
+      // Resets the lowHappinessTurns streak counter to 0 for the target person.
+      const resolvedId = resolveConsequenceTarget(consequence.target, boundActors);
+      if (!resolvedId) return state;
+      const happinessPerson = state.people.get(resolvedId);
+      if (!happinessPerson) return state;
+      const updatedPeople = new Map(state.people);
+      updatedPeople.set(resolvedId, { ...happinessPerson, lowHappinessTurns: 0 });
+      return { ...state, people: updatedPeople };
+    }
+
+    case 'reset_low_morale': {
+      // Resets the settlement-level low-morale streak counter to 0.
+      return { ...state, lowMoraleTurns: 0 };
+    }
+
     // Exhaustiveness guard — compile error if a new ConsequenceType is added without a handler.
     default: {
       const _exhaustive: never = consequence;

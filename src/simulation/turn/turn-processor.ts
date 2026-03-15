@@ -71,6 +71,7 @@ import { processFactions } from '../world/factions';
 import type { FactionProcessResult } from '../world/factions';
 import { computeTraitCategoryBoosts, applyTraitOpinionEffects, getTraitSkillGrowthBonuses } from '../personality/trait-behavior';
 import { applyTemporaryTraitExpiry, checkEarnedTraitAcquisition } from '../personality/assignment';
+import { applyHappinessTracking } from '../population/happiness';
 
 // ─── Result Types ─────────────────────────────────────────────────────────────
 
@@ -212,6 +213,14 @@ export interface DawnResult {
    * Activity log entries for ambition formation and resolution.
    */
   newAmbitionEntries: Array<{ type: 'ambition_formed' | 'ambition_cleared'; personId: string; description: string }>;
+  /** Settlement morale mean (persons aged ≥ 14) computed this dawn. */
+  settlementMorale: number;
+  /** IDs of persons whose lowHappinessTurns reached ≥ 3 this dawn. */
+  desertionCandidateIds: string[];
+  /** Per-person happiness production multipliers, keyed by person ID. */
+  happinessMultipliers: Map<string, number>;
+  /** Updated lowMoraleTurns value to apply to GameState. */
+  newLowMoraleTurns: number;
 }
 
 /** Data returned by processDusk(). The store applies these to GameState. */
@@ -763,12 +772,25 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
   }
   currentBuildings = [...currentBuildings, ...constructionResult.completedBuildings];
 
+  // 5–5.5. Happiness tracking — run before production so multipliers are available.
+  const happinessResult = applyHappinessTracking(updatedPeople, {
+    ...state,
+    people: updatedPeople,
+    settlement: { ...state.settlement, buildings: currentBuildings, populationCount: updatedPeople.size },
+  });
+  // Merge lowHappinessTurns updates into updatedPeople.
+  for (const [id, hp] of happinessResult.updatedPeople) {
+    updatedPeople.set(id, hp);
+  }
+  const { settlementMorale, desertionCandidateIds, happinessMultipliers, newLowMoraleTurns } = happinessResult;
+
   // 5–6. Production and consumption.
   const production = calculateProduction(
     updatedPeople,
     { ...state.settlement, buildings: currentBuildings, constructionQueue: constructionResult.updatedQueue },
     state.currentSeason,
     overcrowdingRatio,
+    happinessMultipliers,
   );
   const consumption = calculateConsumption(updatedPeople);
 
@@ -950,6 +972,10 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     pendingFactionEvents: factionResult.pendingFactionEvents,
     newFactionEntries: factionResult.logEntries,
     newAmbitionEntries: ambitionEntries,
+    settlementMorale,
+    desertionCandidateIds,
+    happinessMultipliers,
+    newLowMoraleTurns,
   };
 }
 

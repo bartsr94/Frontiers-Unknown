@@ -42,17 +42,21 @@ import { TRAIT_DEFINITIONS } from '../../data/trait-definitions';
 /**
  * Merges two parent bloodlines into a child bloodline.
  *
- * For each ethnic group present in either parent, the child's fraction is the
- * average of both parents' fractions (parent with no entry contributes 0).
+ * For each ethnic group present in either parent, the child's fraction is
+ * weighted by the sampled maternal split. When `rng` is provided the maternal
+ * weight is drawn from Gaussian(0.5, 0.015) clamped to [0.44, 0.56], giving
+ * roughly ±1–3% biological variation around the 50/50 baseline.  Without `rng`
+ * the split is exactly 50/50 (used by unit tests and legacy call-sites).
  * The result is re-normalised so all fractions sum exactly to 1.0.
  *
  * @param motherBloodline - Mother's bloodline entries.
  * @param fatherBloodline - Father's bloodline entries.
+ * @param rng - Optional seeded PRNG; when supplied, introduces biological variation.
  * @returns A new bloodline array with summed fractions normalised to 1.0.
  *
  * @example
  * ```ts
- * // Pure Imanian + Pure Kiswani Riverfolk → 50/50 child
+ * // Pure Imanian + Pure Kiswani Riverfolk → ~50/50 child (exact without rng)
  * averageBloodlines(
  *   [{ group: 'imanian', fraction: 1.0 }],
  *   [{ group: 'kiswani_riverfolk', fraction: 1.0 }]
@@ -63,14 +67,23 @@ import { TRAIT_DEFINITIONS } from '../../data/trait-definitions';
 export function averageBloodlines(
   motherBloodline: BloodlineEntry[],
   fatherBloodline: BloodlineEntry[],
+  rng?: SeededRNG,
 ): BloodlineEntry[] {
   const fractions = new Map<EthnicGroup, number>();
 
+  // Biological variation: maternal contribution is ~50% ± a few percent.
+  // σ = 0.015 means ~95% of children are within 47–53% maternal; clamped at
+  // 44–56% to prevent degenerate edge cases.
+  const maternalWeight = rng
+    ? clamp(rng.gaussian(0.5, 0.015), 0.44, 0.56)
+    : 0.5;
+  const paternalWeight = 1 - maternalWeight;
+
   for (const entry of motherBloodline) {
-    fractions.set(entry.group, (fractions.get(entry.group) ?? 0) + entry.fraction * 0.5);
+    fractions.set(entry.group, (fractions.get(entry.group) ?? 0) + entry.fraction * maternalWeight);
   }
   for (const entry of fatherBloodline) {
-    fractions.set(entry.group, (fractions.get(entry.group) ?? 0) + entry.fraction * 0.5);
+    fractions.set(entry.group, (fractions.get(entry.group) ?? 0) + entry.fraction * paternalWeight);
   }
 
   // Build result array and normalise (guard against floating-point drift)
@@ -355,6 +368,7 @@ export function resolveInheritance(
   const childBloodline = averageBloodlines(
     mother.heritage.bloodline,
     father.heritage.bloodline,
+    rng,
   );
 
   const blendedDist = blendTraitDistributions(childBloodline);

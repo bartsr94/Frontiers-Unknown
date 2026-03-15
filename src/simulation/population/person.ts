@@ -522,7 +522,7 @@ export function generatePersonSkills(traits: TraitId[], rng: SeededRNG): PersonS
 
   const result = {} as PersonSkills;
   for (const id of ALL_SKILL_IDS) {
-    result[id] = Math.max(1, Math.min(100, Math.round(raw[id])));
+    result[id] = Math.max(1, Math.min(100, Math.round(raw[id] ?? 0)));
   }
   return result;
 }
@@ -705,6 +705,22 @@ export interface Person {
    * Optional — populated lazily; `?? {}` fallback for old saves.
    */
   opinionSustainedSince?: Partial<Record<string, number>>;
+
+  // ─── Happiness (Phase 5) ─────────────────────────────────────────────────
+
+  /**
+   * Consecutive turns the person's happiness score has been below −50.
+   * Resets to 0 when score rises to −50 or above.
+   * Used to gate the individual desertion event chain.
+   */
+  lowHappinessTurns: number;
+
+  /**
+   * Building claim hook — ID of the BuiltBuilding instance this person has
+   * claimed as a private dwelling. null until the building revamp activates
+   * claims; happiness scoring treats null as "living communally".
+   */
+  claimedBuildingId: string | null;
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
@@ -818,5 +834,7 @@ export function createPerson(options: CreatePersonOptions = {}, rng?: SeededRNG)
     activeScheme: options.activeScheme ?? null,
     roleAssignedTurn: options.roleAssignedTurn ?? 0,
     opinionSustainedSince: options.opinionSustainedSince ?? {},
+    lowHappinessTurns: options.lowHappinessTurns ?? 0,
+    claimedBuildingId: options.claimedBuildingId ?? null,
   };
 }

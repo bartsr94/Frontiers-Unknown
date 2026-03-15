@@ -15,10 +15,11 @@ import { heritageAbbr } from '../components/heritage-helpers';
 import PersonDetail from './PersonDetail';
 import MarriageDialog from '../overlays/MarriageDialog';
 import { ROLE_LABELS, ROLE_COLORS, MAX_COUNCIL_SEATS } from '../shared/role-display';
+import { computeHappiness, getHappinessColor, getHappinessLabel } from '../../simulation/population/happiness';
 
 const MAX_COUNCIL = MAX_COUNCIL_SEATS;
 
-type SortKey = 'name' | 'age' | 'heritage' | 'role' | SkillId;
+type SortKey = 'name' | 'age' | 'heritage' | 'role' | 'happiness' | SkillId;
 
 const SKILL_SORT_LABELS: Array<{ id: SkillId; label: string }> = [
   { id: 'animals',    label: 'Animals' },
@@ -48,9 +49,10 @@ const RATING_BADGE_CLASS: Record<SkillRating, string> = {
 };
 
 interface FilterState {
-  sex:      'all' | 'male' | 'female';
-  married:  'all' | 'married' | 'unmarried';
-  heritage: 'all' | 'IMA' | 'KIS' | 'HAN' | 'MIX';
+  sex:        'all' | 'male' | 'female';
+  married:    'all' | 'married' | 'unmarried';
+  heritage:   'all' | 'IMA' | 'KIS' | 'HAN' | 'MIX';
+  discontent: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -72,12 +74,13 @@ const ASSIGNABLE_ROLES: WorkRole[] = [
 export default function PeopleView() {
   const [selectedId,        setSelectedId]        = useState<string | null>(null);
   const [sortKey,           setSortKey]            = useState<SortKey>('name');
-  const [filter,            setFilter]             = useState<FilterState>({ sex: 'all', married: 'all', heritage: 'all' });
+  const [filter,            setFilter]             = useState<FilterState>({ sex: 'all', married: 'all', heritage: 'all', discontent: false });
   const [showMarriageDialog, setShowMarriageDialog] = useState(false);
   const [rolePickerId,      setRolePickerId]       = useState<string | null>(null);
   const [pickerPos,         setPickerPos]          = useState<{ top: number; left: number; openUp: boolean } | null>(null);
 
   const peopleMap           = useGameStore(s => s.gameState?.people);
+  const gameState           = useGameStore(s => s.gameState);
   const councilIds          = useGameStore(s => s.gameState?.councilMemberIds ?? []);
   const assignCouncilMember = useGameStore(s => s.assignCouncilMember);
   const removeCouncilMember = useGameStore(s => s.removeCouncilMember);
@@ -94,6 +97,9 @@ export default function PeopleView() {
       const group = abbr === 'MIX' ? 'MIX' : abbr === 'IMA' ? 'IMA' : abbr.startsWith('KIS') ? 'KIS' : 'HAN';
       if (group !== filter.heritage) return false;
     }
+    if (filter.discontent && gameState) {
+      if (computeHappiness(p, gameState) >= -15) return false;
+    }
     return true;
   });
 
@@ -108,7 +114,10 @@ export default function PeopleView() {
       case 'combat':
       case 'custom':
       case 'leadership':
-      case 'plants':   return b.skills[sortKey] - a.skills[sortKey];
+      case 'plants':   return b.skills[sortKey as SkillId] - a.skills[sortKey as SkillId];
+      case 'happiness': return gameState
+        ? computeHappiness(a, gameState) - computeHappiness(b, gameState)
+        : 0;
       default:         return `${a.firstName} ${a.familyName}`.localeCompare(`${b.firstName} ${b.familyName}`);
     }
   });
@@ -116,6 +125,7 @@ export default function PeopleView() {
   const activeSkill: SkillId | null = (['animals', 'bargaining', 'combat', 'custom', 'leadership', 'plants'] as const).includes(sortKey as SkillId)
     ? (sortKey as SkillId)
     : null;
+  const showHappinessCol = sortKey === 'happiness' || filter.discontent;
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const selectBtn = (active: boolean) =>
@@ -158,7 +168,7 @@ export default function PeopleView() {
           <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5">
             <span className="text-stone-500 text-xs font-medium shrink-0">Order by</span>
             <span className="w-px h-3 bg-stone-600 self-center mx-0.5" />
-            {(['name', 'age', 'heritage', 'role'] as SortKey[]).map(k => (
+            {(['name', 'age', 'heritage', 'role', 'happiness'] as SortKey[]).map(k => (
               <button key={k} onClick={() => setSortKey(k)} className={selectBtn(sortKey === k)}>
                 {k.charAt(0).toUpperCase() + k.slice(1)}
               </button>
@@ -197,6 +207,13 @@ export default function PeopleView() {
                 {v === 'all' ? 'All' : v}
               </button>
             ))}
+            <span className="w-px h-3 bg-stone-600 self-center mx-1.5" />
+            <button
+              onClick={() => setFilter(f => ({ ...f, discontent: !f.discontent }))}
+              className={selectBtn(filter.discontent)}
+            >
+              ⚠ Discontent
+            </button>
           </div>
         </div>
 
@@ -210,8 +227,8 @@ export default function PeopleView() {
                 <th className="px-2 py-2 font-semibold">Age</th>
                 <th className="px-2 py-2 font-semibold text-center">Sex</th>
                 <th className="px-2 py-2 font-semibold">Role</th>
-                <th className="px-2 py-2 font-semibold text-center w-10" title={activeSkill ? `Sort: ${activeSkill} — FR=Fair · GD=Good · VG=Very Good · EX=Excellent · RN=Renowned · HR=Heroic` : undefined}>
-                  {activeSkill ? <span className="capitalize">{activeSkill}</span> : null}
+                <th className="px-2 py-2 font-semibold text-center w-10" title={activeSkill ? `Sort: ${activeSkill} — FR=Fair · GD=Good · VG=Very Good · EX=Excellent · RN=Renowned · HR=Heroic` : showHappinessCol ? 'Happiness score' : undefined}>
+                  {activeSkill ? <span className="capitalize">{activeSkill}</span> : showHappinessCol ? 'Mood' : null}
                 </th>
                 <th className="px-2 py-2 font-semibold text-center" title="Marital status">Married</th>
                 <th className="px-2 py-2 font-semibold text-center" title="Expedition Council (max 7)">Council</th>
@@ -309,9 +326,20 @@ export default function PeopleView() {
 
                     </td>
 
-                    {/* Skill rating badge — always rendered to prevent layout shift */}
+                    {/* Skill rating badge / happiness score — shared column */}
                     <td className="px-2 py-2 text-center w-10">
-                      {activeSkill && (() => {
+                      {showHappinessCol && gameState && (() => {
+                        const score = computeHappiness(person, gameState);
+                        return (
+                          <span
+                            className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${getHappinessColor(score)}`}
+                            title={getHappinessLabel(score)}
+                          >
+                            {score > 0 ? '+' : ''}{score}
+                          </span>
+                        );
+                      })()}
+                      {!showHappinessCol && activeSkill && (() => {
                         const val = person.skills[activeSkill];
                         const rating = getSkillRating(val);
                         return (

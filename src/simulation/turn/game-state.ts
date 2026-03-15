@@ -308,6 +308,12 @@ export interface BuiltBuilding {
   builtTurn: number;
   /** Cultural style chosen when construction started. null for style-neutral buildings. */
   style: BuildingStyle | null;
+  /**
+   * Building claim hook — IDs of people or households that have claimed
+   * this building as a private dwelling. Empty until the building revamp
+   * activates the claim mechanic.
+   */
+  claimedByPersonIds: string[];
 }
 
 /** An in-progress construction project. */
@@ -699,4 +705,26 @@ export interface GameState {
    * Serialised with GameState so settings survive save/load cycles.
    */
   debugSettings: DebugSettings;
+
+  // ─── Happiness & Morale (Phase 5) ─────────────────────────────────────────
+
+  /**
+   * Consecutive turns settlement morale has been below −20.
+   * Resets to 0 when morale rises to −20 or above.
+   * Gates the escalating crisis event chain.
+   */
+  lowMoraleTurns: number;
+
+  /**
+   * Prevents hap_desertion_imminent firing twice in the same crisis episode.
+   * Reset to false when lowMoraleTurns resets.
+   */
+  massDesertionWarningFired: boolean;
+
+  /**
+   * Cached settlement morale from the last processed dawn.
+   * Used by UI rendering between turns; recomputed in processDawn each season.
+   * Defaults to 0 (neutral) for new games and old saves.
+   */
+  lastSettlementMorale: number;
 }

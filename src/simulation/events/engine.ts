@@ -87,7 +87,19 @@ export type ConsequenceType =
    * Used when an event choice fulfils or cancels the ambition.
    * `target` = personId or slot token. No `value` needed.
    */
-  | 'clear_ambition';
+  | 'clear_ambition'
+  /**
+   * Resets `lowHappinessTurns` to 0 for the target person.
+   * Used by happiness events when the player resolves the settler's grievance.
+   * `target` = personId or slot token. No `value` needed.
+   */
+  | 'reset_low_happiness'
+  /**
+   * Resets `lowMoraleTurns` on GameState to 0.
+   * Used by settlement-level happiness events (town meeting, etc.).
+   * No `target` or `value` needed.
+   */
+  | 'reset_low_morale';
 
 // ─── Event Category ──────────────────────────────────────────────────────────
 

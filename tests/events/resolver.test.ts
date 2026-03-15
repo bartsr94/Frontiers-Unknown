@@ -1327,3 +1327,67 @@ describe("applyEventChoice — 'wound_person' consequence", () => {
     expect(result.state.people.get('p1')?.health.conditions.filter(c => c === 'wounded').length).toBe(1);
   });
 });
+
+// ─── reset_low_happiness ──────────────────────────────────────────────────────
+
+describe("applyEventChoice — 'reset_low_happiness' consequence", () => {
+  function makePersonWithStreak(id: string, streak: number): Person {
+    return {
+      id, firstName: 'Test', familyName: id, sex: 'male', age: 30,
+      alive: true, role: 'unassigned', socialStatus: 'settler',
+      traits: [], spouseIds: [], parentIds: [null, null], childrenIds: [],
+      religion: 'imanian_orthodox',
+      languages: [], relationships: new Map(), opinionModifiers: [],
+      lowHappinessTurns: streak,
+      heritage: { bloodline: [], primaryCulture: 'imanian_homeland', culturalFluency: new Map() },
+      genetics: { visibleTraits: { skinTone: 0.2, skinUndertone: 'cool_pink', hairColor: 'light_brown', hairTexture: 'straight', eyeColor: 'blue', buildType: 'athletic', height: 'average', facialStructure: 'oval' }, genderRatioModifier: 0.5, extendedFertility: false },
+      fertility: { isExtended: false, fertilityStart: 14, fertilityPeak: 25, fertilityDeclineStart: 35, fertilityEnd: 45 },
+      health: { currentHealth: 100, conditions: [] },
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+      portraitVariant: 1,
+    } as unknown as Person;
+  }
+
+  it('resets lowHappinessTurns to 0 for the target person', () => {
+    const person = makePersonWithStreak('p1', 5);
+    const state  = { ...makeState(), people: new Map([['p1', person]]) } as unknown as GameState;
+    const event  = makeEvent([{ type: 'reset_low_happiness', target: '{settler}', value: 0 }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { settler: 'p1' });
+    expect(result.state.people.get('p1')?.lowHappinessTurns).toBe(0);
+  });
+
+  it('leaves other people unchanged', () => {
+    const p1 = makePersonWithStreak('p1', 4);
+    const p2 = makePersonWithStreak('p2', 3);
+    const state  = { ...makeState(), people: new Map([['p1', p1], ['p2', p2]]) } as unknown as GameState;
+    const event  = makeEvent([{ type: 'reset_low_happiness', target: '{settler}', value: 0 }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { settler: 'p1' });
+    expect(result.state.people.get('p1')?.lowHappinessTurns).toBe(0);
+    expect(result.state.people.get('p2')?.lowHappinessTurns).toBe(3);
+  });
+
+  it('is a no-op when the target person does not exist', () => {
+    const state = makeState();
+    const event = makeEvent([{ type: 'reset_low_happiness', target: '{settler}', value: 0 }]);
+    const result = applyEventChoice(event, 'choice_a', state, undefined, { settler: 'nonexistent' });
+    expect(result.state.people).toEqual(state.people);
+  });
+});
+
+// ─── reset_low_morale ─────────────────────────────────────────────────────────
+
+describe("applyEventChoice — 'reset_low_morale' consequence", () => {
+  it('resets lowMoraleTurns to 0 on the state', () => {
+    const state = { ...makeState(), lowMoraleTurns: 7 } as unknown as GameState;
+    const event = makeEvent([{ type: 'reset_low_morale', target: '', value: 0 }]);
+    const result = applyEventChoice(event, 'choice_a', state);
+    expect((result.state as unknown as { lowMoraleTurns: number }).lowMoraleTurns).toBe(0);
+  });
+
+  it('is harmless when lowMoraleTurns is already 0', () => {
+    const state = { ...makeState(), lowMoraleTurns: 0 } as unknown as GameState;
+    const event = makeEvent([{ type: 'reset_low_morale', target: '', value: 0 }]);
+    const result = applyEventChoice(event, 'choice_a', state);
+    expect((result.state as unknown as { lowMoraleTurns: number }).lowMoraleTurns).toBe(0);
+  });
+});

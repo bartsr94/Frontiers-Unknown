@@ -102,6 +102,7 @@ export function calculateProduction(
   settlement: Settlement,
   season: Season,
   overcrowdingRatio: number = 1.0,
+  happinessMultipliers: Map<string, number> = new Map(),
 ): ResourceStock {
   const mods = SEASON_MODIFIERS[season];
   const buildings: BuiltBuilding[] = settlement.buildings;
@@ -110,6 +111,9 @@ export function calculateProduction(
   const delta = emptyResourceStock();
 
   for (const person of people.values()) {
+    // Per-person happiness multiplier (1.0 when not in the map = neutral mood).
+    const happMult = happinessMultipliers.get(person.id) ?? 1.0;
+
     // Base production by role (seasonal modifiers applied below).
     let personFood = 0;
     let personGoods = 0;
@@ -121,8 +125,8 @@ export function calculateProduction(
       // gather_food is seasonally scaled like farming
       case 'gather_food':   personFood   = gatherYield(person.skills.plants); break;
       // gather_stone / gather_lumber are NOT seasonally scaled — accumulated directly
-      case 'gather_stone':  delta.stone  += gatherYield(person.skills.custom); break;
-      case 'gather_lumber': delta.lumber += gatherYield(person.skills.custom); break;
+      case 'gather_stone':  delta.stone  += Math.floor(gatherYield(person.skills.custom) * happMult); break;
+      case 'gather_lumber': delta.lumber += Math.floor(gatherYield(person.skills.custom) * happMult); break;
       case 'craftsman':
       case 'healer':
       case 'guard':
@@ -136,8 +140,9 @@ export function calculateProduction(
     personGoods += roleBonus.goods ?? 0;
     personFood  += roleBonus.food  ?? 0;
 
-    delta.food  += personFood;
-    delta.goods += personGoods;
+    // Apply happiness multiplier to this person's food and goods contribution.
+    delta.food  += personFood  * happMult;
+    delta.goods += personGoods * happMult;
   }
 
   // Apply seasonal modifiers to accumulated food and goods.

@@ -19,12 +19,12 @@ import type { BuiltBuilding } from '../../src/simulation/turn/game-state';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const camp:       BuiltBuilding = { defId: 'camp',        instanceId: 'camp_0',        builtTurn: 0, style: null };
-const longhouse:  BuiltBuilding = { defId: 'longhouse',   instanceId: 'longhouse_0',   builtTurn: 1, style: null };
-const granary:    BuiltBuilding = { defId: 'granary',     instanceId: 'granary_0',     builtTurn: 2, style: null };
-const healersHut: BuiltBuilding = { defId: 'healers_hut', instanceId: 'healers_hut_0', builtTurn: 3, style: null };
-const gathering:  BuiltBuilding = { defId: 'gathering_hall', instanceId: 'gh_0',       builtTurn: 4, style: 'imanian' };
-const palisade:   BuiltBuilding = { defId: 'palisade',    instanceId: 'palisade_0',    builtTurn: 5, style: null };
+const camp:       BuiltBuilding = { defId: 'camp',        instanceId: 'camp_0',        builtTurn: 0, style: null, claimedByPersonIds: [] };
+const longhouse:  BuiltBuilding = { defId: 'longhouse',   instanceId: 'longhouse_0',   builtTurn: 1, style: null, claimedByPersonIds: [] };
+const granary:    BuiltBuilding = { defId: 'granary',     instanceId: 'granary_0',     builtTurn: 2, style: null, claimedByPersonIds: [] };
+const healersHut: BuiltBuilding = { defId: 'healers_hut', instanceId: 'healers_hut_0', builtTurn: 3, style: null, claimedByPersonIds: [] };
+const gathering:  BuiltBuilding = { defId: 'gathering_hall', instanceId: 'gh_0',       builtTurn: 4, style: 'imanian', claimedByPersonIds: [] };
+const palisade:   BuiltBuilding = { defId: 'palisade',    instanceId: 'palisade_0',    builtTurn: 5, style: null, claimedByPersonIds: [] };
 
 // ─── getShelterCapacity ───────────────────────────────────────────────────────
 
