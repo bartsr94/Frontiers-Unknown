@@ -21,6 +21,8 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 | Phase 4.1 — Happiness System | ✅ Complete | Per-person happiness score (4 categories: material/social/purpose/trait) ✅ · Settlement morale ✅ · `lowHappinessTurns` streak → desertion gate ✅ · `happinessMultipliers` wired into production ✅ · `getDepartingFamily` ✅ · 99 new tests ✅ |
 | Misc — Genetics Variation | ✅ Complete | `averageBloodlines` now samples ±1–3% biologic split via `Gaussian(0.5, σ=0.015)` clamped to [0.44, 0.56] ✅ · 6 new `TraitId` values (`optimistic`, `hot_tempered`, `cowardly`, `romantic`, `lonely`, `solitary`) + catalog entries ✅ |
 | Phase 4.2 — Housing & Specialisation | ✅ Complete | 4 private dwelling tiers (`wattle_hut`/`cottage`/`homestead`/`compound`) ✅ · Worker slot caps on all production buildings ✅ · 5 specialisation roles (`blacksmith`/`tailor`/`brewer`/`miller`/`herder`) ✅ · `applyDwellingClaims` 3-pass auto-claim algorithm ✅ · `findAvailableWorkerSlotIndex` slot enforcement ✅ · `person.claimedBuildingId` propagation ✅ · Founding settlers start as foragers (`gather_food`) ✅ · SettlementView dwelling category UI ✅ · PeopleView Trades group + slot hints ✅ · PersonDetail Housing section ✅ · 15 new tests ✅ |
+| Misc — Systems Interconnection | ✅ Complete | Named-rel → scheme generation (nemesis → undermine; confidant suppresses; mentor → tutor without trait) ✅ · Opinion-scaled scheme progress via `schemeOpinionFactor` ✅ · Happiness score → cultural drift rate (`happinessDriftCoefficient` in `culture.ts`) ✅ · `happinessScores` added to `HappinessTrackingResult` ✅ · Design doc in `plans/SYSTEMS_INTERCONNECTION.md` ✅ |
+| Misc — Apprenticeship System | ✅ Complete | `TRAINABLE_TRADES` (12 roles) ✅ · Masters auto-form pairs with children/students every 8 turns ✅ · Progress rate 0.04–0.07/turn (skill tier + `mentor_hearted`) ✅ · Graduation bonus 5–27% per-role capped at 30% ✅ · `tradeTraining` multiplier wired into `calculateProduction()` ✅ · 2 player-facing events (`appr_trade_training_begins`, `appr_trade_mastered`) ✅ · Trade Training section in PersonDetail ✅ · Activity feed icons ✅ · 30 new tests ✅ |
 | Phase 4 — Polish | 🔲 Not started | — |
 ---
 
@@ -120,7 +122,7 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/turn/turn-processor.ts` | `processDawn(state, rng)` + `processDusk(state, season)` |
 | `src/simulation/turn/season.ts` | `SEASON_MODIFIERS` — food/goods production multipliers per season |
 | `src/simulation/events/engine.ts` | Event/choice/consequence **type definitions only** (no logic) |
-| `src/simulation/events/event-filter.ts` | `ALL_EVENTS`, `filterEligibleEvents()`, `drawEvents()`; `canResolveActors` gate makes `actorRequirements` act as implicit event prerequisites |
+| `src/simulation/events/event-filter.ts` | `ALL_EVENTS`, `filterEligibleEvents()`, `drawEvents()`; `canResolveActors` gate makes `actorRequirements` act as implicit event prerequisites; `AMBIENT_MIN_COOLDOWN = 16` floor applied to all `isAmbient: true` events |
 | `src/simulation/events/resolver.ts` | `applyEventChoice(event, choiceId, state, rng?, boundActors?)` returning `ApplyChoiceResult`; `resolveSkillCheck()` helper; `resolveConsequenceTarget()` (maps `{slot}` targets to person IDs); `add_person` consequence handler |
 | `src/simulation/events/actor-resolver.ts` | Actor binding engine: `matchesCriteria`, `canFillSlot`, `canResolveActors`, `selectActor`, `resolveActors`, `interpolateText` — pure TS, zero React, seeded RNG only |
 | `src/simulation/events/definitions/` | 57 events across 9 files; all events with named actors have `actorRequirements` |
@@ -136,7 +138,7 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/data/ethnic-distributions.ts` | All 8 ethnic group `TraitDistribution` constants + `ETHNIC_DISTRIBUTIONS` lookup map |
 | `src/simulation/culture/language-acquisition.ts` | `resolveChildLanguages`, `applyLanguageDrift`, `updateSettlementLanguages`, `updateLanguageTension`, `updateLanguageDiversityTurns` |
 | `src/simulation/culture/identity-pressure.ts` | `IDENTITY_THRESHOLDS`, `IdentityPressureResult`, `processIdentityPressure(blend, currentPressure, tribes)` — pure logic; no RNG; no React |
-| `src/simulation/population/culture.ts` | `CULTURE_LABELS`, `SAUROMATIAN_CULTURE_IDS`, `deriveCulture`, `processCulturalDrift`, `buildSettlementCultureDistribution`, `computeCulturalBlend` |
+| `src/simulation/population/culture.ts` | `CULTURE_LABELS`, `SAUROMATIAN_CULTURE_IDS`, `deriveCulture`, `processCulturalDrift` (optional 4th param `happinessScores?: Map<string, number>`), `buildSettlementCultureDistribution`, `computeCulturalBlend`; `happinessDriftCoefficient(score)` helper — maps happiness score to 0.65–1.10× drift multiplier |
 | `src/simulation/genetics/gender-ratio.ts` | `getSauromatianFraction`, `getImanianFraction`, `resolveGenderRatio`, `determineSex` |
 | `src/simulation/genetics/inheritance.ts` | `resolveInheritance()` pipeline: `averageBloodlines(mother, father, rng?)`, `blendTraitDistributions`, `sampleContinuous`, `sampleDiscrete`; `inheritAptitudeTraits(mother, father, rng)` — samples aptitude traits based on `inheritWeight` in `TRAIT_DEFINITIONS`; bloodline split is `Gaussian(0.5, 0.015)` clamped [0.44, 0.56] when RNG provided |
 | `src/simulation/genetics/fertility.ts` | `BirthResult`, `createFertilityProfile`, `getFertilityChance`, `attemptConception`, `processPregnancies`; calls `inheritAptitudeTraits()` at birth and passes result as child's initial `traits` |
@@ -341,6 +343,7 @@ idle
 ### Event Character Binding System Notes
 
 - **`BoundEvent`**: `GameEvent & { boundActors: Record<string, string> }` — runtime wrapper; all entries in `pendingEvents` are `BoundEvent`; static definitions stay unmodified
+- **`isAmbient?: boolean`** on `GameEvent`: marks background-texture events (weather, random encounters, filler) that carry no specific narrative arc; subject to `AMBIENT_MIN_COOLDOWN = 16` turns in `isEventEligible`, regardless of their per-event `cooldown` value — effectively caps ambient events to at most once per in-game year; currently marked: `dom_hunting_party`, `env_bountiful_harvest`, `env_violent_storm`, `env_winter_hardship`, `eco_passing_merchant`
 - **`actorRequirements?: ActorRequirement[]`** on `GameEvent`: typed criteria for slot selection (`sex`, `religion`, `minAge`, `maxAge`, `maritalStatus`, `minSkill`, `hasTrait`, etc.)
 - **`canResolveActors`** act as an implicit event prerequisite — event is ineligible if any required slot cannot be filled (enforces mutual exclusion)
 - **Actor selection**: greedy in declaration order; each claimed person is excluded from subsequent slots so no two slots share the same person
@@ -647,7 +650,11 @@ interface TraitDefinition {
 - **`PersonScheme`** on `Person`: `{ type: SchemeType; targetId: string; progress: number; startedTurn: number }` or stored as `activeScheme: PersonScheme | null`
 - **5 scheme types**: `scheme_court_person` · `scheme_convert_faith` · `scheme_befriend_person` · `scheme_undermine_person` · `scheme_tutor_person`
 - **Generation**: `generateScheme(person, people, rng)` runs every `SCHEME_GENERATE_INTERVAL = 12` turns per person (jittered by person index); trait-weighted type selection
-- **Progress**: `processSchemes()` advances each active scheme by 1 progress/turn; fires a climax event when progress reaches 100
+  - **Nemesis → undermine** (step 3.5): person with a `nemesis` named relationship generates `scheme_undermine_person` against that nemesis without needing `jealous`/`ambitious` traits
+  - **Confidant suppression**: undermine is not generated (or fails the trait-path step 4 guard) against a person marked as `confidant`
+  - **Mentor → tutor**: a `mentor` named relationship alone is sufficient to generate `scheme_tutor_person`; `mentor_hearted` trait is no longer required
+- **Progress**: `processSchemes()` advances each active scheme by 1 progress/turn; progress rate is scaled by `schemeOpinionFactor(type, person, target)` — positive opinion accelerates social schemes (court/befriend/tutor), hatred accelerates undermine, convert/build are unmodulated
+  - `schemeOpinionFactor` formula: `clamp(1.0 + opinion / 200, 0.5, 1.5)` for positive-direction schemes; inverted for `scheme_undermine_person`; flat `1.0` for convert and build
 - **Climax events** (all `isDeferredOutcome: true`, fired from turn-processor not the deck):
   - `sch_courtship_discovered` · `sch_faith_advocacy_noticed` · `sch_rumours_spreading` · `sch_undermining_climax` · `sch_tutor_breakthrough`
 - **Activity log entries**: `scheme_started`, `scheme_succeeded`, `scheme_failed`
@@ -692,13 +699,13 @@ interface TraitDefinition {
 | File | Purpose |
 |------|---------|
 | `src/simulation/population/named-relationships.ts` | Named relationship formation/dissolution; `processNamedRelationships()`, `seedFoundingRelationships()` |
-| `src/simulation/personality/scheme-engine.ts` | `processSchemes()`, `generateScheme()`; 5 scheme types; progress-to-event pipeline |
+| `src/simulation/personality/scheme-engine.ts` | `processSchemes()`, `generateScheme()`; 5 scheme types; progress-to-event pipeline; `schemeOpinionFactor()` helper; nemesis/confidant/mentor-rel generation rules |
 | `src/simulation/world/factions.ts` | `processFactions()`, `computeFactionStrength()`, `isEligibleMember()`; 6 faction types |
 | `src/simulation/events/definitions/schemes.ts` | 5 scheme climax events — all `isDeferredOutcome: true` |
 | `src/ui/views/CommunityView.tsx` | 3-panel community view (bonds, factions, activity feed) |
 | `src/ui/components/ActivityFeed.tsx` | Rolling 30-entry log with type icons and person-chip navigation |
 | `tests/population/named-relationships.test.ts` | 13 tests — formation gates, dissolution, seed logic |
-| `tests/personality/scheme-engine.test.ts` | 63 tests — scheme generation, progress, climax event firing |
+| `tests/personality/scheme-engine.test.ts` | 74 tests — scheme generation, progress, climax event firing, nemesis/confidant/mentor paths, opinion-scaled rates |
 | `tests/world/factions.test.ts` | 35 tests — eligibility, strength formula, demand threshold |
 
 ---
@@ -710,7 +717,8 @@ interface TraitDefinition {
 - **`lowHappinessTurns`** on `Person` — streak counter incremented when score < −50; reset to 0 otherwise; persists in save file
 - **`isDesertionEligible(person)`**: returns true when `lowHappinessTurns ≥ 3`; used by desertion events
 - **`getDepartingFamily(primaryId, people)`**: spouses depart if their own `lowHappinessTurns ≥ 1` OR `effectiveOpinion(primaryId) ≥ 25`; children under 16 always follow
-- **`applyHappinessTracking(people, state)`**: full tracking pass each dawn — returns `{ updatedPeople, settlementMorale, desertionCandidateIds, happinessMultipliers, newLowMoraleTurns }`
+- **`applyHappinessTracking(people, state)`**: full tracking pass each dawn — returns `{ updatedPeople, settlementMorale, desertionCandidateIds, happinessMultipliers, newLowMoraleTurns, happinessScores }`
+  - **`happinessScores: Map<string, number>`** in `HappinessTrackingResult` — per-person score snapshot passed to `processCulturalDrift` each dawn to modulate drift rate
 - **`happinessMultipliers`**: production-role multipliers (Thriving ×1.15, Content ×1.07, Settled ×1.00, Restless ×0.95, Discontent ×0.88, Miserable ×0.78, Desperate ×0.65); guards/away/keth_thara always ×1.0
 - **`lowMoraleTurns`** and **`lastSettlementMorale`** on `GameState` — track morale trend; `lowMoraleTurns` increments when settlement morale < −20, resets otherwise
 - **Devout amplification**: when `devout` trait + religion suppression factor present, adds `Math.floor(suppressionDelta × 0.5)` further penalty
@@ -723,6 +731,8 @@ interface TraitDefinition {
 |------|--------|
 | `src/simulation/population/happiness.ts` | All happiness functions; `HappinessFactor`, `HappinessTrackingResult` types |
 | `src/simulation/events/definitions/happiness.ts` | 4 crisis events: `hap_settler_considers_leaving`, `hap_low_morale_warning`, `hap_desertion_imminent`, `hap_company_happiness_inquiry`; all injected programmatically |
+| `src/simulation/population/apprenticeship.ts` | `TRAINABLE_TRADES`, `MAX_TRADE_TRAINING`, `getTradeSkill()`, `getMasterProgressRate()`, `computeCompletionBonus()`, `processApprenticeships()` — pure TS, no React, seeded RNG only |
+| `src/simulation/events/definitions/apprenticeship.ts` | 2 events: `appr_trade_training_begins` + `appr_trade_mastered`; both `isDeferredOutcome: true`, injected programmatically by the store |
 | `tests/population/happiness.test.ts` | 99 tests — all factor categories, edge cases, desertion gate, family departure |
 
 ---
@@ -778,6 +788,33 @@ interface TraitDefinition {
 | `src/simulation/buildings/construction.ts` | `applyDwellingClaims`, `findAvailableWorkerSlotIndex`, `DWELLING_IDS` |
 | `src/simulation/buildings/building-definitions.ts` | `workerSlots` / `workerRole` on the 5 new specialisation buildings + 4 dwelling tiers |
 | `tests/buildings/dwelling-claims.test.ts` | 15 tests — Pass 1/2/3, `findAvailableWorkerSlotIndex` slot cap, old-save `undefined` guard |
+
+---
+
+## Misc — Apprenticeship System Notes
+
+- **`TRAINABLE_TRADES`** (12 roles): `farmer` · `gather_food` · `gather_stone` · `gather_lumber` · `blacksmith` · `tailor` · `brewer` · `miller` · `herder` · `healer` · `trader` · `craftsman`
+- **`MAX_TRADE_TRAINING = 30`** — per-role production bonus cap (%)
+- **Master eligibility**: age ≥ 16 · `WorkRole` ∈ `TRAINABLE_TRADES` · trade skill ≥ 26 (Good) · one active apprentice at a time
+- **Apprentice pool**: own children (age 10–20) take priority; named `student` relationships are the fallback
+- **Formation interval**: `APPRENTICESHIP_CHECK_INTERVAL = 8` turns; scan runs at dawn step 8.94
+- **Progress rate**: `getMasterProgressRate(master)` → base 0.04/turn × skill-tier multiplier (1.0/1.25/1.50/1.75 for Good/Excellent/Renowned/Heroic) × 1.25 if `mentor_hearted`
+- **Completion bonus**: `computeCompletionBonus(master)` → 5/8/12/17/22/27% (Fair → Heroic); capped at `MAX_TRADE_TRAINING` per role on graduation
+- **`person.apprenticeship`**: `{ masterId, trade: WorkRole, progress: number, startedTurn: number } | null` — active training state
+- **`person.tradeTraining`**: `Partial<Record<WorkRole, number>>` — completed bonuses, persisted for life; applied in `calculateProduction()` as `tradeMult = 1 + bonus / 100`
+- **Phase A cleanup** (each dawn): ends stale apprenticeships — master gone, master changed role, apprentice age > 22
+- **Phase B progress** (each dawn): advances progress; graduates at 1.0 with `appr_trade_mastered` event + `apprenticeship_completed` log entry
+- **Phase C formation** (every 8 turns): scans for eligible pairs; fires `appr_trade_training_begins` event + `apprenticeship_started` log entry
+- **Serialisation**: both fields are plain JSON — no Map handling; `deserializePerson` provides `?? null` / `?? {}` fallbacks for old saves
+- **`ActivityLogType`** extended with `'apprenticeship_started'` · `'apprenticeship_completed'` · `'apprenticeship_ended'`
+
+### Apprenticeship Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/simulation/population/apprenticeship.ts` | `TRAINABLE_TRADES`, `MAX_TRADE_TRAINING`, `getTradeSkill()`, `getMasterProgressRate()`, `computeCompletionBonus()`, `processApprenticeships()` |
+| `src/simulation/events/definitions/apprenticeship.ts` | 2 events: `appr_trade_training_begins` + `appr_trade_mastered`; `isDeferredOutcome: true`, injected programmatically |
+| `tests/population/apprenticeship.test.ts` | 45 tests — `getTradeSkill` all roles, rate/bonus tiers, Phase A/B/C coverage |
 
 ---
 
@@ -866,7 +903,7 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/genetics/inheritance.test.ts` — 10/10 passing
 - `tests/genetics/gender-ratio.test.ts` — 26/26 passing
 - `tests/genetics/fertility.test.ts` — 31/31 passing
-- `tests/events/event-filter.test.ts` — 56/56 passing (includes 3 new: `weightBoosts` multiplier, no-boost no-op, unknown boost key)
+- `tests/events/event-filter.test.ts` — 78/78 passing (includes `weightBoosts` multiplier, no-boost no-op, unknown boost key, ambient cooldown floor)
 - `tests/events/resolver.test.ts` — 46/46 passing
 - `tests/events/event-queue.test.ts` — 9/9 passing (nextEvent transitions, follow-up insertion, resolveEventChoice/pendingEvents isolation, **3 new: away role restoration via startTurn**)
 - `tests/events/council-advice.test.ts` — 95/95 passing (archetype mapping, choice scoring, hash determinism, advice generation, template coverage)
@@ -900,4 +937,5 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/world/factions.test.ts` — 35/35 passing (eligibility by type, strength formula, DEMAND_STRENGTH_THRESHOLD, formation/dissolution)
 - `tests/population/happiness.test.ts` — 99/99 passing (all factor categories, material/social/purpose/trait, devout amplification, desertion gate, family departure, settlement morale)
 - `tests/buildings/dwelling-claims.test.ts` — 15/15 passing (`applyDwellingClaims` Pass 1 scheme-owned, Pass 2 player-built/homeless priority, Pass 3 `person.claimedBuildingId` propagation, demolition cleanup, old dwelling freed on scheme upgrade)
-- **Total: 1251/1251 passing across 38 test files**
+- `tests/population/apprenticeship.test.ts` — 45/45 passing (`getTradeSkill` all roles, `getMasterProgressRate` tier multipliers + `mentor_hearted`, `computeCompletionBonus` all tiers, `TRAINABLE_TRADES` membership, Phase A/B/C of `processApprenticeships`)
+- **Total: 1395/1395 passing across 40 test files**

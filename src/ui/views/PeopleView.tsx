@@ -293,13 +293,14 @@ export default function PeopleView() {
 
                     {/* Role — clickable dropdown for assignable roles */}
                     <td className="px-2 py-2">
-                      {person.role === 'away' || person.role === 'builder' || person.role === 'keth_thara' ? (
-                        // Locked roles: managed by mission/construction/keth-thara systems
+                      {person.role === 'away' || person.role === 'builder' || person.role === 'keth_thara' || person.role === 'child' ? (
+                        // Locked roles: managed by mission/construction/keth-thara systems, or too young
                         <span
                           className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${ROLE_COLORS[person.role]}`}
                           title={
-                            person.role === 'away'        ? 'Away on mission — cannot reassign' :
-                            person.role === 'keth_thara'  ? 'On Keth-Thara service — returns automatically' :
+                            person.role === 'child'      ? `Too young to work — can be assigned at age 8 (currently ${person.age.toFixed(1)})` :
+                            person.role === 'away'       ? 'Away on mission — cannot reassign' :
+                            person.role === 'keth_thara' ? 'On Keth-Thara service — returns automatically' :
                             'Assigned to construction — use Settlement to unassign'
                           }
                         >
@@ -325,9 +326,12 @@ export default function PeopleView() {
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold
                                       ${ROLE_COLORS[person.role]}
                                       hover:ring-1 hover:ring-white/40 transition-all cursor-pointer`}
-                          title="Click to change role"
+                          title={person.age >= 8 && person.age < 13 ? 'Child worker — 50% work output (full adult at 13)' : 'Click to change role'}
                         >
                           {ROLE_LABELS[person.role]}
+                          {person.age >= 8 && person.age < 13 && (
+                            <span className="opacity-60 text-amber-300 text-[9px] leading-none">−50%</span>
+                          )}
                           <span className="opacity-50 text-[9px] leading-none">▾</span>
                         </button>
                       )}

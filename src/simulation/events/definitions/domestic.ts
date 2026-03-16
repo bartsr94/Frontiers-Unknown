@@ -19,6 +19,7 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
     weight: 3,
     cooldown: 5,
     isUnique: false,
+    isAmbient: true,
     description:
       '{scout} returns to camp excited: he has found fresh game tracks nearby ' +
       '— deer, by the depth and pattern of them, and in good number. An organized ' +

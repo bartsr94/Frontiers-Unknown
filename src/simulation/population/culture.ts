@@ -248,17 +248,36 @@ export function computeReligionDistribution(
 // ─── Per-Turn Cultural Drift ──────────────────────────────────────────────────
 
 /**
+ * Modulates cultural drift speed based on a person's happiness score.
+ *
+ * Happy settlers are open to community norms and assimilate faster.
+ * Miserable settlers retreat inward and resist cultural pull.
+ * Only the *community pull* magnitude is scaled — personal heritage and spouse
+ * bonds are unaffected. Direction never reverses; only pace changes.
+ */
+function happinessDriftCoefficient(score: number): number {
+  if (score >= 30) return 1.10;  // Content / Thriving
+  if (score >= 5)  return 1.00;  // Settled — baseline
+  if (score >= -35) return 0.85; // Restless / Discontent
+  return 0.65;                   // Miserable / Desperate
+}
+
+/**
  * Processes passive cultural drift for all living people in the settlement.
  *
  * Each person's cultural fluency shifts slowly toward the community's
  * cultural distribution, plus a small bonus from their spouse(s).
  *
  * Mechanics:
- *   Community pull:  Δ = DRIFT_RATE × (communityFraction − currentFluency)
+ *   Community pull:  Δ = DRIFT_RATE × happinessCoeff × (communityFraction − currentFluency)
  *   Spouse bonus:    +SPOUSE_RATE toward each living spouse's primaryCulture
  *   Floor:           All existing entries are clamped to ≥ FLUENCY_FLOOR
  *   Exposure seed:   Communities with fraction > EXPOSURE_THRESHOLD introduce
  *                    a new minimum entry in fluency maps lacking that culture
+ *
+ * The happiness coefficient (0.65–1.10) scales only the community pull.
+ * Happy settlers assimilate faster; miserable settlers hold onto their roots.
+ * Spouse and building bonuses are unaffected.
  *
  * After all adjustments, `primaryCulture` is recomputed as the highest entry.
  * Cultures are never removed from the fluency map once seeded — the floor
@@ -266,12 +285,16 @@ export function computeReligionDistribution(
  *
  * @param people - All living people (not mutated).
  * @param _rng - Reserved for future stochastic noise; currently deterministic.
+ * @param buildingCulturePull - Per-building culture nudges from building-effects.
+ * @param happinessScores - Optional pre-computed happiness scores from applyHappinessTracking.
+ *   When provided, the community pull for each person is scaled by their happiness coefficient.
  * @returns A new Map with updated Person records.
  */
 export function processCulturalDrift(
   people: Map<string, Person>,
   _rng: SeededRNG,
   buildingCulturePull: CulturePullModifier[] = [],
+  happinessScores?: Map<string, number>,
 ): Map<string, Person> {
   const communityDist = buildSettlementCultureDistribution(people);
   const result = new Map<string, Person>();
@@ -280,11 +303,17 @@ export function processCulturalDrift(
     // Work on a copy of the fluency map.
     const fluency = new Map(person.heritage.culturalFluency);
 
+    // Happiness coefficient scales the community pull only.
+    // When no scores are provided (e.g. tests, legacy call-sites), fall back to 1.0×
+    // so behaviour is unchanged from the pre-happiness-drift baseline.
+    const happinessScore = happinessScores?.get(id);
+    const driftCoeff = happinessScore !== undefined ? happinessDriftCoefficient(happinessScore) : 1.0;
+
     // ── Community pull ────────────────────────────────────────────────────
     // Shift each existing fluency entry toward the community fraction.
     for (const [cid, currentVal] of fluency) {
       const target = communityDist.get(cid) ?? 0;
-      const newVal = currentVal + DRIFT_RATE * (target - currentVal);
+      const newVal = currentVal + DRIFT_RATE * driftCoeff * (target - currentVal);
       fluency.set(cid, Math.max(FLUENCY_FLOOR, newVal));
     }
 

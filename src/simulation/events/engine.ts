@@ -124,7 +124,8 @@ export type EventCategory =
   | 'cultural'
   | 'personal'
   | 'environmental'
-  | 'company';
+  | 'company'
+  | 'immigration';
 
 // ─── Prerequisite Types ──────────────────────────────────────────────────────
 
@@ -184,7 +185,18 @@ export type PrerequisiteType =
   /** True when at least one faction of the given type is active (params?: { type: FactionType }; omit to check any faction). */
   | 'has_active_faction'
   /** True when two or more Sauromatian women hold seek_companion or seek_spouse ambitions targeting the same man. */
-  | 'has_rival_seekers';
+  | 'has_rival_seekers'
+  /**
+   * True when the settlement's computed prosperity score meets or exceeds the threshold.
+   * Prosperity = buildings×3 + floor(food/15) + floor(goods/8) + gold×2 + floor(pop/5).
+   * params: { value: number }
+   */
+  | 'min_prosperity'
+  /**
+   * True when at least one external tribe of the given ethnic group has contactEstablished.
+   * params: { ethnicGroup?: EthnicGroup }  — omit to check any contacted tribe.
+   */
+  | 'has_tribe_contact';
 
 // ─── Prerequisite & Requirement Interfaces ────────────────────────────────────
 
@@ -481,6 +493,13 @@ export interface GameEvent {
   cooldown: number;
   /** If true, this event fires at most once per game. */
   isUnique: boolean;
+  /**
+   * If true, this is a background-texture event (weather, random encounters, etc.)
+   * with no specific narrative arc. Ambient events are subject to a minimum
+   * cooldown floor (`AMBIENT_MIN_COOLDOWN`) regardless of their `cooldown` value,
+   * preventing the same filler event from firing repeatedly in a short span.
+   */
+  isAmbient?: boolean;
   /**
    * Narrative description shown to the player above the choices.
    * Supports template variables resolved by the engine: `{subject}`, `{tribe}`, etc.

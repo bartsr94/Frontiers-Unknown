@@ -196,7 +196,22 @@ export function computeHappinessFactors(
   if (hasBrewery && hasBrewer) {
     factors.push({ label: 'Quality ale and mead', delta: 5, category: 'social' });
   }
-
+  // ── Social: Bathhouse access (Sauromatian women) ─────────────────────────
+  const isSauromatianWoman = person.sex === 'female' && SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture);
+  if (isSauromatianWoman) {
+    if (settlement.buildings.some(b => b.defId === 'bathhouse_grand')) {
+      factors.push({ label: 'Grand Bathhouse', delta: 16, category: 'social' });
+    } else if (settlement.buildings.some(b => b.defId === 'bathhouse_improved')) {
+      factors.push({ label: 'Improved Bathhouse', delta: 12, category: 'social' });
+    } else if (settlement.buildings.some(b => b.defId === 'bathhouse')) {
+      factors.push({ label: 'Bathhouse comforts', delta: 8, category: 'social' });
+    }
+  } else if (settlement.buildings.some(b => b.defId === 'bathhouse_grand')) {
+    // Grand Bathhouse is a civic amenity all women appreciate
+    if (person.sex === 'female') {
+      factors.push({ label: 'Grand civic bathhouse', delta: 5, category: 'social' });
+    }
+  }
   // ── Social: Spouse / Partner ─────────────────────────────────────────────
   const livingSpouseIds = person.spouseIds.filter(id => people.has(id));
   if (livingSpouseIds.length > 0) {
@@ -503,6 +518,8 @@ export interface HappinessTrackingResult {
   happinessMultipliers: Map<string, number>;
   /** Updated value for GameState.lowMoraleTurns. */
   newLowMoraleTurns: number;
+  /** Per-person happiness scores computed this pass — consumed by processCulturalDrift(). */
+  happinessScores: Map<string, number>;
 }
 
 /** Production roles for which the happiness multiplier applies. */
@@ -527,15 +544,17 @@ export function applyHappinessTracking(
   people: Map<string, Person>,
   state: GameState,
 ): HappinessTrackingResult {
-  const updatedPeople   = new Map<string, Person>();
-  const multipliers     = new Map<string, number>();
+  const updatedPeople    = new Map<string, Person>();
+  const multipliers      = new Map<string, number>();
   const candidateIds: string[] = [];
+  const happinessScores  = new Map<string, number>();
 
   let moraleTotalAge14 = 0;
   let moraleCount      = 0;
 
   for (const [id, person] of people) {
     const score  = computeHappiness(person, state);
+    happinessScores.set(id, score);
     const isCrisis = score < -50;
 
     // Production multiplier (guards, away, keth_thara excluded)
@@ -577,6 +596,7 @@ export function applyHappinessTracking(
     desertionCandidateIds: candidateIds,
     happinessMultipliers: multipliers,
     newLowMoraleTurns,
+    happinessScores,
   };
 }
 

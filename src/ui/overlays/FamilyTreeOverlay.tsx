@@ -591,7 +591,7 @@ function HouseholdMemberCard({ person, role, onViewPerson }: HouseholdMemberCard
   const skinBg      = skinToneColor(person.genetics.visibleTraits.skinTone);
   const happiness   = gameState ? computeHappiness(person, gameState) : null;
 
-  const isAway      = person.role === 'away' || person.role === 'builder';
+  const isAway      = person.role === 'away' || person.role === 'builder' || person.role === 'child';
   const kethEligible =
     canAct &&
     person.sex === 'male' &&

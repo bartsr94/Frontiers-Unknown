@@ -109,6 +109,39 @@ function pickBestTarget(
   return best;
 }
 
+/**
+ * Returns a progress-rate multiplier based on the schemer's effective opinion
+ * of their target.
+ *
+ * Social schemes (court / befriend / tutor): higher opinion → faster progress.
+ * Undermine: lower opinion (more hatred) → faster progress (inverted).
+ * Faith conversion and dwelling: opinion-independent (1.0×).
+ *
+ * Range: [0.5, 1.5] — never stalls a scheme completely, never doubles uncapped.
+ */
+function schemeOpinionFactor(
+  type: SchemeType,
+  person: Person,
+  target: Person | undefined,
+): number {
+  if (!target) return 1.0;
+  const opinion = getEffectiveOpinion(person, target.id);
+  switch (type) {
+    case 'scheme_court_person':
+    case 'scheme_befriend_person':
+    case 'scheme_tutor_person':
+      // Positive opinion → faster progress (warmth, openness, rapport accelerate bonds)
+      return clamp(1.0 + opinion / 200, 0.5, 1.5);
+    case 'scheme_undermine_person':
+      // Negative opinion → faster progress (hatred is its own motivation)
+      return clamp(1.0 + (-opinion) / 200, 0.5, 1.5);
+    case 'scheme_convert_faith':
+    case 'scheme_build_dwelling':
+      // Driven by conviction / practical need, not interpersonal feeling
+      return 1.0;
+  }
+}
+
 /** Pick target with lowest effective opinion. Uses RNG only as tiebreaker. */
 function pickWorstTarget(
   schemer: Person,
@@ -190,11 +223,22 @@ export function generateScheme(
     }
   }
 
-  // 4. scheme_undermine_person — jealous or ambitious; has a rival OR a competing ambition
+  // 3.5. scheme_undermine_person (nemesis path) — a nemesis is sufficient motivation even without
+  //      a jealous/ambitious trait.  Fires before the trait-gated check so the most hostile
+  //      relationship always drives the most hostile scheme.
+  {
+    const nemesisEntry = person.namedRelationships.find(r => r.type === 'nemesis');
+    if (nemesisEntry) {
+      return { type: 'scheme_undermine_person', targetId: nemesisEntry.targetId, progress: 0, startedTurn: currentTurn, revealedToPlayer: false };
+    }
+  }
+
+  // 4. scheme_undermine_person — jealous or ambitious; has a rival OR a competing ambition.
+  //    Confidant loyalty suppresses schemes against the confidant — trust overrides rivalry.
   if (hasTrait(person, 'jealous', 'ambitious')) {
     const rivalEntry = person.namedRelationships.find(r => r.type === 'rival');
-    if (rivalEntry) {
-      // Undermine the rival
+    if (rivalEntry && !hasRelTypeTo(person, 'confidant', rivalEntry.targetId)) {
+      // Undermine the rival (skipped when the rival is also a confidant)
       return { type: 'scheme_undermine_person', targetId: rivalEntry.targetId, progress: 0, startedTurn: currentTurn, revealedToPlayer: false };
     }
     // Also check for competing ambition: someone else has the same ambition type
@@ -212,8 +256,10 @@ export function generateScheme(
     }
   }
 
-  // 5. scheme_tutor_person — mentor_hearted; has an existing mentor named relationship
-  if (hasTrait(person, 'mentor_hearted')) {
+  // 5. scheme_tutor_person — a named mentor relationship is sufficient to generate this scheme;
+  //    the mentor_hearted trait is no longer required (though it still boosts progress via the
+  //    opinion factor).  Anyone who has formally become a mentor should invest in their student.
+  {
     const mentorRel = person.namedRelationships.find(r => r.type === 'mentor');
     if (mentorRel) {
       return { type: 'scheme_tutor_person', targetId: mentorRel.targetId, progress: 0, startedTurn: currentTurn, revealedToPlayer: false };
@@ -327,10 +373,9 @@ export function processSchemes(
 
     // --- Progress advance ---
     let progressRate = PROGRESS_RATE[scheme.type];
-    if (scheme.type === 'scheme_court_person' && target) {
-      const opinionFactor = clamp(getEffectiveOpinion(person, target.id) / 100, 0.5, 1.5);
-      progressRate *= opinionFactor;
-    }
+    // Opinion-scaled progress: positive opinion accelerates social schemes; hatred accelerates
+    // undermining; religious conviction and construction are unaffected.
+    progressRate *= schemeOpinionFactor(scheme.type, person, target);
     const prevProgress = scheme.progress;
     const newProgress = Math.min(1.0, prevProgress + progressRate);
 

@@ -17,6 +17,7 @@ export const ENVIRONMENTAL_EVENTS: GameEvent[] = [
     weight: 2,
     cooldown: 6,
     isUnique: false,
+    isAmbient: true,
     description:
       'The season has been generous — the fields yielding more than expected, stores ' +
       'filling faster than planned. The men work with a lighter step. Even the weather ' +
@@ -55,6 +56,7 @@ export const ENVIRONMENTAL_EVENTS: GameEvent[] = [
     weight: 2,
     cooldown: 8,
     isUnique: false,
+    isAmbient: true,
     description:
       'Without warning, a violent storm tears through the settlement — rain driving ' +
       'sideways through every gap in the shelters, wind scattering anything left ' +
@@ -88,6 +90,7 @@ export const ENVIRONMENTAL_EVENTS: GameEvent[] = [
     weight: 3,
     cooldown: 4,
     isUnique: false,
+    isAmbient: true,
     description:
       'The winter has proved harder than anticipated. The cold is deep and persistent, ' +
       "fuel is running lower than planned, and the men are eyeing the food stores with " +

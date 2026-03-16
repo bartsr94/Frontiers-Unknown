@@ -61,6 +61,11 @@ function makePersonWithSkill(role: Person['role'], plants: number, custom: numbe
   } as unknown as Person;
 }
 
+/** Person stub with a completed tradeTraining bonus for the given role. */
+function makePersonWithTraining(role: Person['role'], bonus: number): Person {
+  return { role, tradeTraining: { [role]: bonus } } as unknown as Person;
+}
+
 function makePopulation(roles: Person['role'][]): Map<string, Person> {
   const map = new Map<string, Person>();
   roles.forEach((role, i) => map.set(`p${i}`, makePerson(role)));
@@ -532,5 +537,50 @@ describe('calculateProduction — herder (stable)', () => {
     const map = new Map([['p0', makePerson('herder')]]);
     const result = calculateProduction(map, makeSettlement(0, [makeBuilding('stable')]), 'spring');
     expect(result.horses).toBe(1);
+  });
+});
+
+// ─── calculateProduction — tradeTraining multiplier ──────────────────────────
+
+describe('calculateProduction — tradeTraining bonus', () => {
+  const withFields = () => makeSettlement(0, [makeBuilding('fields')]);
+
+  it('increases food output when the person is trained in their current role', () => {
+    // 2 farmers, 10% training, Fields, autumn:
+    //   delta.food before seasonal = 2 × 3 × 1.1 = 6.6
+    //   Math.floor(6.6 × 1.6) = Math.floor(10.56) = 10
+    //   Without training: Math.floor(6 × 1.6) = Math.floor(9.6) = 9
+    const people = new Map([
+      ['p0', makePersonWithTraining('farmer', 10)],
+      ['p1', makePersonWithTraining('farmer', 10)],
+    ]);
+    expect(calculateProduction(people, withFields(), 'autumn').food).toBe(10);
+  });
+
+  it('stacks correctly with the seasonal multiplier', () => {
+    // 1 farmer, 20% training, Fields, autumn:
+    //   delta.food = 3 × 1.2 = 3.6;  seasonal: Math.floor(3.6 × 1.6) = 5
+    //   Without training: Math.floor(3 × 1.6) = Math.floor(4.8) = 4
+    const people = new Map([['p0', makePersonWithTraining('farmer', 20)]]);
+    expect(calculateProduction(people, withFields(), 'autumn').food).toBe(5);
+  });
+
+  it('does not apply when the person works a different role than the trained trade', () => {
+    // Trained as a farmer but currently working as a trader — bonus must NOT fire.
+    const person = { role: 'trader' as Person['role'], tradeTraining: { farmer: 30 } } as unknown as Person;
+    const result   = calculateProduction(new Map([['p0', person]]),              makeSettlement(), 'spring');
+    const baseline = calculateProduction(new Map([['p0', makePerson('trader')]]), makeSettlement(), 'spring');
+    expect(result.goods).toBe(baseline.goods);
+    expect(result.food).toBe(baseline.food);
+  });
+
+  it('produces the same output as an untrained person when tradeTraining field is absent', () => {
+    // Old-save persons without a tradeTraining field must not crash,
+    // and must produce identically to a 0% bonus.
+    const trainedZero  = new Map([['p0', makePersonWithTraining('farmer', 0)]]);
+    const missingField = new Map([['p0', makePerson('farmer')]]);
+    expect(calculateProduction(trainedZero,  withFields(), 'spring')).toEqual(
+      calculateProduction(missingField, withFields(), 'spring'),
+    );
   });
 });

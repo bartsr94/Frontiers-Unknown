@@ -189,9 +189,12 @@ export function attemptConception(
   currentTurn: number,
   season: Season,
   rng: SeededRNG,
+  buildingFertilityBonus = 0,
 ): PregnancyState | null {
-  const chance = getFertilityChance(woman, season);
-  if (chance <= 0) return null;
+  const baseChance = getFertilityChance(woman, season);
+  if (baseChance <= 0) return null;
+
+  const chance = Math.min(baseChance + buildingFertilityBonus, 0.65);
 
   if (rng.next() < chance) {
     return {
@@ -301,6 +304,7 @@ export function processPregnancies(
       isPlayerControlled: false,
       portraitVariant,
       traits: aptitudeTraits.length > 0 ? aptitudeTraits : undefined,
+      role: 'child',
     });
 
     results.push({ motherId: mother.id, child, motherDied, motherHealthDelta });

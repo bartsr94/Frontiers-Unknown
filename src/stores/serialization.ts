@@ -83,6 +83,9 @@ export function deserializePerson(s: SerialPerson): Person {
     claimedBuildingId: (s as Partial<typeof s>).claimedBuildingId ?? null,
     // Housing & specialisation fields.
     joinedYear: (s as Partial<typeof s>).joinedYear ?? 1,
+    // Apprenticeship fields — not present in pre-apprenticeship saves.
+    apprenticeship: (s as Partial<typeof s>).apprenticeship ?? null,
+    tradeTraining: (s as Partial<typeof s>).tradeTraining ?? {},
   };
 }
 

@@ -256,8 +256,10 @@ export type WorkRole =
   | 'blacksmith'     // Works at Smithy; produces steel and goods
   | 'tailor'         // Works at Tannery; produces goods
   | 'brewer'         // Works at Brewery; produces goods and settlement morale
-  | 'miller'         // Works at Mill; multiplies food output
-  | 'herder'         // Works at Stable; manages cattle and horses
+  | 'miller'              // Works at Mill; multiplies food output
+  | 'herder'              // Works at Stable; manages cattle and horses
+  | 'bathhouse_attendant' // Works at Bathhouse; enables bathhouse happiness and fertility bonuses
+  | 'child'      // Under 8 — too young to work; set automatically and cleared at age 8
   | 'unassigned';
 
 /** A person's social standing within the settlement community. */
@@ -539,6 +541,20 @@ const DEFAULT_SKILLS: PersonSkills = {
   animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25,
 };
 
+// ─── Child Labour Modifier ────────────────────────────────────────────────────
+
+/**
+ * Returns a work-output multiplier based on a person's age.
+ * - Under 8 : 0.0 — too young to work (assignment is blocked at the store layer)
+ * - 8 – 12  : 0.5 — child labour; half the output of a full adult
+ * - 13+     : 1.0 — full adult output
+ */
+export function getChildWorkModifier(age: number): number {
+  if (age < 8)  return 0;
+  if (age < 13) return 0.5;
+  return 1.0;
+}
+
 // ─── Opinion Modifiers ────────────────────────────────────────────────────────
 
 /**
@@ -737,6 +753,29 @@ export interface Person {
    * Used to compute housing-expectation pressure in the happiness system.
    */
   joinedYear: number;
+
+  // ─── Apprenticeship (Phase 4.3) ─────────────────────────────────────────
+
+  /**
+   * Active trade apprenticeship if this person is currently being trained.
+   * Null when not apprenticed. Progress advances each turn via processApprenticeships().
+   */
+  apprenticeship: {
+    masterId: string;
+    /** The WorkRole the master is teaching. */
+    trade: WorkRole;
+    /** 0.0–1.0. Completes at 1.0, triggering the appr_trade_mastered event. */
+    progress: number;
+    startedTurn: number;
+  } | null;
+
+  /**
+   * Lasting production bonuses from completed apprenticeship(s).
+   * Maps WorkRole → bonus percent (5–27). Applied as a multiplier during
+   * production when this person works in the trained role.
+   * Stacks across multiple apprenticeships; capped at 30% per role.
+   */
+  tradeTraining: Partial<Record<WorkRole, number>>;
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
@@ -853,5 +892,7 @@ export function createPerson(options: CreatePersonOptions = {}, rng?: SeededRNG)
     lowHappinessTurns: options.lowHappinessTurns ?? 0,
     claimedBuildingId: options.claimedBuildingId ?? null,
     joinedYear: options.joinedYear ?? 1,
+    apprenticeship: options.apprenticeship ?? null,
+    tradeTraining: options.tradeTraining ?? {},
   };
 }

@@ -41,8 +41,8 @@ import {
   ETHNIC_GROUP_PRIMARY_LANGUAGE,
 } from '../population/person';
 import type { DerivedSkillId, SkillId, OpinionModifier } from '../population/person';
-import { addOpinionModifier } from '../population/opinions';
-import { canMarry, performMarriage, applyMarriageOpinionFloor } from '../population/marriage';
+import { addOpinionModifier, applyMarriageOpinionFloor } from '../population/opinions';
+import { canMarry, performMarriage } from '../population/marriage';
 import { generateName } from '../population/naming';
 import { createFertilityProfile } from '../genetics/fertility';
 import { ETHNIC_DISTRIBUTIONS } from '../../data/ethnic-distributions';
@@ -350,6 +350,10 @@ function applyConsequence(
       const minAge        = (p.minAge       as number)             ?? 18;
       const maxAge        = (p.maxAge       as number)             ?? 45;
       const socialStatus  = (p.socialStatus as SocialStatus)       ?? 'newcomer';
+      // Optional archetype params for immigration events
+      const initialRole        = (p.role              as import('../population/person').WorkRole) ?? 'unassigned';
+      const initialSkillBoosts = (p.initialSkillBoosts as Partial<import('../population/person').PersonSkills>) ?? {};
+      const initialTraits      = (p.initialTraits      as import('../personality/traits').TraitId[]) ?? [];
 
       const isSauromatian = ethnicGroup !== 'imanian';
       const religion      = (p.religion as ReligionId)
@@ -376,7 +380,7 @@ function applyConsequence(
           familyName,
           sex,
           age,
-          role: 'unassigned',
+          role: initialRole,
           socialStatus,
           genetics: {
             visibleTraits: {
@@ -405,7 +409,25 @@ function applyConsequence(
           religion,
         }, rng);
 
-        updatedPeople.set(person.id, person);
+        // Apply archetype overrides from immigration events.
+        const boostedSkills = Object.keys(initialSkillBoosts).length > 0
+          ? { ...person.skills, ...Object.fromEntries(
+              Object.entries(initialSkillBoosts).map(([k, v]) => [
+                k,
+                Math.min(100, (person.skills[k as import('../population/person').SkillId] ?? 25) + (v ?? 0)),
+              ]),
+            ) }
+          : person.skills;
+
+        const boostedPerson = initialTraits.length > 0 || Object.keys(initialSkillBoosts).length > 0
+          ? {
+              ...person,
+              skills: boostedSkills as import('../population/person').PersonSkills,
+              traits: [...new Set([...person.traits, ...initialTraits])],
+            }
+          : person;
+
+        updatedPeople.set(boostedPerson.id, boostedPerson);
       }
 
       return {

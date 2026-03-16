@@ -206,10 +206,13 @@ function buildActivityLog(
   const successionEntries = dawnResult.successionLogEntries.map(e => ({
     turn, type: e.type, personId: e.personId, targetId: e.targetId, description: e.description,
   }));
+  const apprenticeshipEntries = (dawnResult.newApprenticeshipEntries ?? []).map(e => ({
+    turn, type: e.type, personId: e.personId, targetId: e.targetId, description: e.description,
+  }));
   return [
     ...existing,
     ...relEntries, ...schemeEntries, ...factionEntries, ...ambitionEntries,
-    ...roleEntries, ...traitEntries, ...successionEntries,
+    ...roleEntries, ...traitEntries, ...successionEntries, ...apprenticeshipEntries,
   ].slice(-30);
 }
 
@@ -248,11 +251,13 @@ function applyDawnResultToState(state: GameState, dawnResult: DawnResult): GameS
   );
 
   const turn = state.turnNumber;
+  const deadIds = new Set(dawnResult.newGraveyardEntries.map(e => e.id));
 
   return {
     ...state,
     people,
     graveyard: [...state.graveyard, ...dawnResult.newGraveyardEntries],
+    councilMemberIds: state.councilMemberIds.filter(id => !deadIds.has(id)),
     households: claimedHouseholds,
     settlement: {
       ...state.settlement,
@@ -557,8 +562,21 @@ export const useGameStore = create<GameStore>((set, get) => {
         })
         .filter((e): e is BoundEvent => e !== null);
 
+      // Inject apprenticeship lifecycle events (formation + graduation).
+      const apprenticeshipBoundEvents: BoundEvent[] = (dawnResult.pendingApprenticeshipEvents ?? [])
+        .map(({ eventId, masterId, apprenticeId }) => {
+          const ev = getEventById(eventId);
+          if (!ev) return null;
+          const actorSlots = ev.actorRequirements ?? [];
+          const boundActors: Record<string, string> = {};
+          if (actorSlots[0]) boundActors[actorSlots[0].slot] = masterId;
+          if (actorSlots[1]) boundActors[actorSlots[1].slot] = apprenticeId;
+          return { ...ev, boundActors } as BoundEvent;
+        })
+        .filter((e): e is BoundEvent => e !== null);
+
       // Deferred events are prepended so they resolve before new draws.
-      const allPending: BoundEvent[] = [...deferredBoundEvents, ...schemeBoundEvents, ...factionBoundEvents, ...happinessBoundEvents, ...successionBoundEvents, ...childBirthBoundEvents, ...boundDrawn];
+      const allPending: BoundEvent[] = [...deferredBoundEvents, ...schemeBoundEvents, ...factionBoundEvents, ...happinessBoundEvents, ...successionBoundEvents, ...childBirthBoundEvents, ...apprenticeshipBoundEvents, ...boundDrawn];
 
       // One-time creole emergence notification.
       const showCreoleNotification =
@@ -742,6 +760,9 @@ export const useGameStore = create<GameStore>((set, get) => {
       if (!gameState) return;
       const person = gameState.people.get(personId);
       if (!person) return;
+
+      // Children under 8 are too young to be assigned any work role.
+      if (person.age < 8 || person.role === 'child') return;
 
       const updatedPeople = new Map(gameState.people);
 

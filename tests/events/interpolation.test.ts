@@ -128,6 +128,63 @@ describe('unknown slot passthrough', () => {
   });
 });
 
+// ─── Pronoun alias tokens — female-form aliases (.she / .her / .She / .Her) ──
+//
+// These are aliases: .she === .he, .her === .his, .She === .He, .Her === .His
+// They exist because event authors naturally write "she" and "her" for female
+// characters.  The aliases must resolve correctly for both sexes.
+
+describe('pronoun alias tokens: .she / .her / .She / .Her', () => {
+  // Female actor — expect natural female pronouns
+  it('{slot.she} → "she" for female', () => {
+    const w = makeFemale();
+    expect(interpolateText('{midwife.she} assists', { midwife: w })).toBe('she assists');
+  });
+  it('{slot.her} → "her" for female (possessive)', () => {
+    const w = makeFemale();
+    expect(interpolateText('{midwife.her} knowledge', { midwife: w })).toBe('her knowledge');
+  });
+  it('{slot.She} → "She" for female', () => {
+    const w = makeFemale();
+    expect(interpolateText('{midwife.She} asks', { midwife: w })).toBe('She asks');
+  });
+  it('{slot.Her} → "Her" for female', () => {
+    const w = makeFemale();
+    expect(interpolateText('{midwife.Her} knowledge', { midwife: w })).toBe('Her knowledge');
+  });
+
+  // Male actor — aliases must still resolve (author should've used .he/.his, but it shouldn't break)
+  it('{slot.she} → "he" for male', () => {
+    const m = makeMale();
+    expect(interpolateText('{scout.she} returns', { scout: m })).toBe('he returns');
+  });
+  it('{slot.her} → "his" for male', () => {
+    const m = makeMale();
+    expect(interpolateText('{scout.her} pack', { scout: m })).toBe('his pack');
+  });
+  it('{slot.She} → "He" for male', () => {
+    const m = makeMale();
+    expect(interpolateText('{scout.She} stands', { scout: m })).toBe('He stands');
+  });
+  it('{slot.Her} → "His" for male', () => {
+    const m = makeMale();
+    expect(interpolateText('{scout.Her} pack', { scout: m })).toBe('His pack');
+  });
+
+  // Multi-token string using alias forms (regression for dom_midwife_offer)
+  it('full sentence with mixed alias pronouns resolves correctly', () => {
+    const w = makeFemale('Titi', 'Chakula');
+    const text =
+      '{midwife.She} has attended more births than {midwife.she} can count. ' +
+      '{midwife.Her} knowledge has saved lives. {midwife.She} asks for nothing.';
+    expect(interpolateText(text, { midwife: w }))
+      .toBe(
+        'She has attended more births than she can count. ' +
+        'Her knowledge has saved lives. She asks for nothing.',
+      );
+  });
+});
+
 // ─── Unknown suffix passthrough ───────────────────────────────────────────────
 
 describe('unknown suffix passthrough', () => {

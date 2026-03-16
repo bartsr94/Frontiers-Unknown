@@ -14,7 +14,7 @@ import type { GameState, ResourceType, BuildingId, ReligiousPolicy } from '../tu
 import type { ReligionId } from '../population/person';
 import { computeReligiousTension } from '../population/culture';
 import type { SeededRNG } from '../../utils/rng';
-import { hasBuilding, lacksBuilding, getOvercrowdingRatio } from '../buildings/building-effects';
+import { hasBuilding, lacksBuilding, getOvercrowdingRatio, computeProsperityScore } from '../buildings/building-effects';
 import { AMBITION_FIRING_THRESHOLD } from '../population/ambitions';
 import { getEffectiveOpinion } from '../population/opinions';
 import { canResolveActors, matchesCriteria } from './actor-resolver';
@@ -32,8 +32,10 @@ import { RELIGIOUS_EVENTS }     from './definitions/religious';
 import { IDENTITY_EVENTS }      from './definitions/identity';
 import { SCHEME_EVENTS }        from './definitions/schemes';
 import { FACTION_EVENTS }       from './definitions/factions';
-import { HAPPINESS_EVENTS }     from './definitions/happiness';
-import { WEDDING_EVENTS }       from './definitions/weddings';
+import { HAPPINESS_EVENTS }      from './definitions/happiness';
+import { WEDDING_EVENTS }        from './definitions/weddings';
+import { APPRENTICESHIP_EVENTS } from './definitions/apprenticeship';
+import { IMMIGRATION_EVENTS }   from './definitions/immigration';
 
 // ─── Master event deck ────────────────────────────────────────────────────────
 
@@ -54,6 +56,8 @@ export const ALL_EVENTS: GameEvent[] = [
   ...FACTION_EVENTS,
   ...HAPPINESS_EVENTS,
   ...WEDDING_EVENTS,
+  ...APPRENTICESHIP_EVENTS,
+  ...IMMIGRATION_EVENTS,
 ];
 
 // ─── Prerequisite checking ────────────────────────────────────────────────────
@@ -227,6 +231,16 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
       }
       return Array.from(targetCounts.values()).some(c => c >= 2);
     }
+    case 'min_prosperity': {
+      const threshold = prereq.params?.['value'] as number;
+      return computeProsperityScore(state) >= threshold;
+    }
+    case 'has_tribe_contact': {
+      const ethnicGroup = prereq.params?.['ethnicGroup'] as string | undefined;
+      return Array.from((state.tribes ?? new Map()).values()).some(
+        t => t.contactEstablished && (ethnicGroup === undefined || t.ethnicGroup === ethnicGroup),
+      );
+    }
     default:
       return true;
   }
@@ -235,11 +249,20 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
 // ─── Eligibility check ────────────────────────────────────────────────────────
 
 /**
+/**
+ * Minimum turns between firings for ambient (background-texture) events.
+ * 16 turns = one full in-game year. Ambient events marked with `isAmbient: true`
+ * are subject to this floor regardless of their per-event `cooldown` value.
+ */
+const AMBIENT_MIN_COOLDOWN = 16;
+
+/**
  * Returns true if the given event is eligible to be drawn this turn.
  *
  * Checks:
  *  1. isUnique events that have already fired are excluded.
  *  2. Events still within their cooldown window are excluded.
+ *  2b. Ambient events are further gated by AMBIENT_MIN_COOLDOWN.
  *  3. All prerequisites must be satisfied.
  */
 export function isEventEligible(event: GameEvent, state: GameState): boolean {
@@ -253,8 +276,11 @@ export function isEventEligible(event: GameEvent, state: GameState): boolean {
   }
 
   // 2. Cooldown: the event last fired within the cooldown window.
+  const effectiveCooldown = event.isAmbient
+    ? Math.max(event.cooldown, AMBIENT_MIN_COOLDOWN)
+    : event.cooldown;
   const lastFired = state.eventCooldowns.get(event.id);
-  if (lastFired !== undefined && state.turnNumber - lastFired < event.cooldown) {
+  if (lastFired !== undefined && state.turnNumber - lastFired < effectiveCooldown) {
     return false;
   }
 

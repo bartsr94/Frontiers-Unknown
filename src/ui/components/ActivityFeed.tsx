@@ -16,6 +16,13 @@ const TYPE_ICON: Record<ActivityLogType, string> = {
   trait_acquired:       '⭐',
   ambition_formed:      '🔥',
   ambition_cleared:     '🎯',
+  dwelling_claimed:        '🏠',
+  household_formed:        '👨‍👩‍👧',
+  household_succession:    '👑',
+  household_dissolved:     '💔',
+  apprenticeship_started:  '📚',
+  apprenticeship_completed: '🎓',
+  apprenticeship_ended:    '📕',
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────

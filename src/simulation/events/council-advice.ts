@@ -238,6 +238,12 @@ const ADVICE_TEMPLATES: Record<VoiceArchetype, Record<EventCategory, string[]>> 
       'We answer to the Company with deeds, not explanations.',
       'The boldest settlements are the ones the Company remembers.',
     ],
+    immigration: [
+      'New blood means new strength. I see only upside in welcoming those strong enough to make the journey.',
+      'Every settler who chooses us over staying where they were is a small vote of confidence. Accept it.',
+      'A settlement that turns away willing workers will not stay large long. Let them in and set them to work.',
+      'Do not overthink a closed fist asking to become an open hand. Grip it and pull them through the gate.',
+    ],
   },
 
   pragmatist: {
@@ -288,6 +294,12 @@ const ADVICE_TEMPLATES: Record<VoiceArchetype, Record<EventCategory, string[]>> 
       'Good numbers open doors. I do not know a better way to be heard in Port Iron.',
       'Our standing with the Company translates directly to our latitude here. Protect it.',
       'The Company wants a return. Give them one, and give it to them in terms they understand.',
+    ],
+    immigration: [
+      'The question with any new settler is simple: what do they bring and what will they consume?',
+      'Immigration is leverage we have because we built something worth coming to. Use it.',
+      'A skilled arrival is worth evaluating on their merits. Skills, age, connections — those are the variables that matter.',
+      'The terms we offer now will be the terms others hear about. Price accordingly.',
     ],
   },
 
@@ -340,6 +352,12 @@ const ADVICE_TEMPLATES: Record<VoiceArchetype, Record<EventCategory, string[]>> 
       'Our standing rests on what people say about us. Let those things be worth saying.',
       'Goodwill, once established, insulates us against the inevitable difficult seasons ahead.',
     ],
+    immigration: [
+      'A person who chooses to come to us has already decided to trust us. Let us not disappoint that first instinct.',
+      'Every new arrival represents a relationship with whoever they left behind. We are building an extended community.',
+      'The way we greet newcomers is the story they send home. Let it be a story that brings more.',
+      'I have always found that people who feel genuinely welcomed become the most committed members of any community.',
+    ],
   },
 
   traditionalist: {
@@ -390,6 +408,12 @@ const ADVICE_TEMPLATES: Record<VoiceArchetype, Record<EventCategory, string[]>> 
       'Our obligations to the Company are real. Meeting them is not merely good practice — it is what we agreed to.',
       'I believe in honoring our commitments, even when it costs us. Especially when it costs us.',
       'A good report to the Company is one that can be verified. Let us make sure ours can be.',
+    ],
+    immigration: [
+      'I do not oppose new settlers. I oppose those who are not prepared to work within the customs of this place.',
+      'The settlement has a character. Those who come here should understand it before they sit down at our table.',
+      'Each arrival reshapes what this settlement is, slightly. That is not bad, but it should not be unconsidered.',
+      'My question about any newcomer is always the same: what do they bring, and are they willing to become part of what we have built?',
     ],
   },
 
@@ -442,6 +466,12 @@ const ADVICE_TEMPLATES: Record<VoiceArchetype, Record<EventCategory, string[]>> 
       'Our position here is still establishing itself. I am reluctant to do anything that tests confidence before we have fully earned it.',
       'The Company\'s patience is not unlimited. Neither is our margin for error.',
     ],
+    immigration: [
+      'I would know why they are leaving before I commit to taking them in. People flee for reasons.',
+      'A stranger at the gate is a question mark. I am in no hurry to answer it hastily.',
+      'The settlement\'s stability is worth more than a faster population count. Let us be careful who we add to it.',
+      'I am not opposed to immigration. I am opposed to accepting people before we understand what we are accepting.',
+    ],
   },
 
   schemer: {
@@ -492,6 +522,12 @@ const ADVICE_TEMPLATES: Record<VoiceArchetype, Record<EventCategory, string[]>> 
       'The Company\'s representative here is an individual with individual ambitions. I would want to understand them.',
       'Letters to Port Iron should be carefully composed. What is emphasized is as important as what is true.',
       'Company factors are people. People have preferences. We should know what theirs are.',
+    ],
+    immigration: [
+      'Every new arrival is also a window into wherever they came from. I find that useful.',
+      'The interesting question is not whether to take them in, but what they know and who they know.',
+      'A person with connections in two worlds is worth more than their skills alone suggest.',
+      'Someone chose to come to us rather than staying where they were. It is always worth finding out exactly why.',
     ],
   },
 };

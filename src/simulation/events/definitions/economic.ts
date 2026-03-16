@@ -13,6 +13,7 @@ export const ECONOMIC_EVENTS: GameEvent[] = [
     weight: 3,
     cooldown: 6,
     isUnique: false,
+    isAmbient: true,
     actorRequirements: [
       { slot: 'negotiator', criteria: { sex: 'male' } },
     ],

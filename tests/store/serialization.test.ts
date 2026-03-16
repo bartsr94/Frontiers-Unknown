@@ -313,3 +313,206 @@ describe('deserializeGameState — Household.isAutoNamed backward compatibility'
     expect(state.households.get('hh-3')!.isAutoNamed).toBe(false);
   });
 });
+
+// ─── deserializePerson — Phase 4.0 autonomy fallbacks ────────────────────────
+
+describe('deserializePerson — Phase 4.0 autonomy fallbacks', () => {
+  /** Minimal person shape from before Phase-4.0 autonomy fields were added. */
+  const oldPerson = () => ({
+    id: 'p1',
+    heritage: { bloodline: [], primaryCulture: 'imanian', culturalFluency: [] },
+    relationships: [],
+    portraitVariant: 1,
+    opinionModifiers: [],
+  } as unknown as Parameters<typeof deserializePerson>[0]);
+
+  it('defaults namedRelationships to [] when absent (pre-Phase-4 save)', () => {
+    expect(deserializePerson(oldPerson()).namedRelationships).toEqual([]);
+  });
+
+  it('defaults activeScheme to null when absent (pre-Phase-4 save)', () => {
+    expect(deserializePerson(oldPerson()).activeScheme).toBeNull();
+  });
+
+  it('defaults opinionSustainedSince to {} when absent', () => {
+    expect(deserializePerson(oldPerson()).opinionSustainedSince).toEqual({});
+  });
+
+  it('defaults roleAssignedTurn to 0 when absent', () => {
+    expect(deserializePerson(oldPerson()).roleAssignedTurn).toBe(0);
+  });
+});
+
+// ─── deserializePerson — happiness and housing fallbacks ─────────────────────
+
+describe('deserializePerson — happiness and housing fallbacks', () => {
+  const oldPerson = () => ({
+    id: 'p1',
+    heritage: { bloodline: [], primaryCulture: 'imanian', culturalFluency: [] },
+    relationships: [],
+  } as unknown as Parameters<typeof deserializePerson>[0]);
+
+  it('defaults lowHappinessTurns to 0 when absent', () => {
+    expect(deserializePerson(oldPerson()).lowHappinessTurns).toBe(0);
+  });
+
+  it('defaults claimedBuildingId to null when absent', () => {
+    expect(deserializePerson(oldPerson()).claimedBuildingId).toBeNull();
+  });
+
+  it('defaults joinedYear to 1 when absent', () => {
+    expect(deserializePerson(oldPerson()).joinedYear).toBe(1);
+  });
+});
+
+// ─── deserializePerson — apprenticeship fallbacks and round-trip ──────────────
+
+describe('deserializePerson — apprenticeship fallbacks', () => {
+  const oldPerson = () => ({
+    id: 'p1',
+    heritage: { bloodline: [], primaryCulture: 'imanian', culturalFluency: [] },
+    relationships: [],
+  } as unknown as Parameters<typeof deserializePerson>[0]);
+
+  it('defaults apprenticeship to null when absent (pre-apprenticeship save)', () => {
+    expect(deserializePerson(oldPerson()).apprenticeship).toBeNull();
+  });
+
+  it('defaults tradeTraining to {} when absent (pre-apprenticeship save)', () => {
+    expect(deserializePerson(oldPerson()).tradeTraining).toEqual({});
+  });
+
+  it('preserves an active apprenticeship state through round-trip', () => {
+    const withAppr = {
+      ...oldPerson(),
+      apprenticeship: { masterId: 'master_1', trade: 'farmer', progress: 0.65, startedTurn: 5 },
+    } as unknown as Parameters<typeof deserializePerson>[0];
+    const restored = deserializePerson(withAppr);
+    expect(restored.apprenticeship).not.toBeNull();
+    expect(restored.apprenticeship!.masterId).toBe('master_1');
+    expect(restored.apprenticeship!.progress).toBeCloseTo(0.65);
+  });
+
+  it('preserves tradeTraining bonuses through round-trip', () => {
+    const withTraining = {
+      ...oldPerson(),
+      tradeTraining: { farmer: 15, trader: 10 },
+    } as unknown as Parameters<typeof deserializePerson>[0];
+    const restored = deserializePerson(withTraining);
+    expect(restored.tradeTraining).toMatchObject({ farmer: 15, trader: 10 });
+  });
+
+  it('preserves null apprenticeship as null', () => {
+    const withNull = {
+      ...oldPerson(),
+      apprenticeship: null,
+    } as unknown as Parameters<typeof deserializePerson>[0];
+    expect(deserializePerson(withNull).apprenticeship).toBeNull();
+  });
+});
+
+// ─── deserializeGameState — Phase 4.0 activity fallbacks ─────────────────────
+
+describe('deserializeGameState — Phase 4.0 activity fallbacks', () => {
+  it('defaults factions to [] when absent', () => {
+    expect(deserializeGameState(makeMinimalSaveJson()).factions).toEqual([]);
+  });
+
+  it('defaults activityLog to [] when absent', () => {
+    expect(deserializeGameState(makeMinimalSaveJson()).activityLog).toEqual([]);
+  });
+});
+
+// ─── deserializeGameState — Phase 4.1/4.2 happiness and housing fallbacks ─────
+
+describe('deserializeGameState — happiness and housing fallbacks', () => {
+  it('defaults lowMoraleTurns to 0 when absent', () => {
+    expect(deserializeGameState(makeMinimalSaveJson()).lowMoraleTurns).toBe(0);
+  });
+
+  it('defaults massDesertionWarningFired to false when absent', () => {
+    expect(deserializeGameState(makeMinimalSaveJson()).massDesertionWarningFired).toBe(false);
+  });
+
+  it('defaults lastSettlementMorale to 0 when absent', () => {
+    expect(deserializeGameState(makeMinimalSaveJson()).lastSettlementMorale).toBe(0);
+  });
+
+  it('defaults communalResourceMinimum to { lumber: 15, stone: 5 } when absent', () => {
+    const state = deserializeGameState(makeMinimalSaveJson());
+    expect(state.communalResourceMinimum).toEqual({ lumber: 15, stone: 5 });
+  });
+
+  it('defaults buildingWorkersInitialized to false when absent', () => {
+    expect(deserializeGameState(makeMinimalSaveJson()).buildingWorkersInitialized).toBe(false);
+  });
+});
+
+// ─── deserializeGameState — BuiltBuilding field fallbacks ────────────────────
+
+describe('deserializeGameState — BuiltBuilding field fallbacks', () => {
+  /** Settlement with one bare building missing the ownership/worker fields. */
+  function settlementWithOldBuilding() {
+    return {
+      name: 'Test Settlement',
+      location: 'marsh',
+      buildings: [{ defId: 'camp', instanceId: 'camp_0', builtTurn: 1, style: null }],
+      constructionQueue: [],
+      resources: { food: 0, cattle: 0, goods: 0, steel: 0, lumber: 0, stone: 0, medicine: 0, gold: 0, horses: 0 },
+      populationCount: 0,
+    };
+  }
+
+  it('defaults BuiltBuilding.ownerHouseholdId to null when absent (pre-ownership save)', () => {
+    const state = deserializeGameState(makeMinimalSaveJson({ settlement: settlementWithOldBuilding() }));
+    expect(state.settlement.buildings[0]!.ownerHouseholdId).toBeNull();
+  });
+
+  it('defaults BuiltBuilding.assignedWorkerIds to [] when absent', () => {
+    const state = deserializeGameState(makeMinimalSaveJson({ settlement: settlementWithOldBuilding() }));
+    expect(state.settlement.buildings[0]!.assignedWorkerIds).toEqual([]);
+  });
+
+  it('defaults ConstructionProject.ownerHouseholdId to null when absent', () => {
+    const json = makeMinimalSaveJson({
+      settlement: {
+        name: 'Test Settlement',
+        location: 'marsh',
+        buildings: [],
+        constructionQueue: [{
+          id: 'proj_1', defId: 'longhouse', style: null,
+          progressPoints: 0, totalPoints: 100,
+          assignedWorkerIds: [], startedTurn: 1,
+          resourcesSpent: { food: 0, cattle: 0, goods: 0, steel: 0, lumber: 0, stone: 0, medicine: 0, gold: 0, horses: 0 },
+          // ownerHouseholdId deliberately absent
+        }],
+        resources: { food: 0, cattle: 0, goods: 0, steel: 0, lumber: 0, stone: 0, medicine: 0, gold: 0, horses: 0 },
+        populationCount: 0,
+      },
+    });
+    const state = deserializeGameState(json);
+    expect(state.settlement.constructionQueue[0]!.ownerHouseholdId).toBeNull();
+  });
+});
+
+// ─── deserializeGameState — tribe trade-system fallbacks ─────────────────────
+
+describe('deserializeGameState — tribe trade-system fallbacks', () => {
+  /** Minimal tribe object predating the trade-system additions. */
+  const oldTribe = { id: 'tribe_1', name: 'Riverfang' };
+
+  it('defaults contactEstablished to false when absent', () => {
+    const state = deserializeGameState(makeMinimalSaveJson({ tribes: [['tribe_1', oldTribe]] }));
+    expect(state.tribes.get('tribe_1')!.contactEstablished).toBe(false);
+  });
+
+  it('defaults lastTradeTurn to null when absent', () => {
+    const state = deserializeGameState(makeMinimalSaveJson({ tribes: [['tribe_1', oldTribe]] }));
+    expect(state.tribes.get('tribe_1')!.lastTradeTurn).toBeNull();
+  });
+
+  it('defaults tradeHistoryCount to 0 when absent', () => {
+    const state = deserializeGameState(makeMinimalSaveJson({ tribes: [['tribe_1', oldTribe]] }));
+    expect(state.tribes.get('tribe_1')!.tradeHistoryCount).toBe(0);
+  });
+});

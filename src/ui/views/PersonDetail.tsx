@@ -32,6 +32,7 @@ import { getAmbitionLabel, getAmbitionIntensityClass } from '../../simulation/po
 import { computeOpinionBreakdown, getEffectiveOpinion } from '../../simulation/population/opinions';
 import { computeHappiness, computeHappinessFactors, getHappinessLabel, getHappinessColor } from '../../simulation/population/happiness';
 import { BUILDING_CATALOG, getBuildingDisplayName } from '../../simulation/buildings/building-definitions';
+import { TRAINABLE_TRADES } from '../../simulation/population/apprenticeship';
 
 // ─── Bloodline colours ────────────────────────────────────────────────────────
 
@@ -681,6 +682,90 @@ export default function PersonDetail({ personId, onClose, onNavigate, onOpenFami
                         );
                       })}
                     </div>
+                  </div>
+                )}
+              </div>
+              <Divider />
+            </>
+          );
+        })()}
+
+        {/* Trade Training */}
+        {(() => {
+          const hasActive = !!person.apprenticeship;
+          const hasCompleted = person.tradeTraining && Object.keys(person.tradeTraining).length > 0;
+          // Check if this person is currently acting as a master for someone else.
+          const apprenticeEntry = people
+            ? Array.from(people.values()).find(p => p.apprenticeship?.masterId === person.id)
+            : undefined;
+          const isMaster = !!apprenticeEntry;
+
+          if (!hasActive && !hasCompleted && !isMaster) return null;
+
+          return (
+            <>
+              <SectionHeading>Trade Training</SectionHeading>
+              <div className="flex flex-col gap-1 mb-1 text-xs">
+
+                {/* Active apprenticeship — this person is learning */}
+                {person.apprenticeship && (() => {
+                  const master = people?.get(person.apprenticeship.masterId);
+                  const masterName = master ? master.firstName : '(unknown)';
+                  const pct = Math.round(person.apprenticeship.progress * 100);
+                  const tradeLabel = person.apprenticeship.trade.replace(/_/g, ' ');
+                  return (
+                    <div>
+                      <span>📚 Apprenticing under </span>
+                      <button
+                        onClick={() => navigateTo(person.apprenticeship!.masterId)}
+                        className="text-amber-300 hover:text-amber-100 underline decoration-dotted"
+                      >
+                        {masterName}
+                      </button>
+                      <span className="text-stone-400"> — {tradeLabel} — {pct}% complete</span>
+                      <div className="mt-0.5 h-1 w-full bg-stone-700 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-amber-400 rounded-full"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* This person is a master training someone else */}
+                {isMaster && apprenticeEntry && (() => {
+                  const pct = Math.round(apprenticeEntry.apprenticeship!.progress * 100);
+                  const tradeLabel = apprenticeEntry.apprenticeship!.trade.replace(/_/g, ' ');
+                  return (
+                    <div>
+                      <span>👨‍🏫 Teaching </span>
+                      <button
+                        onClick={() => navigateTo(apprenticeEntry.id)}
+                        className="text-sky-300 hover:text-sky-100 underline decoration-dotted"
+                      >
+                        {apprenticeEntry.firstName}
+                      </button>
+                      <span className="text-stone-400"> the {tradeLabel} trade — {pct}% done</span>
+                    </div>
+                  );
+                })()}
+
+                {/* Completed training bonuses */}
+                {hasCompleted && (
+                  <div className="flex flex-wrap gap-1 mt-0.5">
+                    {(Object.entries(person.tradeTraining) as [string, number][])
+                      .filter(([, v]) => v > 0)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([role, bonus]) => (
+                        <span
+                          key={role}
+                          title={`${TRAINABLE_TRADES.has(role as never) ? 'Trained trade' : 'Trade'}: +${bonus}% production bonus as ${role.replace(/_/g, ' ')}`}
+                          className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 cursor-help"
+                        >
+                          🎓 +{bonus}% {role.replace(/_/g, ' ')}
+                        </span>
+                      ))}
                   </div>
                 )}
               </div>

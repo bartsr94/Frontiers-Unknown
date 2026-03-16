@@ -236,3 +236,50 @@ export function hasBuilding(buildings: BuiltBuilding[], defId: BuildingId): bool
 export function lacksBuilding(buildings: BuiltBuilding[], defId: BuildingId): boolean {
   return !hasBuilding(buildings, defId);
 }
+
+// ── Fertility Bonus ────────────────────────────────────────────────────────────
+
+/**
+ * Returns the total additive fertility bonus granted by all standing buildings.
+ * Each building can define `fertilityBonus` (fraction 0.0–1.0).
+ * The result is capped at 0.25 in the caller (fertility.ts).
+ */
+export function getBuildingFertilityBonus(buildings: BuiltBuilding[]): number {
+  return buildings.reduce((sum, b) => {
+    const bonus = BUILDING_CATALOG[b.defId].fertilityBonus;
+    return bonus !== undefined ? sum + bonus : sum;
+  }, 0);
+}
+
+// ── Prosperity Score ──────────────────────────────────────────────────────────
+
+import type { GameState } from '../turn/game-state';
+
+/**
+ * Computes a derived prosperity score for the settlement.
+ * Used as a prerequisite gate for immigration events.
+ *
+ * Formula:
+ *   completedBuildings.length × 3
+ *   + floor(food / 15)
+ *   + floor(goods / 8)
+ *   + gold × 2
+ *   + floor(populationCount / 5)
+ *
+ * Representative values:
+ *   Starting camp, 8 settlers              ≈ 10
+ *   4 buildings, modest resources, 12 pop  ≈ 20–25
+ *   8 buildings, comfortable, 20 pop       ≈ 40–55
+ *   14 buildings, well-stocked, 35 pop     ≈ 80+
+ */
+export function computeProsperityScore(state: GameState): number {
+  const { settlement } = state;
+  const r = settlement.resources;
+  return (
+    settlement.buildings.length * 3
+    + Math.floor(r.food / 15)
+    + Math.floor(r.goods / 8)
+    + r.gold * 2
+    + Math.floor(settlement.populationCount / 5)
+  );
+}

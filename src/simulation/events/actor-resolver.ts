@@ -9,11 +9,11 @@
  * Template variable syntax:
  *   {slot}        → full name (firstName + familyName)
  *   {slot.first}  → given name only
- *   {slot.he}     → subject pronoun (he / she)
- *   {slot.his}    → possessive pronoun (his / her)
+ *   {slot.he}     → subject pronoun (he / she)  — alias: {slot.she}
+ *   {slot.his}    → possessive pronoun (his / her) — alias: {slot.her}
  *   {slot.him}    → object pronoun (him / her)
- *   {slot.He}     → capitalised subject pronoun
- *   {slot.His}    → capitalised possessive pronoun
+ *   {slot.He}     → capitalised subject pronoun  — alias: {slot.She}
+ *   {slot.His}    → capitalised possessive pronoun — alias: {slot.Her}
  *   {slot.Him}    → capitalised object pronoun
  *
  * Unknown tokens (no matching slot) are left as-is.
@@ -217,11 +217,15 @@ export function interpolateText(
 
     switch (suffix) {
       case 'first': return person.firstName;
-      case 'he':    return isMale ? 'he'  : 'she';
-      case 'his':   return isMale ? 'his' : 'her';
+      case 'he':
+      case 'she':   return isMale ? 'he'  : 'she';
+      case 'his':
+      case 'her':   return isMale ? 'his' : 'her';
       case 'him':   return isMale ? 'him' : 'her';
-      case 'He':    return isMale ? 'He'  : 'She';
-      case 'His':   return isMale ? 'His' : 'Her';
+      case 'He':
+      case 'She':   return isMale ? 'He'  : 'She';
+      case 'His':
+      case 'Her':   return isMale ? 'His' : 'Her';
       case 'Him':   return isMale ? 'Him' : 'Her';
       default:      return token; // unknown suffix — leave as-is
     }

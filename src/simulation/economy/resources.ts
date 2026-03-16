@@ -13,7 +13,7 @@
  *   - Overcrowding reduces all production by 10% when ratio > 1.25.
  */
 
-import type { Person } from '../population/person';
+import { type Person, getChildWorkModifier } from '../population/person';
 import type { Settlement, ResourceType, ResourceStock, Season, BuiltBuilding } from '../turn/game-state';
 import { SEASON_MODIFIERS } from '../turn/season';
 import {
@@ -113,6 +113,9 @@ export function calculateProduction(
   for (const person of people.values()) {
     // Per-person happiness multiplier (1.0 when not in the map = neutral mood).
     const happMult = happinessMultipliers.get(person.id) ?? 1.0;
+    // Children under 8 cannot work; ages 8–12 work at 50% capacity.
+    const effectiveMult = happMult * getChildWorkModifier(person.age);
+    if (effectiveMult === 0) continue;
 
     // Base production by role (seasonal modifiers applied below).
     let personFood = 0;
@@ -125,8 +128,8 @@ export function calculateProduction(
       // gather_food is seasonally scaled like farming
       case 'gather_food':   personFood   = gatherYield(person.skills.plants); break;
       // gather_stone / gather_lumber are NOT seasonally scaled — accumulated directly
-      case 'gather_stone':  delta.stone  += Math.floor(gatherYield(person.skills.custom) * happMult); break;
-      case 'gather_lumber': delta.lumber += Math.floor(gatherYield(person.skills.custom) * happMult); break;
+      case 'gather_stone':  delta.stone  += Math.floor(gatherYield(person.skills.custom) * effectiveMult); break;
+      case 'gather_lumber': delta.lumber += Math.floor(gatherYield(person.skills.custom) * effectiveMult); break;
       case 'craftsman':
       case 'healer':
       case 'guard':
@@ -142,6 +145,8 @@ export function calculateProduction(
       case 'brewer':
       case 'miller':
       case 'herder':
+      case 'bathhouse_attendant':
+      case 'child':
       case 'unassigned': break;
     }
 
@@ -151,15 +156,21 @@ export function calculateProduction(
     const roleBonus = getRoleProductionBonus(buildings, person.role);
     personGoods += roleBonus.goods ?? 0;
     personFood  += roleBonus.food  ?? 0;
+
+    // Trade training bonus: completed apprenticeship grants a permanent % boost to production
+    // in the trained role. Only applies when the person is actually working that role.
+    const tradeBonus = person.tradeTraining?.[person.role] ?? 0;
+    const tradeMult  = tradeBonus > 0 ? 1 + tradeBonus / 100 : 1.0;
+
     for (const [key, value] of Object.entries(roleBonus) as [keyof ResourceStock, number][]) {
       if (key !== 'food' && key !== 'goods') {
-        delta[key] += Math.floor(value * happMult);
+        delta[key] += Math.floor(value * effectiveMult * tradeMult);
       }
     }
 
-    // Apply happiness multiplier to this person's food and goods contribution.
-    delta.food  += personFood  * happMult;
-    delta.goods += personGoods * happMult;
+    // Apply happiness, child-age, and trade-training multipliers to food and goods.
+    delta.food  += personFood  * effectiveMult * tradeMult;
+    delta.goods += personGoods * effectiveMult * tradeMult;
   }
 
   // Apply seasonal modifiers to accumulated food and goods.

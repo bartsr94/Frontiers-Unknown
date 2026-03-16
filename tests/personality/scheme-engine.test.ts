@@ -198,11 +198,58 @@ describe('generateScheme — scheme_undermine_person', () => {
   });
 });
 
+describe('generateScheme — scheme_undermine_person (nemesis path)', () => {
+  it('generates undermine scheme for a nemesis even without jealous/ambitious trait', () => {
+    const rng = createRNG(42);
+    const a = makePerson('a', {
+      traits: [], // no jealous or ambitious
+      namedRelationships: [makeRel('nemesis', 'b')],
+    });
+    const b = makePerson('b');
+    const people = new Map([['a', a], ['b', b]]);
+
+    const scheme = generateScheme(a, people, 0, rng);
+    expect(scheme).not.toBeNull();
+    expect(scheme!.type).toBe('scheme_undermine_person');
+    expect(scheme!.targetId).toBe('b');
+  });
+
+  it('confidant bond suppresses undermine toward that rival', () => {
+    const rng = createRNG(42);
+    // a is jealous with a rival, but that rival is also their confidant
+    const a = makePerson('a', {
+      traits: ['jealous' as never],
+      namedRelationships: [makeRel('rival', 'b'), makeRel('confidant', 'b')],
+    });
+    const b = makePerson('b');
+    const people = new Map([['a', a], ['b', b]]);
+
+    const scheme = generateScheme(a, people, 0, rng);
+    // Should not undermine b because of the confidant bond; falls through to null (no other triggers)
+    expect(scheme).toBeNull();
+  });
+});
+
 describe('generateScheme — scheme_tutor_person', () => {
   it('generates tutor scheme for mentor_hearted with an existing mentor relationship', () => {
     const rng = createRNG(42);
     const a = makePerson('a', {
       traits: ['mentor_hearted' as never],
+      namedRelationships: [makeRel('mentor', 'b')],
+    });
+    const b = makePerson('b');
+    const people = new Map([['a', a], ['b', b]]);
+
+    const scheme = generateScheme(a, people, 0, rng);
+    expect(scheme).not.toBeNull();
+    expect(scheme!.type).toBe('scheme_tutor_person');
+    expect(scheme!.targetId).toBe('b');
+  });
+
+  it('generates tutor scheme from mentor relationship alone, without mentor_hearted trait', () => {
+    const rng = createRNG(42);
+    const a = makePerson('a', {
+      traits: [], // no mentor_hearted — mentor relationship is sufficient
       namedRelationships: [makeRel('mentor', 'b')],
     });
     const b = makePerson('b');
@@ -282,7 +329,9 @@ describe('processSchemes — scheme generation interval', () => {
     const result = processSchemes(people, 12, rng);
     // activeScheme should remain the befriend one, not get replaced
     const updatedA = result.updatedPeople.get('a') ?? a;
-    expect(updatedA.activeScheme?.progress).toBe(0.5 + 0.05); // advanced, not replaced
+    // opinion 50 → factor = 1.0 + 50/200 = 1.25 → rate = 0.05 * 1.25 = 0.0625
+    expect(updatedA.activeScheme?.type).toBe('scheme_befriend_person'); // not replaced
+    expect(updatedA.activeScheme?.progress).toBeCloseTo(0.5 + 0.0625); // advanced, not replaced
   });
 });
 
@@ -325,6 +374,67 @@ describe('processSchemes — progress advance', () => {
     // At 0.98 + 0.05 = 1.03 → clamped to 1.0, then scheme completes (activeScheme cleared)
     const updatedA = result.updatedPeople.get('a')!;
     expect(updatedA.activeScheme).toBeNull(); // completed
+  });
+});
+
+describe('processSchemes — opinion-scaled progress', () => {
+  it('befriend scheme advances faster when schemer likes the target (high opinion)', () => {
+    const rng = createRNG(1);
+    const baseScheme: PersonScheme = {
+      type: 'scheme_befriend_person',
+      targetId: 'b',
+      progress: 0.1,
+      startedTurn: 0,
+      revealedToPlayer: false,
+    };
+
+    // Run with high opinion (+100)
+    let aHigh = makePerson('a', { activeScheme: { ...baseScheme } });
+    aHigh = withOpinion(aHigh, 'b', 100);
+    const bHigh = makePerson('b');
+    const highResult = processSchemes(new Map([['a', aHigh], ['b', bHigh]]), 1, rng);
+    const highProgress = highResult.updatedPeople.get('a')!.activeScheme!.progress;
+
+    // Run with neutral opinion (0) — must reinit RNG to be fair
+    const rng2 = createRNG(1);
+    let aMid = makePerson('a', { activeScheme: { ...baseScheme } });
+    aMid = withOpinion(aMid, 'b', 0);
+    const bMid = makePerson('b');
+    const midResult = processSchemes(new Map([['a', aMid], ['b', bMid]]), 1, rng2);
+    const midProgress = midResult.updatedPeople.get('a')!.activeScheme!.progress;
+
+    expect(highProgress).toBeGreaterThan(midProgress);
+  });
+
+  it('undermine scheme advances faster when schemer hates the target (negative opinion)', () => {
+    const rng = createRNG(1);
+    const baseScheme: PersonScheme = {
+      type: 'scheme_undermine_person',
+      targetId: 'b',
+      progress: 0.1,
+      startedTurn: 0,
+      revealedToPlayer: false,
+    };
+
+    // Hatred: opinion -100 → 1.5× multiplier
+    let aHate = makePerson('a', { activeScheme: { ...baseScheme }, traits: ['respected_elder' as never] });
+    // Use a non-fail trait setup — override with bare person + low opinion
+    aHate = makePerson('a', { activeScheme: { ...baseScheme } });
+    aHate = withOpinion(aHate, 'b', -100);
+    const bHate = makePerson('b');
+    const hateResult = processSchemes(new Map([['a', aHate], ['b', bHate]]), 1, rng);
+    const hateProgress = hateResult.updatedPeople.get('a')!.activeScheme?.progress;
+
+    // Neutral: opinion 0 → 1.0× multiplier
+    const rng2 = createRNG(1);
+    let aNeutral = makePerson('a', { activeScheme: { ...baseScheme } });
+    aNeutral = withOpinion(aNeutral, 'b', 0);
+    const bNeutral = makePerson('b');
+    const neutralResult = processSchemes(new Map([['a', aNeutral], ['b', bNeutral]]), 1, rng2);
+    const neutralProgress = neutralResult.updatedPeople.get('a')!.activeScheme?.progress;
+
+    expect(hateProgress).toBeDefined();
+    expect(hateProgress!).toBeGreaterThan(neutralProgress!);
   });
 });
 
@@ -863,7 +973,7 @@ describe('processSchemes — undermine scheme completion', () => {
 // High-opinion schemers should clearly advance faster than low-opinion ones.
 
 describe('processSchemes — court scheme progress rate', () => {
-  it('advances faster with high opinion (factor > 1.0)', () => {
+  it('advances faster with high opinion (factor = 1.5×)', () => {
     const rng = createRNG(1);
     const scheme: PersonScheme = {
       type: 'scheme_court_person',
@@ -874,8 +984,29 @@ describe('processSchemes — court scheme progress rate', () => {
     };
     let a = makePerson('a', { activeScheme: scheme, sex: 'male' });
     const b = makePerson('b', { sex: 'female' });
-    // opinion = 100 → factor = clamp(100/100, 0.5, 1.5) = 1.0 → rate = 0.04
+    // opinion = 100 → factor = clamp(1.0 + 100/200, 0.5, 1.5) = 1.5 → rate = 0.04 * 1.5 = 0.06
     a = withOpinion(a, 'b', 100);
+    const people = new Map([['a', a], ['b', b]]);
+
+    const result = processSchemes(people, 1, rng);
+    const progress = result.updatedPeople.get('a')!.activeScheme!.progress;
+    // rate = 0.04 * 1.5 = 0.06
+    expect(progress).toBeCloseTo(0.06);
+  });
+
+  it('advances at baseline with neutral opinion (factor = 1.0×)', () => {
+    const rng = createRNG(1);
+    const scheme: PersonScheme = {
+      type: 'scheme_court_person',
+      targetId: 'b',
+      progress: 0,
+      startedTurn: 0,
+      revealedToPlayer: false,
+    };
+    let a = makePerson('a', { activeScheme: scheme, sex: 'male' });
+    const b = makePerson('b', { sex: 'female' });
+    // opinion = 0 → factor = clamp(1.0 + 0/200, 0.5, 1.5) = 1.0 → rate = 0.04
+    a = withOpinion(a, 'b', 0);
     const people = new Map([['a', a], ['b', b]]);
 
     const result = processSchemes(people, 1, rng);
@@ -884,25 +1015,31 @@ describe('processSchemes — court scheme progress rate', () => {
     expect(progress).toBeCloseTo(0.04);
   });
 
-  it('advances slower with low opinion (factor = 0.5 floor)', () => {
+  it('advances slower with very negative opinion — tutor scheme hits 0.5× floor', () => {
+    // Use scheme_tutor_person: failure is relationship-based (not opinion-based), so
+    // a mentor relationship keeps the scheme alive even at opinion = -100.
+    // factor = clamp(1.0 + (-100)/200, 0.5, 1.5) = 0.5 → rate = 0.03 * 0.5 = 0.015
     const rng = createRNG(1);
     const scheme: PersonScheme = {
-      type: 'scheme_court_person',
+      type: 'scheme_tutor_person',
       targetId: 'b',
       progress: 0,
       startedTurn: 0,
       revealedToPlayer: false,
     };
-    let a = makePerson('a', { activeScheme: scheme, sex: 'male' });
-    const b = makePerson('b', { sex: 'female' });
-    // opinion = 0 → factor = clamp(0/100, 0.5, 1.5) = 0.5 → rate = 0.02
-    a = withOpinion(a, 'b', 0);
+    let a = makePerson('a', {
+      activeScheme: scheme,
+      namedRelationships: [makeRel('mentor', 'b')], // keeps tutor alive
+    });
+    const b = makePerson('b');
+    // opinion = -100 → factor = clamp(1.0 + (-100)/200, 0.5, 1.5) = 0.5 → rate = 0.015
+    a = withOpinion(a, 'b', -100);
     const people = new Map([['a', a], ['b', b]]);
 
     const result = processSchemes(people, 1, rng);
     const progress = result.updatedPeople.get('a')!.activeScheme!.progress;
-    // rate = 0.04 * 0.5 = 0.02
-    expect(progress).toBeCloseTo(0.02);
+    // rate = 0.03 * 0.5 = 0.015
+    expect(progress).toBeCloseTo(0.015);
   });
 });
 

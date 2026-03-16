@@ -147,6 +147,12 @@ export interface BuildingDef {
    * Only meaningful when workerSlots > 0.
    */
   workerRole?: string;
+  /**
+   * Additive bonus to conception chance rolls, applied settlement-wide.
+   * E.g. 0.05 = +5% on top of the base fertility rate.
+   * Multiple buildings stack; total is capped at +0.25 in fertility.ts.
+   */
+  fertilityBonus?: number;
 }
 
 // ─── Building Catalogue ────────────────────────────────────────────────────────
@@ -512,6 +518,70 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     buildSeasons: 4,
     shelterCapacity: 12,
     allowMultiple: true,
+  },
+
+  // ── Social amenities ───────────────────────────────────────────────────────────────
+
+  bathhouse: {
+    id: 'bathhouse',
+    name: 'Bathhouse',
+    description: 'Heated pools and bathing chambers built on Imanian plumbing. Draws Sauromatian women from the surrounding territory — and keeps the ones you have.',
+    category: 'social',
+    hasStyleVariants: false,
+    cost: { lumber: 15, stone: 5, goods: 5 },
+    buildSeasons: 2,
+    requires: 'gathering_hall',
+    shelterCapacity: 0,
+    workerSlots: 2,
+    workerRole: 'bathhouse_attendant',
+    fertilityBonus: 0.05,
+    culturePull: { strength: 0.003, direction: 'sauromatian' },
+    skillGrowth: [
+      { role: 'bathhouse_attendant', skill: 'bargaining', bonus: 1 },
+      { role: 'bathhouse_attendant', skill: 'leadership', bonus: 1 },
+    ],
+  },
+
+  bathhouse_improved: {
+    id: 'bathhouse_improved',
+    name: 'Improved Bathhouse',
+    description: 'Expanded pools, private treatment rooms, and a small herbal garden. Word of its comforts travels far into tribal territory.',
+    category: 'social',
+    hasStyleVariants: false,
+    cost: { lumber: 20, stone: 10, goods: 8 },
+    buildSeasons: 2,
+    requires: 'bathhouse',
+    replacesId: 'bathhouse',
+    shelterCapacity: 0,
+    workerSlots: 3,
+    workerRole: 'bathhouse_attendant',
+    fertilityBonus: 0.10,
+    culturePull: { strength: 0.005, direction: 'sauromatian' },
+    skillGrowth: [
+      { role: 'bathhouse_attendant', skill: 'bargaining', bonus: 1 },
+      { role: 'bathhouse_attendant', skill: 'leadership', bonus: 1 },
+    ],
+  },
+
+  bathhouse_grand: {
+    id: 'bathhouse_grand',
+    name: 'Grand Bathhouse',
+    description: 'A civic institution — tiled floors, a heated great pool, private suites, and an apothecary alcove. The finest amenity in the Ashmark.',
+    category: 'social',
+    hasStyleVariants: false,
+    cost: { lumber: 30, stone: 15, goods: 10, gold: 5 },
+    buildSeasons: 3,
+    requires: 'bathhouse_improved',
+    replacesId: 'bathhouse_improved',
+    shelterCapacity: 0,
+    workerSlots: 4,
+    workerRole: 'bathhouse_attendant',
+    fertilityBonus: 0.15,
+    culturePull: { strength: 0.008, direction: 'sauromatian' },
+    skillGrowth: [
+      { role: 'bathhouse_attendant', skill: 'bargaining', bonus: 1 },
+      { role: 'bathhouse_attendant', skill: 'leadership', bonus: 1 },
+    ],
   },
 };
 

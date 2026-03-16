@@ -320,7 +320,11 @@ export type BuildingId =
   | 'wattle_hut'
   | 'cottage'
   | 'homestead'
-  | 'compound';
+  | 'compound'
+  // ── Social amenities ─────────────────────────────────────────────────────
+  | 'bathhouse'
+  | 'bathhouse_improved'
+  | 'bathhouse_grand';
 
 /** Cultural style applied to buildings that have style variants. */
 export type BuildingStyle = 'imanian' | 'sauromatian';
@@ -572,7 +576,10 @@ export type ActivityLogType =
   | 'dwelling_claimed'    // A household completed and claimed a private dwelling
   | 'household_formed'   // New household created (split-off, birth, or new arrival)
   | 'household_succession' // Household head changed after a death
-  | 'household_dissolved'; // Empty household removed
+  | 'household_dissolved' // Empty household removed
+  | 'apprenticeship_started'    // A master took on an apprentice
+  | 'apprenticeship_completed'  // An apprentice graduated with a trade bonus
+  | 'apprenticeship_ended';     // Apprenticeship ended early (master left / role change)
 
 /**
  * A single entry in the rolling Activity Log.
