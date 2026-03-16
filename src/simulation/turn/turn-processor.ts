@@ -72,6 +72,12 @@ import type { FactionProcessResult } from '../world/factions';
 import { computeTraitCategoryBoosts, applyTraitOpinionEffects, getTraitSkillGrowthBonuses } from '../personality/trait-behavior';
 import { applyTemporaryTraitExpiry, checkEarnedTraitAcquisition } from '../personality/assignment';
 import { applyHappinessTracking } from '../population/happiness';
+import {
+  assignChildToHousehold,
+  pruneOrphanedHouseholds,
+  processHouseholdSuccession,
+} from '../population/household';
+import type { HouseholdSuccessionResult } from '../population/household';
 
 // ─── Result Types ─────────────────────────────────────────────────────────────
 
@@ -144,8 +150,16 @@ export interface DawnResult {
    * Each value is the amount lost (positive number). Zero-valued resources are omitted.
    */
   spoilageThisTurn: Partial<ResourceStock>;
-  /** Households updated this dawn (Ashka-Melathi bonds added). Empty map if no changes. */
+  /** Households updated this dawn (Ashka-Melathi bonds added + lifecycle changes). Empty map if no changes. */
   updatedHouseholds: Map<string, Household>;
+  /** New households created this dawn (child births, succession splits). */
+  newHouseholds: Map<string, Household>;
+  /** IDs of households dissolved this dawn (pruned empty households, succession merges). */
+  dissolvedHouseholdIds: string[];
+  /** Activity log entries for household succession events (head died, new head named, split-offs). */
+  successionLogEntries: import('./game-state').ActivityLogEntry[];
+  /** Household IDs of Sauromatian successions awaiting a council decision event. */
+  pendingSauromatianCouncilEventHouseholdIds: string[];
   /** New Ashka-Melathi bonds formed this dawn: [householdId, personAId, personBId]. */
   newAshkaMelathiBonds: Array<[string, string, string]>;
   /** Updated religious tension (0.0–1.0) recomputed from the new religion distribution. */
@@ -348,6 +362,8 @@ function toGraveyardEntry(person: Person, deathYear: number, cause: string): Gra
     parentIds: person.parentIds,
     childrenIds: [...person.childrenIds],
     heritage: person.heritage,
+    portraitVariant: person.portraitVariant ?? 1,
+    ageAtDeath: Math.floor(person.age),
   };
 }
 
@@ -379,6 +395,10 @@ function mergePeopleUpdates(
 interface DemographicsResult {
   births: BirthNotification[];
   newGraveyardEntries: GraveyardEntry[];
+  updatedHouseholds: Map<string, Household>;
+  newHouseholds: Map<string, Household>;
+  successionLogEntries: import('./game-state').ActivityLogEntry[];
+  pendingSauromatianCouncilEvents: string[];
 }
 
 /**
@@ -396,6 +416,11 @@ function processDemographicPhase(
 ): DemographicsResult {
   const newGraveyardEntries: GraveyardEntry[] = [];
   const births: BirthNotification[] = [];
+  // Working household map — we accumulate household changes here
+  const updatedHouseholds = new Map(state.households);
+  const newHouseholds = new Map<string, Household>();
+  const successionLogEntries: import('./game-state').ActivityLogEntry[] = [];
+  const pendingSauromatianCouncilEvents: string[] = [];
 
   // Resolve due pregnancies.
   const birthResults = processPregnancies(
@@ -423,6 +448,25 @@ function processDemographicPhase(
 
     const namedChild: Person = { ...result.child, firstName, familyName };
     updatedPeople.set(namedChild.id, namedChild);
+
+    // Assign child to the appropriate household
+    const liveMother = result.motherDied ? mother : (updatedPeople.get(mother.id) ?? mother);
+    assignChildToHousehold(
+      namedChild,
+      liveMother,
+      father,
+      updatedPeople,
+      updatedHouseholds,
+      state.turnNumber,
+    );
+    // Sync newHouseholds: any household added to updatedHouseholds that wasn't
+    // in state.households is a newly-created one
+    const stateHouseholds = state.households ?? new Map<string, Household>();
+    for (const [hhId, hh] of updatedHouseholds) {
+      if (!stateHouseholds.has(hhId) && !newHouseholds.has(hhId)) {
+        newHouseholds.set(hhId, hh);
+      }
+    }
 
     if (result.motherDied) {
       newGraveyardEntries.push(toGraveyardEntry(mother, state.currentYear, 'childbirth'));
@@ -494,7 +538,49 @@ function processDemographicPhase(
     }
   }
 
-  return { births, newGraveyardEntries };
+  // Household succession: for every head who died this dawn, run succession logic.
+  for (const entry of newGraveyardEntries) {
+    // Find which household (if any) this person was head of
+    const household = Array.from(updatedHouseholds.values()).find(
+      hh => hh.headId === entry.id,
+    );
+    if (!household) continue;
+
+    const result: HouseholdSuccessionResult = processHouseholdSuccession(
+      household.id,
+      entry.id,
+      updatedHouseholds,
+      updatedPeople,
+      state.turnNumber,
+    );
+
+    // Merge succession results back into working maps
+    for (const [id, hh] of result.updatedHouseholds) updatedHouseholds.set(id, hh);
+    for (const [id, hh] of result.newHouseholds) {
+      updatedHouseholds.set(id, hh);
+      newHouseholds.set(id, hh);
+    }
+    for (const [id, p] of result.updatedPeople) updatedPeople.set(id, p);
+    successionLogEntries.push(...result.logEntries);
+    if (result.pendingSauromatianCouncilEvent) {
+      pendingSauromatianCouncilEvents.push(household.id);
+    }
+  }
+
+  // Prune orphaned households (safety net for any remaining stale entries)
+  const pruneResult = pruneOrphanedHouseholds(updatedHouseholds, updatedPeople);
+  for (const [id, hh] of pruneResult.updatedHouseholds) updatedHouseholds.set(id, hh);
+  for (const id of pruneResult.dissolvedIds) updatedHouseholds.delete(id);
+  for (const [id, p] of pruneResult.updatedPeople) updatedPeople.set(id, p);
+
+  return {
+    births,
+    newGraveyardEntries,
+    updatedHouseholds,
+    newHouseholds,
+    successionLogEntries,
+    pendingSauromatianCouncilEvents,
+  };
 }
 
 // ─── Dawn helper: Ashka-Melathi household bond formation ─────────────────────
@@ -747,7 +833,14 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
   const buildingChildModifier = getChildMortalityModifier(state.settlement.buildings ?? []);
 
   // 2–4. Demographics: births, conception, natural death, child mortality.
-  const { births, newGraveyardEntries } = processDemographicPhase(
+  const {
+    births,
+    newGraveyardEntries,
+    updatedHouseholds: demoHouseholds,
+    newHouseholds: demoNewHouseholds,
+    successionLogEntries,
+    pendingSauromatianCouncilEvents: pendingSauromatianCouncilEventHouseholdIds,
+  } = processDemographicPhase(
     updatedPeople,
     overcrowdingMortality,
     buildingChildModifier,
@@ -837,10 +930,18 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
   }
 
   // 8.75. Ashka-Melathi household bond formation.
-  const { updatedHouseholds, newAshkaMelathiBonds } = processHouseholdBonds(
+  // Pass demoHouseholds so bond logic sees post-succession household state.
+  const { updatedHouseholds: bondHouseholds, newAshkaMelathiBonds } = processHouseholdBonds(
     updatedPeople,
-    state.households ?? new Map<string, Household>(),
+    demoHouseholds,
     rng,
+  );
+  // Merge demographic + bond changes into final household map.
+  const updatedHouseholds = new Map(demoHouseholds);
+  for (const [id, h] of bondHouseholds) updatedHouseholds.set(id, h);
+  // Compute dissolved IDs: households present in original state but absent from updated map.
+  const dissolvedHouseholdIds = Array.from((state.households ?? new Map<string, Household>()).keys()).filter(
+    id => !updatedHouseholds.has(id),
   );
 
   // 8.8–8.9. Social systems: opinions and ambitions.
@@ -865,6 +966,11 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     state.turnNumber,
     rng,
     state.debugSettings,
+    {
+      households: state.households as Map<string, { dwellingBuildingId: string | null; productionBuildingIds: string[] }>,
+      currentYear: state.currentYear,
+      settlementLumber: state.settlement.resources.lumber,
+    },
   );
   mergePeopleUpdates(updatedPeople, schemeResult.updatedPeople);
 
@@ -956,6 +1062,10 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
       currentBuildings,
     ),
     updatedHouseholds,
+    newHouseholds: demoNewHouseholds,
+    dissolvedHouseholdIds,
+    successionLogEntries,
+    pendingSauromatianCouncilEventHouseholdIds,
     newAshkaMelathiBonds,
     updatedReligiousTension,
     updatedHiddenWheelDivergenceTurns: divergenceResult.updatedDivergenceTurns,

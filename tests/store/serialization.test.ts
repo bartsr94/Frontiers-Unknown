@@ -92,6 +92,8 @@ describe('deserializeGameState — graveyard backward compatibility', () => {
           parentIds: [null, null],
           childrenIds: [],
           heritage: { bloodline: [], primaryCulture: 'imanian', culturalFluency: {} },
+          portraitVariant: 1,
+          ageAtDeath: 25,
         },
       ],
     }));
@@ -113,6 +115,8 @@ describe('deserializeGameState — graveyard backward compatibility', () => {
       parentIds: [null, null],
       childrenIds: [],
       heritage: { bloodline: [], primaryCulture: 'imanian', culturalFluency: {} },
+      portraitVariant: 1,
+      ageAtDeath: 39,
     }));
     const state = deserializeGameState(makeMinimalSaveJson({ graveyard: entries }));
     expect(state.graveyard).toHaveLength(3);
@@ -222,6 +226,8 @@ describe('serializeGameState / deserializeGameState round-trip', () => {
           parentIds: [null, null],
           childrenIds: [],
           heritage: { bloodline: [], primaryCulture: 'ansberite' as const, culturalFluency: new Map() },
+          portraitVariant: 1,
+          ageAtDeath: 57,
         },
       ],
     };
@@ -232,5 +238,78 @@ describe('serializeGameState / deserializeGameState round-trip', () => {
     expect(restored.graveyard).toHaveLength(1);
     expect(restored.graveyard[0]!.id).toBe('dead_1');
     expect(restored.graveyard[0]!.firstName).toBe('Caius');
+  });
+});
+
+// ─── Household.isAutoNamed backward compatibility ─────────────────────────────
+
+describe('deserializeGameState — Household.isAutoNamed backward compatibility', () => {
+  it('defaults isAutoNamed to false when the field is absent (pre-lifecycle save)', () => {
+    const json = makeMinimalSaveJson({
+      households: [
+        ['hh-1', {
+          id: 'hh-1',
+          name: 'Iron Hearth',
+          tradition: 'imanian',
+          headId: 'p1',
+          seniorWifeId: null,
+          memberIds: ['p1'],
+          ashkaMelathiBonds: [],
+          foundedTurn: 1,
+          productionBuildingIds: [],
+          dwellingBuildingId: null,
+          // isAutoNamed deliberately absent — simulates pre-lifecycle save
+        }],
+      ],
+    });
+    const state = deserializeGameState(json);
+    expect(state.households.size).toBe(1);
+    // Old saves without isAutoNamed default to true (auto-naming enabled),
+    // because households that predate the lifecycle system were all auto-named.
+    expect(state.households.get('hh-1')!.isAutoNamed).toBe(true);
+  });
+
+  it('preserves isAutoNamed: true when present', () => {
+    const json = makeMinimalSaveJson({
+      households: [
+        ['hh-2', {
+          id: 'hh-2',
+          name: 'Kettara Ashkaran',
+          tradition: 'sauromatian',
+          headId: null,
+          seniorWifeId: 'p2',
+          memberIds: ['p2'],
+          ashkaMelathiBonds: [],
+          foundedTurn: 2,
+          productionBuildingIds: [],
+          dwellingBuildingId: null,
+          isAutoNamed: true,
+        }],
+      ],
+    });
+    const state = deserializeGameState(json);
+    expect(state.households.get('hh-2')!.isAutoNamed).toBe(true);
+  });
+
+  it('preserves isAutoNamed: false (player-renamed) when present', () => {
+    const json = makeMinimalSaveJson({
+      households: [
+        ['hh-3', {
+          id: 'hh-3',
+          name: 'My Custom Name',
+          tradition: 'ansberite',
+          headId: 'p3',
+          seniorWifeId: null,
+          memberIds: ['p3'],
+          ashkaMelathiBonds: [],
+          foundedTurn: 3,
+          productionBuildingIds: [],
+          dwellingBuildingId: null,
+          isAutoNamed: false,
+        }],
+      ],
+    });
+    const state = deserializeGameState(json);
+    expect(state.households.get('hh-3')!.isAutoNamed).toBe(false);
   });
 });

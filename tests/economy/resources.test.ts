@@ -38,7 +38,7 @@ function makeSettlement(cattle = 0, buildings: BuiltBuilding[] = []): Settlement
 
 /** Minimal BuiltBuilding stub for use in tests. */
 function makeBuilding(defId: BuiltBuilding['defId']): BuiltBuilding {
-  return { defId, instanceId: `${defId}_0`, builtTurn: 1, style: null };
+  return { defId, instanceId: `${defId}_0`, builtTurn: 1, style: null, claimedByPersonIds: [], ownerHouseholdId: null, assignedWorkerIds: [] };
 }
 
 /** Minimal person stub — only the role field is read by calculateProduction. */
@@ -428,5 +428,109 @@ describe('calculateProduction — guard produces nothing', () => {
     for (const value of Object.values(result)) {
       expect(value).toBe(0);
     }
+  });
+});
+// ─── Specialisation roles ─────────────────────────────────────────────────────
+
+describe('calculateProduction — blacksmith (smithy)', () => {
+  it('with a smithy: produces 2 steel + 1 goods in spring', () => {
+    const map = new Map([['p0', makePerson('blacksmith')]]);
+    const result = calculateProduction(map, makeSettlement(0, [makeBuilding('smithy')]), 'spring');
+    expect(result.steel).toBe(2);
+    expect(result.goods).toBe(1);
+  });
+
+  it('without a smithy: produces 0 steel and 0 goods', () => {
+    const map = new Map([['p0', makePerson('blacksmith')]]);
+    const result = calculateProduction(map, makeSettlement(), 'spring');
+    expect(result.steel).toBe(0);
+    expect(result.goods).toBe(0);
+  });
+
+  it('steel is not seasonally scaled (autumn ×1.6 has no effect on steel)', () => {
+    const map = new Map([['p0', makePerson('blacksmith')]]);
+    const spring = calculateProduction(map, makeSettlement(0, [makeBuilding('smithy')]), 'spring');
+    const autumn = calculateProduction(map, makeSettlement(0, [makeBuilding('smithy')]), 'autumn');
+    expect(spring.steel).toBe(2);
+    expect(autumn.steel).toBe(2);
+  });
+
+  it('goods ARE scaled by the goods seasonal multiplier (summer ×1.3)', () => {
+    // 2 blacksmiths → personGoods = 2; Math.floor(2 * 1.3) = 2
+    // Use 4 so the rounding is visible: Math.floor(4 * 1.3) = 5
+    const map = new Map(
+      Array.from({ length: 4 }, (_, i) => [`p${i}`, makePerson('blacksmith')])
+    );
+    const summer = calculateProduction(map, makeSettlement(0, [makeBuilding('smithy')]), 'summer');
+    expect(summer.goods).toBe(5); // Math.floor(4 * 1.3)
+  });
+});
+
+describe('calculateProduction — tailor (tannery)', () => {
+  it('with a tannery: produces 3 goods in spring', () => {
+    const map = new Map([['p0', makePerson('tailor')]]);
+    const result = calculateProduction(map, makeSettlement(0, [makeBuilding('tannery')]), 'spring');
+    expect(result.goods).toBe(3);
+  });
+
+  it('without a tannery: produces 0 goods', () => {
+    const map = new Map([['p0', makePerson('tailor')]]);
+    const result = calculateProduction(map, makeSettlement(), 'spring');
+    expect(result.goods).toBe(0);
+  });
+});
+
+describe('calculateProduction — brewer (brewery)', () => {
+  it('with a brewery: produces 2 goods in spring', () => {
+    const map = new Map([['p0', makePerson('brewer')]]);
+    const result = calculateProduction(map, makeSettlement(0, [makeBuilding('brewery')]), 'spring');
+    expect(result.goods).toBe(2);
+  });
+
+  it('without a brewery: produces 0 goods', () => {
+    const map = new Map([['p0', makePerson('brewer')]]);
+    const result = calculateProduction(map, makeSettlement(), 'spring');
+    expect(result.goods).toBe(0);
+  });
+});
+
+describe('calculateProduction — miller (mill)', () => {
+  it('with a mill: produces 3 food in spring', () => {
+    const map = new Map([['p0', makePerson('miller')]]);
+    const result = calculateProduction(map, makeSettlement(0, [makeBuilding('mill')]), 'spring');
+    expect(result.food).toBe(3);
+  });
+
+  it('miller food is seasonally scaled (autumn ×1.6 → Math.floor(3 × 1.6) = 4)', () => {
+    const map = new Map([['p0', makePerson('miller')]]);
+    const autumn = calculateProduction(map, makeSettlement(0, [makeBuilding('mill')]), 'autumn');
+    expect(autumn.food).toBe(4);
+  });
+
+  it('without a mill: produces 0 food', () => {
+    const map = new Map([['p0', makePerson('miller')]]);
+    const result = calculateProduction(map, makeSettlement(), 'spring');
+    expect(result.food).toBe(0);
+  });
+});
+
+describe('calculateProduction — herder (stable)', () => {
+  it('herder personally contributes 0 resources regardless of stable', () => {
+    // The stable provides a flatProductionBonus of 1 horse, but that is
+    // independent of the herder role.  A standalone herder without a stable
+    // produces nothing.
+    const map = new Map([['p0', makePerson('herder')]]);
+    const result = calculateProduction(map, makeSettlement(), 'spring');
+    for (const value of Object.values(result)) {
+      expect(value).toBe(0);
+    }
+  });
+
+  it('stable provides flatProductionBonus of 1 horse regardless of worker role', () => {
+    // The horse bonus derives from the building's flatProductionBonus, not the
+    // herder role — it fires even without a herder assigned.
+    const map = new Map([['p0', makePerson('herder')]]);
+    const result = calculateProduction(map, makeSettlement(0, [makeBuilding('stable')]), 'spring');
+    expect(result.horses).toBe(1);
   });
 });

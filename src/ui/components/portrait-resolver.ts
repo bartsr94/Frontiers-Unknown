@@ -17,6 +17,7 @@
  */
 
 import type { Person, EthnicGroup } from '../../simulation/population/person';
+import type { GraveyardEntry } from '../../simulation/turn/game-state';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -177,6 +178,58 @@ export function resolvePortraitSrc(person: Person): string | null {
   const count      = stageCounts[stageToUse];
   // Clamp handles saves created before more variants were added to the registry
   const variant    = Math.min(person.portraitVariant, count);
+  const variantStr = String(variant).padStart(3, '0');
+  const sexAbbr    = sex === 'male' ? 'm' : 'f';
+
+  return `/portraits/${sex}/${category}/${category}_${sexAbbr}_${stageToUse}_${variantStr}.png`;
+}
+
+// ─── Deceased Portrait Resolver ───────────────────────────────────────────────
+
+/**
+ * Resolves a portrait image path for a deceased person using the data stored
+ * on their GraveyardEntry at the time of death.
+ *
+ * Mirrors resolvePortraitSrc but works from the minimal data preserved in the
+ * graveyard (portraitVariant, ageAtDeath, sex, heritage.bloodline) instead of
+ * a full Person object. This avoids re-running bloodline math post-mortem and
+ * works safely after JSON round-trip (bloodline is a plain array, no Maps).
+ *
+ * @returns A `/portraits/…` URL or null if no art exists for this combination.
+ */
+export function resolveDeceasedPortraitSrc(entry: GraveyardEntry): string | null {
+  // Compute portrait category from the stored bloodline (plain array, no Maps needed).
+  let imanian = 0;
+  let kiswani = 0;
+  let hanjoda = 0;
+  for (const e of entry.heritage.bloodline) {
+    if (e.group === 'imanian')              imanian += e.fraction;
+    else if (KISWANI_GROUPS.has(e.group))   kiswani += e.fraction;
+    else if (HANJODA_GROUPS.has(e.group))   hanjoda += e.fraction;
+  }
+  let category: PortraitCategory | null = null;
+  if      (imanian >= 0.75)                   category = 'imanian';
+  else if (kiswani >= 0.75)                   category = 'kiswani';
+  else if (hanjoda >= 0.75)                   category = 'hanjoda';
+  else if (imanian + kiswani >= 0.80)         category = 'mixed_imanian_kiswani';
+  else if (imanian + hanjoda >= 0.80)         category = 'mixed_imanian_hanjoda';
+  else if (kiswani + hanjoda >= 0.80)         category = 'mixed_kiswani_hanjoda';
+
+  if (!category) return null;
+
+  const sex         = entry.sex;
+  const exactStage  = getAgeStage(entry.ageAtDeath);
+  const stageCounts = PORTRAIT_REGISTRY[category][sex];
+
+  const stageToUse: AgeStage | undefined =
+    stageCounts[exactStage] > 0
+      ? exactStage
+      : STAGE_FALLBACK_ORDER.find(s => stageCounts[s] > 0);
+
+  if (!stageToUse) return null;
+
+  const count      = stageCounts[stageToUse];
+  const variant    = Math.min(entry.portraitVariant, count);
   const variantStr = String(variant).padStart(3, '0');
   const sexAbbr    = sex === 'male' ? 'm' : 'f';
 

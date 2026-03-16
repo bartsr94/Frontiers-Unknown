@@ -23,9 +23,10 @@ export interface BuildingDef {
   description: string;
   /**
    * Category for grouping in the build menu.
-   * 'civic' = the main shelter upgrade chain.
+   * 'civic'    = the communal shelter upgrade chain.
+   * 'dwelling' = private household dwellings (multiple instances allowed).
    */
-  category: 'civic' | 'food' | 'industry' | 'defence' | 'social';
+  category: 'civic' | 'food' | 'industry' | 'defence' | 'social' | 'dwelling';
   /** Whether this building has cultural style variants (Imanian / Sauromatian). */
   hasStyleVariants: boolean;
   /**
@@ -121,6 +122,31 @@ export interface BuildingDef {
    * is present. Halves food decay in winter.
    */
   winterFoodProtection?: boolean;
+  /**
+   * Maximum number of production workers that can be simultaneously assigned
+   * to this building instance.
+   *
+   *   undefined  = no worker association (passive buildings: Granary, Palisade, etc.)
+   *   0          = passive benefit only; no assigned workers
+   *   N > 0      = hard cap; role assignment is blocked once this count is reached
+   *
+   * Civic / defence / social buildings that have no worker concept leave this
+   * undefined.
+   */
+  workerSlots?: number;
+  /**
+   * When true, multiple built instances of this building type may coexist in
+   * the settlement simultaneously. The "Already constructed" guard in canBuild()
+   * is skipped for these buildings.
+   * Defaults to false (undefined = false).
+   */
+  allowMultiple?: boolean;
+  /**
+   * The WorkRole that workers assigned to this building should have.
+   * Used by the role-assignment system to find available slots.
+   * Only meaningful when workerSlots > 0.
+   */
+  workerRole?: string;
 }
 
 // ─── Building Catalogue ────────────────────────────────────────────────────────
@@ -248,6 +274,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [
       { role: 'farmer', skill: 'plants', bonus: 1 },
     ],
+    workerSlots: 4,
+    workerRole: 'farmer',
+    allowMultiple: true,
   },
 
   // ── Industry ────────────────────────────────────────────────────────────────
@@ -265,6 +294,8 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [
       { role: 'craftsman', skill: 'custom', bonus: 1 },
     ],
+    workerSlots: 2,
+    workerRole: 'craftsman',
   },
 
   trading_post: {
@@ -281,6 +312,8 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [
       { role: 'trader', skill: 'bargaining', bonus: 1 },
     ],
+    workerSlots: 3,
+    workerRole: 'trader',
   },
 
   // ── Health ──────────────────────────────────────────────────────────────────
@@ -298,6 +331,8 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [
       { role: 'healer', skill: 'plants', bonus: 1 },
     ],
+    workerSlots: 2,
+    workerRole: 'healer',
   },
 
   // ── Social ──────────────────────────────────────────────────────────────────
@@ -353,8 +388,130 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     shelterCapacity: 0,
     flatProductionBonus: { horses: 1 },
     skillGrowth: [
-      { role: 'farmer', skill: 'animals', bonus: 1 },
+      { role: 'herder', skill: 'animals', bonus: 1 },
     ],
+    workerSlots: 2,
+    workerRole: 'herder',
+  },
+
+  // ── Specialised industry (all require a Workshop) ──────────────────────────
+
+  mill: {
+    id: 'mill',
+    name: 'Mill',
+    description: 'Waterwheel and grinding stones — a miller turns raw grain into substantially more food than any farmer cooking in the field.',
+    category: 'food',
+    hasStyleVariants: false,
+    cost: { lumber: 12, stone: 10 },
+    buildSeasons: 2,
+    requires: 'fields',
+    shelterCapacity: 0,
+    roleProductionBonus: { role: 'miller', bonus: { food: 3 } },
+    skillGrowth: [{ role: 'miller', skill: 'plants', bonus: 1 }],
+    workerSlots: 2,
+    workerRole: 'miller',
+    allowMultiple: true,
+  },
+
+  smithy: {
+    id: 'smithy',
+    name: 'Smithy',
+    description: 'A dedicated forge with anvil and bellows. Blacksmiths here produce finished steel goods faster than any general workshop can manage.',
+    category: 'industry',
+    hasStyleVariants: false,
+    cost: { lumber: 15, steel: 10 },
+    buildSeasons: 2,
+    requires: 'workshop',
+    shelterCapacity: 0,
+    roleProductionBonus: { role: 'blacksmith', bonus: { steel: 2, goods: 1 } },
+    skillGrowth: [{ role: 'blacksmith', skill: 'custom', bonus: 2 }],
+    workerSlots: 2,
+    workerRole: 'blacksmith',
+    allowMultiple: true,
+  },
+
+  tannery: {
+    id: 'tannery',
+    name: 'Tannery',
+    description: 'Hides cured, cloth cut and stitched — a skilled tailor outproduces any generalist craftsman in trade goods.',
+    category: 'industry',
+    hasStyleVariants: false,
+    cost: { lumber: 10, goods: 5 },
+    buildSeasons: 2,
+    requires: 'workshop',
+    shelterCapacity: 0,
+    roleProductionBonus: { role: 'tailor', bonus: { goods: 3 } },
+    skillGrowth: [{ role: 'tailor', skill: 'custom', bonus: 2 }],
+    workerSlots: 2,
+    workerRole: 'tailor',
+    allowMultiple: true,
+  },
+
+  brewery: {
+    id: 'brewery',
+    name: 'Brewery',
+    description: 'A vat-room and barley store. Good ale and mead boost morale across the whole settlement — and fetch a fine price at the Trading Post.',
+    category: 'social',
+    hasStyleVariants: false,
+    cost: { lumber: 12, stone: 6 },
+    buildSeasons: 2,
+    requires: 'granary',
+    shelterCapacity: 0,
+    roleProductionBonus: { role: 'brewer', bonus: { goods: 2 } },
+    skillGrowth: [{ role: 'brewer', skill: 'bargaining', bonus: 1 }],
+    workerSlots: 2,
+    workerRole: 'brewer',
+    allowMultiple: true,
+  },
+
+  // ── Private Dwellings (household-owned; multiple instances allowed) ─────────
+
+  wattle_hut: {
+    id: 'wattle_hut',
+    name: 'Wattle Hut',
+    description: 'A wattle-and-daub hut — humble, but it belongs to a household. A private hearthfire means something.',
+    category: 'dwelling',
+    hasStyleVariants: false,
+    cost: { lumber: 3 },
+    buildSeasons: 1,
+    shelterCapacity: 4,
+    allowMultiple: true,
+  },
+
+  cottage: {
+    id: 'cottage',
+    name: 'Cottage',
+    description: 'A proper timber-framed cottage with a loft and a real door that closes. Room for a family.',
+    category: 'dwelling',
+    hasStyleVariants: false,
+    cost: { lumber: 8, stone: 4 },
+    buildSeasons: 2,
+    shelterCapacity: 6,
+    allowMultiple: true,
+  },
+
+  homestead: {
+    id: 'homestead',
+    name: 'Homestead',
+    description: 'A sturdy dwelling with outbuildings and a yard. A homestead is built to last and to be passed down.',
+    category: 'dwelling',
+    hasStyleVariants: false,
+    cost: { lumber: 15, stone: 8 },
+    buildSeasons: 3,
+    shelterCapacity: 8,
+    allowMultiple: true,
+  },
+
+  compound: {
+    id: 'compound',
+    name: 'Compound',
+    description: 'A walled private estate — house, stores, workshop, and garden. A compound signals that a household has truly put down roots.',
+    category: 'dwelling',
+    hasStyleVariants: false,
+    cost: { lumber: 25, stone: 15, gold: 5 },
+    buildSeasons: 4,
+    shelterCapacity: 12,
+    allowMultiple: true,
   },
 };
 

@@ -81,6 +81,8 @@ export function deserializePerson(s: SerialPerson): Person {
     // Phase 5 happiness fields — not present in pre-Phase-5 saves.
     lowHappinessTurns: (s as Partial<typeof s>).lowHappinessTurns ?? 0,
     claimedBuildingId: (s as Partial<typeof s>).claimedBuildingId ?? null,
+    // Housing & specialisation fields.
+    joinedYear: (s as Partial<typeof s>).joinedYear ?? 1,
   };
 }
 
@@ -141,17 +143,41 @@ export function deserializeGameState(json: string): GameState {
       hiddenWheelEmerged:         (s.culture as Partial<typeof s.culture>).hiddenWheelEmerged         ?? false,
     },
     eventCooldowns: new Map(s.eventCooldowns),
-    households: new Map(s.households ?? []),
+    households: new Map(
+      (s.households ?? []).map(([id, h]) => [
+        id,
+        {
+          ...h,
+          dwellingBuildingId:  (h as Partial<typeof h>).dwellingBuildingId  ?? null,
+          productionBuildingIds: (h as Partial<typeof h>).productionBuildingIds ?? [],
+          isAutoNamed: (h as Partial<typeof h>).isAutoNamed ?? true,
+        },
+      ]),
+    ),
     // Backward compat: saves from before the graveyard was introduced won't have
     // this field. Default to empty array so opinion/family lookups never surface
     // "Unknown" names from pre-graveyard deaths.
-    graveyard: (s as unknown as Partial<GameState>).graveyard ?? [],
+    graveyard: ((s as unknown as Partial<GameState>).graveyard ?? []).map((g: any) => ({
+      ...g,
+      // Backward compat: pre-Family-Tree-Overlay saves won't have portrait fields.
+      portraitVariant: g.portraitVariant ?? 1,
+      ageAtDeath:      g.ageAtDeath      ?? 0,
+    })),
     deferredEvents: s.deferredEvents ?? [],
     flags: (s as unknown as GameState).flags ?? { creoleEmergedNotified: false },
     identityPressure: (s as unknown as Partial<GameState>).identityPressure ?? { companyPressureTurns: 0, tribalPressureTurns: 0 },
     settlement: {
       ...(s.settlement as typeof s.settlement),
       religiousPolicy: ((s.settlement as Partial<typeof s.settlement>).religiousPolicy) ?? 'tolerant',
+      buildings: (s.settlement as typeof s.settlement).buildings.map(b => ({
+        ...b,
+        ownerHouseholdId:  (b as Partial<typeof b>).ownerHouseholdId  ?? null,
+        assignedWorkerIds: (b as Partial<typeof b>).assignedWorkerIds ?? [],
+      })),
+      constructionQueue: ((s.settlement as typeof s.settlement).constructionQueue ?? []).map(p => ({
+        ...p,
+        ownerHouseholdId: (p as Partial<typeof p>).ownerHouseholdId ?? null,
+      })),
     },
     // Phase 4.0 autonomy fields.
     factions:       (s as unknown as Partial<GameState>).factions       ?? [],
@@ -161,5 +187,8 @@ export function deserializeGameState(json: string): GameState {
     lowMoraleTurns:            (s as unknown as Partial<GameState>).lowMoraleTurns            ?? 0,
     massDesertionWarningFired: (s as unknown as Partial<GameState>).massDesertionWarningFired ?? false,
     lastSettlementMorale:      (s as unknown as Partial<GameState>).lastSettlementMorale      ?? 0,
+    // Housing & specialisation fields.
+    communalResourceMinimum:   (s as unknown as Partial<GameState>).communalResourceMinimum   ?? { lumber: 15, stone: 5 },
+    buildingWorkersInitialized:(s as unknown as Partial<GameState>).buildingWorkersInitialized ?? false,
   };
 }

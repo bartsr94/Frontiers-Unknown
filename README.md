@@ -44,6 +44,8 @@ npx tsc --noEmit   # Type-check
 | 3.8 | Cultural Identity Pressure | ✅ Complete |
 | 3.9 | Trait Expansion — Character Agency | ✅ Complete |
 | 4.0 | Character Autonomy — Deep Agency | ✅ Complete |
+| 4.1 | Happiness System — The Weight of Days | ✅ Complete |
+| 4.2 | Housing & Specialisation | ✅ Complete |
 | 4 | Polish — The Ashmark Remembers | 🔲 Planned |
 
 **Phase 3 progress:** Language acquisition engine ✅ · Cultural identity & drift system ✅ · Founder character variety ✅ · Skills & experience tracking ✅ · Council voice system ✅ · Character portrait system ✅ · Event `add_person` consequence ✅ · Settlement buildings & construction system ✅ · Event character binding (named actors, `{slot}` interpolation, portrait strip) ✅ · Economy system (Company quota, tribe trade, spoilage, crafting) ✅ · Generic task roles (Forager, Quarrier, Lumberjack) ✅ · Tilled Fields building ✅ · Clickable role assignment ✅
@@ -60,7 +62,11 @@ npx tsc --noEmit   # Type-check
 
 **Phase 4.0 progress:** Named relationships (`friend` / `rival` / `nemesis` / `confidant` / `mentor` / `student`) with opinion-gated formation and dissolution ✅ · `processNamedRelationships()` + `seedFoundingRelationships()` wired into `processDawn()` ✅ · Scheme engine — 5 scheme types (`court_person`, `convert_faith`, `befriend_person`, `undermine_person`, `tutor_person`) with progress-based event firing ✅ · 5 scheme events in `definitions/schemes.ts` ✅ · Faction system — 6 faction types (`cultural_preservationists`, `company_loyalists`, `orthodox_faithful`, `wheel_devotees`, `community_elders`, `merchant_bloc`) with membership, strength, and collective demands ✅ · `activityLog` rolling 30-entry feed with 11 log entry types ✅ · `CommunityView` tab — population/bonds summary, factions panel, activity feed ✅ · `ActivityFeed` component with per-type icons and clickable person chips ✅ · `applySharedRoleOpinionDrift()` — co-workers develop opinions passively ✅ · Bug fixes: founder trait pool expanded, ambition opinion thresholds tuned, friend threshold & sustain turns tuned ✅ · 135 new tests across 4 new test files ✅
 
-**1116/1116 tests across 36 test files — zero compile errors.**
+**Phase 4.1 progress:** Per-person happiness score (4 categories: material / social / purpose / trait) ✅ · Settlement morale aggregate ✅ · `lowHappinessTurns` streak → desertion gate (≥3 turns below crisis threshold) ✅ · `happinessMultipliers` wired into production per role ✅ · `getDepartingFamily` (spouse + children departure logic) ✅ · PersonDetail happiness chip with factor-breakdown tooltip ✅ · 4 crisis events injected programmatically ✅ · 99 new tests ✅
+
+**Phase 4.2 progress:** 4 private dwelling tiers (`wattle_hut` / `cottage` / `homestead` / `compound`) ✅ · Worker slot caps on all production buildings (`workerSlots` + `workerRole` on `BuildingDef`) ✅ · 5 specialisation roles (`blacksmith` / `tailor` / `brewer` / `miller` / `herder`) ✅ · `applyDwellingClaims` 3-pass fairness algorithm extracted to `construction.ts` as pure function ✅ · `findAvailableWorkerSlotIndex` slot-cap predicate ✅ · `person.claimedBuildingId` propagation from household assignment ✅ · Founding settlers start as foragers (`gather_food`) — no Tilled Fields at game start ✅ · SettlementView dwelling category UI + PeopleView Trades group + PersonDetail Housing section ✅ · 15 new tests in `dwelling-claims.test.ts` ✅
+
+**1251/1251 tests across 38 test files — zero compile errors.**
 
 ---
 
@@ -73,9 +79,11 @@ npx tsc --noEmit   # Type-check
 - [plans/EVENT_CHARACTER_BINDING.md](plans/EVENT_CHARACTER_BINDING.md) — Event character binding system (actor slots, text interpolation, portrait strip)
 - [plans/ECONOMY_SYSTEM.md](plans/ECONOMY_SYSTEM.md) — Economy system design (Company quota, tribe trade, spoilage, crafting)
 - [plans/HOUSEHOLD_DEPTH.md](plans/HOUSEHOLD_DEPTH.md) — Household system design (ashkarans, Keth-Thara, thralls, Ashka-Melathi bonds, wife-council)
+- [plans/HOUSING_AND_SPECIALISATION.md](plans/HOUSING_AND_SPECIALISATION.md) — Private dwelling tiers, worker slot caps, specialisation roles
 - [plans/OPINIONS_SYSTEM.md](plans/OPINIONS_SYSTEM.md) — Opinion score system (baseline, drift, decay, marriage gate, trait affinities)
 - [plans/AUTONOMY_SYSTEM.md](plans/AUTONOMY_SYSTEM.md) — Character autonomy system (ambitions, intensity, 5 ambition-driven events)
 - [plans/RELIGION_SYSTEM.md](plans/RELIGION_SYSTEM.md) — Religion system design (three faiths, Hidden Wheel emergence, religious policy, Company pressure)
 - [plans/CULTURAL_IDENTITY_PRESSURE.md](plans/CULTURAL_IDENTITY_PRESSURE.md) — Cultural identity pressure design (five-zone blend scale, passive Company/tribe deltas, 6 identity events)
+- [plans/HOUSING_AND_SPECIALISATION.md](plans/HOUSING_AND_SPECIALISATION.md) — Housing, worker slots, and specialisation roles design (private dwellings, slot caps, blacksmith/tailor/brewer/miller/herder)
 - [plans/TRAIT_EXPANSION.md](plans/TRAIT_EXPANSION.md) — Trait expansion design (~80 traits, 6 categories, temporary traits, aptitude inheritance, earned trait acquisition)
 - [plans/CHARACTER_AUTONOMY_OVERHAUL.md](plans/CHARACTER_AUTONOMY_OVERHAUL.md) — Character autonomy design (named relationships, scheme engine, factions, activity log, community view)

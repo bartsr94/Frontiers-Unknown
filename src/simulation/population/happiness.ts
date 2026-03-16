@@ -95,6 +95,11 @@ const ROLE_SKILL_MAP: Partial<Record<WorkRole, SkillId>> = {
   wheel_singer:  'leadership',
   voice_of_wheel:'bargaining',
   builder:       'custom',
+  blacksmith:    'custom',
+  tailor:        'custom',
+  brewer:        'bargaining',
+  miller:        'plants',
+  herder:        'animals',
 };
 
 // ─── Factor Computation ──────────────────────────────────────────────────────
@@ -144,6 +149,52 @@ export function computeHappinessFactors(
   if (conditions.includes('recovering'))      factors.push({ label: 'Still recovering',                delta:  -5, category: 'material' });
   if (conditions.includes('chronic_illness')) factors.push({ label: 'Living with a chronic condition', delta: -20, category: 'material' });
   if (conditions.includes('frail'))           factors.push({ label: 'Physical frailty weighs on them', delta: -10, category: 'material' });
+
+  // ── Material: Private Dwelling ────────────────────────────────────────
+  // Find the household this person belongs to and its claimed dwelling.
+  let dwellingTierBonus = 0;
+  const household = person.householdId
+    ? (state.households?.get(person.householdId) ?? null)
+    : null;
+  const dwellingId = household?.dwellingBuildingId ?? null;
+  if (dwellingId) {
+    const dwelling = settlement.buildings.find(b => b.instanceId === dwellingId);
+    if (dwelling) {
+      if (dwelling.defId === 'wattle_hut')  dwellingTierBonus = 8;
+      if (dwelling.defId === 'cottage')      dwellingTierBonus = 15;
+      if (dwelling.defId === 'homestead')    dwellingTierBonus = 22;
+      if (dwelling.defId === 'compound')     dwellingTierBonus = 30;
+    }
+  }
+  if (dwellingTierBonus > 0) {
+    factors.push({ label: 'Has a hearth to call home', delta: dwellingTierBonus, category: 'material' });
+  }
+
+  // Time-based expectation: year 5+ without a private home feels like deprivation.
+  const currentYear = state.currentYear ?? 1;
+  const joinedYear  = person.joinedYear ?? 1;
+  const yearsPresent = currentYear - joinedYear;
+  if (!dwellingId && yearsPresent >= 5) {
+    const penalty = Math.min(3 + Math.floor((yearsPresent - 5) * 1.5), 20);
+    factors.push({ label: 'No home after years of service', delta: -penalty, category: 'material' });
+  }
+
+  // Relative jealousy: if ANY dwelling exists but this person has none.
+  if (!dwellingId) {
+    const anyDwellingExists = settlement.buildings.some(
+      b => ['wattle_hut','cottage','homestead','compound'].includes(b.defId),
+    );
+    if (anyDwellingExists) {
+      factors.push({ label: 'Others have homes; I do not', delta: -8, category: 'material' });
+    }
+  }
+
+  // ── Social: Brewery morale ─────────────────────────────────────────────
+  const hasBrewery = settlement.buildings.some(b => b.defId === 'brewery');
+  const hasBrewer  = Array.from(people.values()).some(p => p.role === 'brewer');
+  if (hasBrewery && hasBrewer) {
+    factors.push({ label: 'Quality ale and mead', delta: 5, category: 'social' });
+  }
 
   // ── Social: Spouse / Partner ─────────────────────────────────────────────
   const livingSpouseIds = person.spouseIds.filter(id => people.has(id));

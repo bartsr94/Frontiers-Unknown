@@ -2,7 +2,7 @@
 
 **Feature:** Phase 4.0 — Deep Character Agency  
 **Phase:** Phase 4 (Polish)  
-**Status:** 🔲 Not started  
+**Status:** ✅ Complete (Phase 4.0)  
 **Companion docs:** `AUTONOMY_SYSTEM.md` (Phase 3.6 foundation), `OPINIONS_SYSTEM.md`, `TRAIT_EXPANSION.md`
 
 ---

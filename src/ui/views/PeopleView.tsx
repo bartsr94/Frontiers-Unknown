@@ -14,8 +14,10 @@ import { skinToneColor } from '../components/Portrait';
 import { heritageAbbr } from '../components/heritage-helpers';
 import PersonDetail from './PersonDetail';
 import MarriageDialog from '../overlays/MarriageDialog';
+import FamilyTreeOverlay from '../overlays/FamilyTreeOverlay';
 import { ROLE_LABELS, ROLE_COLORS, MAX_COUNCIL_SEATS } from '../shared/role-display';
 import { computeHappiness, getHappinessColor, getHappinessLabel } from '../../simulation/population/happiness';
+import { BUILDING_CATALOG } from '../../simulation/buildings/building-definitions';
 
 const MAX_COUNCIL = MAX_COUNCIL_SEATS;
 
@@ -68,11 +70,17 @@ const ASSIGNABLE_ROLES: WorkRole[] = [
   'craftsman',
   'healer',
   'guard',
+  'herder',
+  'blacksmith',
+  'tailor',
+  'brewer',
+  'miller',
   'unassigned',
 ];
 
 export default function PeopleView() {
   const [selectedId,        setSelectedId]        = useState<string | null>(null);
+  const [familyTreePersonId, setFamilyTreePersonId] = useState<string | null>(null);
   const [sortKey,           setSortKey]            = useState<SortKey>('name');
   const [filter,            setFilter]             = useState<FilterState>({ sex: 'all', married: 'all', heritage: 'all', discontent: false });
   const [showMarriageDialog, setShowMarriageDialog] = useState(false);
@@ -428,6 +436,38 @@ export default function PeopleView() {
                 </span>
               </button>
             ))}
+            {/* Trades group */}
+            <div className="px-2 py-0.5 text-[9px] text-stone-500 uppercase tracking-wider font-semibold mt-1 border-t border-stone-700 pt-1">Trades</div>
+            {(['herder', 'blacksmith', 'tailor', 'brewer', 'miller'] satisfies WorkRole[]).map(r => {
+              const buildings = gameState?.settlement.buildings ?? [];
+              const matchBuildings = buildings.filter(b => BUILDING_CATALOG[b.defId]?.workerRole === r);
+              const totalSlots = matchBuildings.reduce((sum, b) => sum + (BUILDING_CATALOG[b.defId]?.workerSlots ?? 0), 0);
+              const usedSlots  = matchBuildings.reduce((sum, b) => sum + (b.assignedWorkerIds ?? []).length, 0);
+              const openSlots  = totalSlots - usedSlots;
+              const isFull     = totalSlots > 0 && openSlots <= 0;
+              const noBuilding = totalSlots === 0;
+              return (
+                <button
+                  key={r}
+                  onClick={() => { assignRole(person.id, r); setRolePickerId(null); setPickerPos(null); }}
+                  className={`w-full text-left px-2.5 py-1 text-xs flex items-center gap-2 transition-colors
+                              ${ person.role === r ? 'opacity-40 cursor-default' : 'hover:bg-stone-700'}`}
+                  title={noBuilding ? `No building for ${ROLE_LABELS[r]} yet` : isFull ? `All ${ROLE_LABELS[r]} slots filled` : undefined}
+                >
+                  <span className={`inline-block px-1.5 py-0.5 rounded font-semibold ${ROLE_COLORS[r]} ${noBuilding && person.role !== r ? 'opacity-50' : ''}`}>
+                    {ROLE_LABELS[r]}
+                  </span>
+                  {totalSlots > 0 && (
+                    <span className={`ml-auto text-[10px] ${isFull ? 'text-amber-500' : 'text-stone-500'}`}>
+                      {openSlots}/{totalSlots}
+                    </span>
+                  )}
+                  {noBuilding && (
+                    <span className="ml-auto text-[10px] text-stone-600">no building</span>
+                  )}
+                </button>
+              );
+            })}
             {/* Unassigned */}
             <div className="border-t border-stone-700 mx-1 mt-0.5" />
             <button
@@ -460,9 +500,17 @@ export default function PeopleView() {
               personId={selectedId}
               onClose={() => setSelectedId(null)}
               onNavigate={id => setSelectedId(id)}
+              onOpenFamilyTree={id => setFamilyTreePersonId(id)}
             />
           </div>
         </>
+      )}
+      {familyTreePersonId && (
+        <FamilyTreeOverlay
+          rootPersonId={familyTreePersonId}
+          onClose={() => setFamilyTreePersonId(null)}
+          onNavigateToPerson={id => { setSelectedId(id); setFamilyTreePersonId(null); }}
+        />
       )}
     </div>
   );

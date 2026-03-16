@@ -177,6 +177,22 @@ export interface Household {
   /** Pairs of person IDs who share an Ashka-Melathi intimate bond. */
   ashkaMelathiBonds: [string, string][];
   foundedTurn: number;
+  /**
+   * The BuiltBuilding instanceId of the household's private dwelling.
+   * null = household lives in communal settlement housing.
+   */
+  dwellingBuildingId: string | null;
+  /**
+   * InstanceIds of production buildings claimed by this household.
+   * Household members have designated access to these buildings; they still
+   * count against each building's worker slot cap.
+   */
+  productionBuildingIds: string[];
+  /**
+   * When true the household name is derived automatically from head/seniorWife
+   * and updated whenever leadership changes.  False = player has renamed it.
+   */
+  isAutoNamed: boolean;
 }
 
 // ─── Settlement Culture ────────────────────────────────────────────────────────
@@ -278,19 +294,33 @@ export type LocationId = string;
  * All building types that can be constructed in the settlement.
  */
 export type BuildingId =
+  // ── Communal civic ────────────────────────────────────────────────────────
   | 'camp'
   | 'longhouse'
   | 'roundhouse'
   | 'great_hall'
   | 'clan_lodge'
+  // ── Food & storage ────────────────────────────────────────────────────────
   | 'granary'
   | 'fields'
+  | 'stable'
+  | 'mill'
+  // ── Industry ──────────────────────────────────────────────────────────────
   | 'workshop'
+  | 'smithy'
+  | 'tannery'
   | 'trading_post'
+  // ── Social & health ───────────────────────────────────────────────────────
   | 'healers_hut'
   | 'gathering_hall'
+  | 'brewery'
+  // ── Defence ───────────────────────────────────────────────────────────────
   | 'palisade'
-  | 'stable';
+  // ── Private dwellings (allow multiples; claimed by households) ───────────
+  | 'wattle_hut'
+  | 'cottage'
+  | 'homestead'
+  | 'compound';
 
 /** Cultural style applied to buildings that have style variants. */
 export type BuildingStyle = 'imanian' | 'sauromatian';
@@ -301,7 +331,7 @@ export interface BuiltBuilding {
   defId: BuildingId;
   /**
    * Unique instance identifier (e.g. 'granary_0').
-   * Allows future support for multiple instances of the same building type.
+   * Multiple instances of the same building type are distinguished by this.
    */
   instanceId: string;
   /** Turn number on which construction completed. 0 for the starting Camp. */
@@ -309,11 +339,23 @@ export interface BuiltBuilding {
   /** Cultural style chosen when construction started. null for style-neutral buildings. */
   style: BuildingStyle | null;
   /**
-   * Building claim hook — IDs of people or households that have claimed
-   * this building as a private dwelling. Empty until the building revamp
-   * activates the claim mechanic.
+   * IDs of people who live in this building (dwelling buildings only).
+   * Empty for production/civic/defence buildings.
    */
   claimedByPersonIds: string[];
+  /**
+   * The household that owns this building. null = communal.
+   * Set automatically when a household-initiated construction project completes.
+   * Can also be set by the player for production buildings.
+   */
+  ownerHouseholdId: string | null;
+  /**
+   * IDs of people currently assigned as production workers in this building.
+   * Replaces the old role-based global lookup — each worker is tied to a
+   * specific building instance.
+   * Checked against BuildingDef.workerSlots before new assignments are accepted.
+   */
+  assignedWorkerIds: string[];
 }
 
 /** An in-progress construction project. */
@@ -337,6 +379,12 @@ export interface ConstructionProject {
   startedTurn: number;
   /** Resources already spent (for 50% refund on cancel). */
   resourcesSpent: Partial<ResourceStock>;
+  /**
+   * When set, the completed BuiltBuilding will be automatically claimed by
+   * this household. Set by the scheme_build_dwelling consequence handler.
+   * null for all communal / player-initiated construction.
+   */
+  ownerHouseholdId: string | null;
 }
 
 /**
@@ -407,6 +455,10 @@ export interface GraveyardEntry {
   childrenIds: string[];
   /** Preserved heritage for bloodline and genealogy queries. */
   heritage: Heritage;
+  /** Stable portrait index, copied from Person.portraitVariant at time of death. */
+  portraitVariant: number;
+  /** Age in whole years at time of death — used to resolve the correct portrait stage. */
+  ageAtDeath: number;
 }
 
 /**
@@ -449,6 +501,12 @@ export interface GameConfig {
    * falls back to kiswani_riverfolk if no tribes are selected.
    */
   includeSauromatianWomen?: boolean;
+  /**
+   * When true, the scheme_build_dwelling consent event auto-accepts when
+   * resources are above communalResourceMinimum. Default false (player is
+   * always prompted).
+   */
+  allowAutonomousBuilding?: boolean;
 }
 
 // ─── Cultural Identity Pressure ───────────────────────────────────────────────
@@ -497,7 +555,11 @@ export type ActivityLogType =
   | 'faction_dissolved'
   | 'trait_acquired'
   | 'ambition_formed'
-  | 'ambition_cleared';
+  | 'ambition_cleared'
+  | 'dwelling_claimed'    // A household completed and claimed a private dwelling
+  | 'household_formed'   // New household created (split-off, birth, or new arrival)
+  | 'household_succession' // Household head changed after a death
+  | 'household_dissolved'; // Empty household removed
 
 /**
  * A single entry in the rolling Activity Log.
@@ -727,4 +789,20 @@ export interface GameState {
    * Defaults to 0 (neutral) for new games and old saves.
    */
   lastSettlementMorale: number;
+
+  // ─── Housing & Specialisation (Phase 5.1) ─────────────────────────────────
+
+  /**
+   * Minimum resource stockpile the scheme system must see ABOVE the building
+   * cost before allowing autonomous household construction to proceed.
+   * Player-configurable in the Settlement panel. Defaults to modest floors.
+   */
+  communalResourceMinimum: Partial<ResourceStock>;
+
+  /**
+   * One-time migration flag. Set to true after the first load applies the
+   * `buildingWorkersInitialized` migration (moves existing role assignments
+   * into building.assignedWorkerIds).
+   */
+  buildingWorkersInitialized: boolean;
 }

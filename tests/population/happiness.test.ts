@@ -23,6 +23,8 @@ const CAMP: BuiltBuilding = {
   builtTurn: 0,
   style: null,
   claimedByPersonIds: [],
+  ownerHouseholdId: null,
+  assignedWorkerIds: [],
 };
 
 function makePerson(id: string, overrides: Partial<Person> = {}): Person {

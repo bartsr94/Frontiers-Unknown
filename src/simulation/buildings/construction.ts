@@ -13,6 +13,7 @@ import type {
   BuildingId,
   BuildingStyle,
   ResourceStock,
+  Household,
 } from '../turn/game-state';
 import type { Person } from '../population/person';
 import type { SeededRNG } from '../../utils/rng';
@@ -54,12 +55,13 @@ export function canBuild(
     return { ok: false, reason: `Upgrade requires existing ${sourceDef.name}` };
   }
 
-  // Already built? (Allow multiples only if it makes lore sense — currently none do.)
-  if (hasBuilding(settlement.buildings, defId)) {
+  // Already built? Skip the check for buildings that allow multiple instances.
+  if (!def.allowMultiple && hasBuilding(settlement.buildings, defId)) {
     return { ok: false, reason: 'Already constructed' };
   }
 
-  // Also prevent starting a project that is already in the queue.
+  // Prevent starting a duplicate project in the queue (even for allowMultiple buildings,
+  // only one construction project per type can be queued at a time).
   if (settlement.constructionQueue.some(p => p.defId === defId)) {
     return { ok: false, reason: 'Already under construction' };
   }
@@ -96,6 +98,7 @@ export function startConstruction(
   defId: BuildingId,
   style: BuildingStyle | null,
   turnNumber: number,
+  ownerHouseholdId: string | null = null,
 ): { project: ConstructionProject; updatedResources: ResourceStock } {
   const def = BUILDING_CATALOG[defId];
   _projectCounter += 1;
@@ -118,6 +121,7 @@ export function startConstruction(
     assignedWorkerIds: [],
     startedTurn: turnNumber,
     resourcesSpent: spent,
+    ownerHouseholdId,
   };
 
   return { project, updatedResources };
@@ -230,6 +234,8 @@ export function processConstruction(
         instanceId: `${project.defId}_${turnNumber}`,
         builtTurn: turnNumber,
         style: project.style,
+        ownerHouseholdId: project.ownerHouseholdId,
+        assignedWorkerIds: [],
       });
 
       // Record any building that this upgrade replaces.
@@ -272,4 +278,129 @@ export function cancelConstruction(project: ConstructionProject): CancelConstruc
     refund,
     freedWorkerIds: [...project.assignedWorkerIds],
   };
+}
+
+// ─── Dwelling Claims ──────────────────────────────────────────────────────────
+
+/** Building IDs that classify as private household dwellings. */
+export const DWELLING_IDS: ReadonlySet<string> = new Set([
+  'wattle_hut', 'cottage', 'homestead', 'compound',
+]);
+
+/**
+ * Assigns unclaimed dwelling buildings to homeless households and propagates
+ * `person.claimedBuildingId` for all household members.
+ *
+ * Three-pass algorithm:
+ *   Pass 1 — newly-completed scheme-owned buildings: link to ownerHouseholdId
+ *   Pass 2 — any remaining unowned standing dwellings: assign to the first
+ *             homeless household; stamps ownerHouseholdId on the building
+ *   Pass 3 — propagate dwellingBuildingId → person.claimedBuildingId;
+ *             defensively clear both if the dwelling was demolished
+ *
+ * All inputs are treated as immutable; fresh data structures are returned.
+ */
+export function applyDwellingClaims(
+  completedBuildings: BuiltBuilding[],
+  allBuildings: BuiltBuilding[],
+  households: Map<string, Household>,
+  people: Map<string, Person>,
+): {
+  buildings: BuiltBuilding[];
+  households: Map<string, Household>;
+  people: Map<string, Person>;
+} {
+  const hh = new Map(households);
+  let buildings = [...allBuildings];
+
+  // Pass 1: newly-completed buildings that were scheme-built (ownerHouseholdId pre-set)
+  for (const b of completedBuildings) {
+    if (!b.ownerHouseholdId) continue;
+    const existing = hh.get(b.ownerHouseholdId);
+    if (!existing) continue;
+    if (DWELLING_IDS.has(b.defId)) {
+      // If this household already owned a different dwelling, free it so Pass 2
+      // can redistribute it to a homeless household rather than leaving it orphaned.
+      const oldDwellingId = existing.dwellingBuildingId;
+      if (oldDwellingId && oldDwellingId !== b.instanceId) {
+        const oldIdx = buildings.findIndex(x => x.instanceId === oldDwellingId);
+        if (oldIdx >= 0) {
+          buildings = buildings.map((x, i) =>
+            i === oldIdx ? { ...x, ownerHouseholdId: null } : x,
+          );
+        }
+      }
+      hh.set(b.ownerHouseholdId, { ...existing, dwellingBuildingId: b.instanceId });
+    } else {
+      hh.set(b.ownerHouseholdId, {
+        ...existing,
+        productionBuildingIds: [...(existing.productionBuildingIds ?? []), b.instanceId],
+      });
+    }
+  }
+
+  // Pass 2: unowned standing dwellings → assign to the first homeless household
+  const unowned = buildings.filter(b => DWELLING_IDS.has(b.defId) && !b.ownerHouseholdId);
+  for (const b of unowned) {
+    const homelessEntry = Array.from(hh.entries()).find(
+      ([, h]) => !h.dwellingBuildingId && (h.memberIds ?? []).length > 0,
+    );
+    if (!homelessEntry) break;
+    const [hhId, hhObj] = homelessEntry;
+    hh.set(hhId, { ...hhObj, dwellingBuildingId: b.instanceId });
+    // Stamp the building so it isn't re-assigned on subsequent dawns
+    const idx = buildings.findIndex(x => x.instanceId === b.instanceId);
+    if (idx >= 0) {
+      buildings = buildings.map((x, i) => (i === idx ? { ...x, ownerHouseholdId: hhId } : x));
+    }
+  }
+
+  // Pass 3: propagate household's dwellingBuildingId → person.claimedBuildingId;
+  // clear both if the building was demolished.
+  const ppl = new Map(people);
+  for (const [hhId, hhObj] of hh) {
+    if (!hhObj.dwellingBuildingId) continue;
+    // Try to stamp unclaimed members
+    for (const memberId of hhObj.memberIds ?? []) {
+      const p = ppl.get(memberId);
+      if (p && !p.claimedBuildingId) {
+        ppl.set(memberId, { ...p, claimedBuildingId: hhObj.dwellingBuildingId });
+      }
+    }
+    // Defensive: if the dwelling was demolished, clear both household and person refs
+    const stillStanding = buildings.some(x => x.instanceId === hhObj.dwellingBuildingId);
+    if (!stillStanding) {
+      hh.set(hhId, { ...hhObj, dwellingBuildingId: null });
+      for (const memberId of hhObj.memberIds ?? []) {
+        const p = ppl.get(memberId);
+        if (p?.claimedBuildingId === hhObj.dwellingBuildingId) {
+          ppl.set(memberId, { ...p, claimedBuildingId: null });
+        }
+      }
+    }
+  }
+
+  return { buildings, households: hh, people: ppl };
+}
+
+// ─── Worker Slot Lookup ───────────────────────────────────────────────────────
+
+/**
+ * Finds the index of the first building that:
+ *   - has `workerRole === role`, AND
+ *   - has `workerSlots` defined, AND
+ *   - has fewer assigned workers than its `workerSlots` cap.
+ *
+ * Returns `-1` when no such building exists (all slots full, or no building
+ * with that workerRole).
+ */
+export function findAvailableWorkerSlotIndex(buildings: BuiltBuilding[], role: string): number {
+  return buildings.findIndex(b => {
+    const def = BUILDING_CATALOG[b.defId];
+    return (
+      def?.workerRole === role &&
+      def.workerSlots !== undefined &&
+      (b.assignedWorkerIds ?? []).length < def.workerSlots
+    );
+  });
 }

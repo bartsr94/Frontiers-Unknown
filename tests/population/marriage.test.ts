@@ -281,3 +281,91 @@ describe('formConcubineRelationship', () => {
     expect(result.household.memberIds).toContain('w1');
   });
 });
+
+// ─── performMarriage — household merging (both parties have pre-existing HHs) ─
+
+function makeHouseholdStub(
+  id: string,
+  headId: string | null,
+  seniorWifeId: string | null,
+  memberIds: string[],
+  tradition: 'imanian' | 'sauromatian' | 'ansberite' = 'imanian',
+) {
+  return {
+    id,
+    name: `HH ${id}`,
+    tradition,
+    headId,
+    seniorWifeId,
+    memberIds,
+    ashkaMelathiBonds: [] as [string, string][],
+    foundedTurn: 1,
+    productionBuildingIds: [] as string[],
+    dwellingBuildingId: null as string | null,
+    isAutoNamed: true,
+  };
+}
+
+describe('performMarriage — merge path (both parties have households)', () => {
+  it('Imanian: woman\'s household dissolves into man\'s; dissolvedHouseholdId returned', () => {
+    const man   = makePerson('m1', 'male',   'imanian', { householdId: 'hh-m', householdRole: 'head' });
+    const woman = makePerson('w1', 'female', 'imanian', { householdId: 'hh-w', householdRole: 'senior_wife' });
+    const hhM = makeHouseholdStub('hh-m', 'm1',  null,  ['m1']);
+    const hhW = makeHouseholdStub('hh-w', null, 'w1', ['w1']);
+    const state: GameState = {
+      people: new Map([['m1', man], ['w1', woman]]),
+      households: new Map([['hh-m', hhM], ['hh-w', hhW]]),
+      turnNumber: 1,
+    } as unknown as GameState;
+
+    const result = performMarriage(man, woman, state);
+
+    // Man's household survives; woman's dissolves
+    expect(result.household.id).toBe('hh-m');
+    expect(result.dissolvedHouseholdId).toBe('hh-w');
+    expect(result.householdCreated).toBe(false);
+    // Both persons end up in the surviving household
+    expect(result.household.memberIds).toContain('m1');
+    expect(result.household.memberIds).toContain('w1');
+  });
+
+  it('Sauromatian: man\'s household dissolves into woman\'s', () => {
+    const man   = makePerson('m1', 'male',   'settlement_native', { householdId: 'hh-m', householdRole: 'head' });
+    const woman = makePerson('w1', 'female', 'settlement_native', { householdId: 'hh-w', householdRole: 'senior_wife' });
+    const hhM = makeHouseholdStub('hh-m', 'm1', null, ['m1'], 'sauromatian');
+    const hhW = makeHouseholdStub('hh-w', null, 'w1', ['w1'], 'sauromatian');
+    const state: GameState = {
+      people: new Map([['m1', man], ['w1', woman]]),
+      households: new Map([['hh-m', hhM], ['hh-w', hhW]]),
+      turnNumber: 1,
+    } as unknown as GameState;
+
+    const result = performMarriage(man, woman, state);
+
+    // Woman's household survives; man's dissolves
+    expect(result.household.id).toBe('hh-w');
+    expect(result.dissolvedHouseholdId).toBe('hh-m');
+    expect(result.householdCreated).toBe(false);
+    expect(result.household.memberIds).toContain('m1');
+    expect(result.household.memberIds).toContain('w1');
+  });
+
+  it('traditional observer disapproves of cross-cultural marriage (opinionChanges in result)', () => {
+    const man      = makePerson('m1', 'male',   'imanian', { householdId: 'hh-m', householdRole: 'head' });
+    const woman    = makePerson('w1', 'female', 'kiswani_riverfolk', { householdId: 'hh-w', householdRole: 'senior_wife' });
+    const observer = makePerson('o1', 'male',   'imanian', { traits: ['traditional'] as unknown as Person['traits'] });
+    const hhM = makeHouseholdStub('hh-m', 'm1', null, ['m1']);
+    const hhW = makeHouseholdStub('hh-w', null, 'w1', ['w1']);
+    const state: GameState = {
+      people: new Map([['m1', man], ['w1', woman], ['o1', observer]]),
+      households: new Map([['hh-m', hhM], ['hh-w', hhW]]),
+      turnNumber: 1,
+    } as unknown as GameState;
+
+    const result = performMarriage(man, woman, state);
+
+    const change = result.opinionChanges.find(c => c.observerId === 'o1' && c.targetId === 'm1');
+    expect(change).toBeDefined();
+    expect(change!.delta).toBe(-10);
+  });
+});

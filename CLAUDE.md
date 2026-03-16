@@ -20,6 +20,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 | Phase 4.0 — Character Autonomy | ✅ Complete | Named relationships (friend/rival/nemesis/confidant/mentor/student) ✅ · Scheme engine (5 types, progress-based event firing) ✅ · Faction system (6 types, membership/strength/demands) ✅ · Activity log (30-entry rolling feed, 11 entry types) ✅ · Community tab (bonds, factions, feed) ✅ · Shared-role opinion drift ✅ · 135 new tests ✅ |
 | Phase 4.1 — Happiness System | ✅ Complete | Per-person happiness score (4 categories: material/social/purpose/trait) ✅ · Settlement morale ✅ · `lowHappinessTurns` streak → desertion gate ✅ · `happinessMultipliers` wired into production ✅ · `getDepartingFamily` ✅ · 99 new tests ✅ |
 | Misc — Genetics Variation | ✅ Complete | `averageBloodlines` now samples ±1–3% biologic split via `Gaussian(0.5, σ=0.015)` clamped to [0.44, 0.56] ✅ · 6 new `TraitId` values (`optimistic`, `hot_tempered`, `cowardly`, `romantic`, `lonely`, `solitary`) + catalog entries ✅ |
+| Phase 4.2 — Housing & Specialisation | ✅ Complete | 4 private dwelling tiers (`wattle_hut`/`cottage`/`homestead`/`compound`) ✅ · Worker slot caps on all production buildings ✅ · 5 specialisation roles (`blacksmith`/`tailor`/`brewer`/`miller`/`herder`) ✅ · `applyDwellingClaims` 3-pass auto-claim algorithm ✅ · `findAvailableWorkerSlotIndex` slot enforcement ✅ · `person.claimedBuildingId` propagation ✅ · Founding settlers start as foragers (`gather_food`) ✅ · SettlementView dwelling category UI ✅ · PeopleView Trades group + slot hints ✅ · PersonDetail Housing section ✅ · 15 new tests ✅ |
 | Phase 4 — Polish | 🔲 Not started | — |
 ---
 
@@ -127,9 +128,9 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/events/definitions/relationships.ts` | 5 autonomous ambition-driven events: `rel_mutual_attraction`, `rel_council_petition`, `rel_seniority_bid`, `rel_keth_thara_selfvow`, `rel_informal_union_proposed` |
 | `src/simulation/events/definitions/identity.ts` | 6 cultural identity pressure events: `ident_company_cultural_concern`, `ident_company_inspector_dispatched`, `ident_company_pleased`, `ident_tribal_leader_invitation`, `ident_tribal_champion_recognised`, `ident_settlers_feel_foreign` |
 | `src/simulation/events/definitions/schemes.ts` | 5 scheme resolution events: `sch_courtship_discovered`, `sch_faith_advocacy_noticed`, `sch_rumours_spreading`, `sch_undermining_climax`, `sch_tutor_breakthrough`; all have `isDeferredOutcome: true` |
-| `src/simulation/buildings/building-definitions.ts` | `BuildingId` (13-member union), `BuildingDef`, `BUILDING_CATALOG`, `getBuildingDisplayName(defId, style)` — static catalog of all building types |
+| `src/simulation/buildings/building-definitions.ts` | `BuildingId` (21-member union), `BuildingDef`, `BUILDING_CATALOG`, `getBuildingDisplayName(defId, style)` — static catalog of all building types; `workerSlots?: number` and `workerRole?: WorkRole` on `BuildingDef` for slot-cap enforcement |
 | `src/simulation/buildings/building-effects.ts` | Pure effect getters: `getShelterCapacity`, `getOvercrowdingRatio`, `getBuildingFlatProductionBonus`, `getLanguageDriftMultiplier`, `getBuildingCulturePull`, `getSkillGrowthBonuses`, `hasBuilding`, `lacksBuilding`, etc. |
-| `src/simulation/buildings/construction.ts` | `canBuild` → `CanBuildResult` (`{ ok: true }` / `{ ok: false; reason }`); `startConstruction`, `assignBuilder`, `removeBuilder`, `processConstruction`, `cancelConstruction` |
+| `src/simulation/buildings/construction.ts` | `canBuild` → `CanBuildResult` (`{ ok: true }` / `{ ok: false; reason }`); `startConstruction`, `assignBuilder`, `removeBuilder`, `processConstruction`, `cancelConstruction`; `applyDwellingClaims(completedBuildings, allBuildings, households, people)` — 3-pass fairness algorithm (Pass 1 scheme-owned → direct link, Pass 2 unowned → first homeless household, Pass 3 propagate `person.claimedBuildingId` / clear demolished refs); `findAvailableWorkerSlotIndex(buildings, role)` → index of first building with an open `workerRole` slot, `−1` if none; `DWELLING_IDS` set (`wattle_hut`, `cottage`, `homestead`, `compound`) |
 | `src/simulation/economy/resources.ts` | Production/consumption math with seasonal modifiers |
 | `src/simulation/genetics/traits.ts` | Trait type definitions + `IMANIAN_TRAITS` constant |
 | `src/data/ethnic-distributions.ts` | All 8 ethnic group `TraitDistribution` constants + `ETHNIC_DISTRIBUTIONS` lookup map |
@@ -165,12 +166,12 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/ui/layout/CouncilFooter.tsx` | 7-seat Expedition Council row; portraits, click-to-select adviser, trait-driven `AdviceBubble` with per-(person × event) advice caching |
 | `src/ui/views/PeopleView.tsx` | Settler roster; sort/filter (sex, status, heritage group, **base skill**); click row → PersonDetail panel |
 | `src/ui/views/PersonDetail.tsx` | Full person detail: genetics, heritage, traits, skills (base + derived), languages, family |
-| `src/ui/views/FamilyTree.tsx` | 3-generation ancestor/descendant tree; spouses shown to the side of root node |
+| `src/ui/overlays/FamilyTreeOverlay.tsx` | Full-screen overlay opened from PersonDetail: **Family Tree** tab (tier-based rendering, child spouses inline, grandchildren grouped by parent, re-rootable with history stack) + **Household** tab (member roster by household role, work-role assignment dropdown, claimed dwelling + production buildings) |
 | `src/ui/views/EventView.tsx` | Event card with choices; actor badge strip (portrait + name) above description when slots are bound; `interpolateText` applied to all displayed text; calls `resolveEventChoice` + `nextEvent` |
 | `src/ui/views/TradeView.tsx` | Trade & Commerce view: Company quota panel, tribe list with dispositions, barter interface with fairness meter; locked without Trading Post |
 | `src/ui/views/CommunityView.tsx` | 3-panel community tab — left: population/bonds summary; centre: factions list with strength/demands; right: expanded activity feed |
 | `src/ui/components/ActivityFeed.tsx` | Rolling 30-entry activity feed; per-type icon (relationship/scheme/faction/trait/ambition/role); clickable person name chips navigate to PersonDetail |
-| `src/ui/shared/role-display.ts` | `ROLE_LABELS` and `ROLE_COLORS` — exhaustive `Record<WorkRole, string>` for all 11 roles |
+| `src/ui/shared/role-display.ts` | `ROLE_LABELS` and `ROLE_COLORS` — exhaustive `Record<WorkRole, string>` for all 20 roles |
 | `src/simulation/economy/company.ts` | `computeYearlyQuota`, `checkQuotaStatus`, `applyQuotaConsequences`, `getCompanySupplyDelivery` — Company quota math and failure escalation |
 | `src/simulation/economy/trade.ts` | `getTradeValue`, `validateTrade`, `executeTribeTradeLogic`, `TradeOffer`, `TradeResult` — barter pricing and tribe disposition effects |
 | `src/simulation/economy/spoilage.ts` | `calculateSpoilage` — per-resource decay rates with seasonal modifiers and building mitigation |
@@ -321,7 +322,9 @@ idle
 
 ### Settlement Buildings System Notes
 
-- **13 building types** (`BuildingId`): `camp` · `longhouse` · `roundhouse` · `great_hall` · `clan_lodge` · `granary` · `fields` · `workshop` · `trading_post` · `healers_hut` · `gathering_hall` · `palisade` · `stable`
+- **21 building types** (`BuildingId`): `camp` · `longhouse` · `roundhouse` · `great_hall` · `clan_lodge` · `granary` · `fields` · `workshop` · `trading_post` · `healers_hut` · `gathering_hall` · `palisade` · `stable` · `mill` · `smithy` · `tannery` · `brewery` · `wattle_hut` · `cottage` · `homestead` · `compound`
+- **4 dwelling tiers** (`DWELLING_IDS`): `wattle_hut` (cheapest) · `cottage` · `homestead` · `compound` (highest capacity); auto-claimed by households on construction completion via `applyDwellingClaims`
+- **Worker slot caps** on production buildings: `workerSlots?: number` on `BuildingDef` limits how many settlers can staff a building; `workerRole?: WorkRole` ties the slot to a specific role; enforced in `assignRole` via `findAvailableWorkerSlotIndex`
 - **Tilled Fields** (`fields`): Food category · 5 lumber cost · 1 season · `roleProductionBonus: { role: 'farmer', bonus: { food: 2 } }` — without it, farmers produce only 1 food/season (same as a low-skill forager)
 - **`BuiltBuilding`**: `{ defId, instanceId, builtTurn, style: BuildingStyle | null }` — `style` is `null` for single-variant buildings
 - **`ConstructionProject`**: `{ id, defId, style, progressPoints, totalPoints, assignedWorkerIds, startedTurn, resourcesSpent }`
@@ -353,7 +356,7 @@ idle
 - **Away blocking**: `matchesCriteria` returns `false` for `away` persons → they are excluded from all actor slot selection, event eligibility, and `best_council`/`best_settlement` skill check picks
 - **Role restoration**: `game-store.startTurn` iterates due `DeferredEventEntry` objects, reads `context.missionActorId` + `context.prevRole`, and restores the person's role before building `stateAfterDrain`
 - **Construction guard**: `assignBuilder` in `game-store.ts` skips persons with `role === 'away'`
-- **UI**: `ROLE_LABELS`/`ROLE_COLORS` now cover all 11 roles including `builder`, `away`, `gather_food`, `gather_stone`, and `gather_lumber`; `PersonDetail` shows a styled badge; `CouncilFooter` dims away members (opacity-50) and suppresses advice generation for them
+- **UI**: `ROLE_LABELS`/`ROLE_COLORS` now cover all 20 roles including `builder`, `away`, `gather_food`, `gather_stone`, `gather_lumber`, and the 5 specialisation roles; `PersonDetail` shows a styled badge; `CouncilFooter` dims away members (opacity-50) and suppresses advice generation for them
 - **Live deferred chains**: `dip_upriver_camp_spotted` (`missionActorSlot: 'envoy'`, 4 turns) and `dom_settler_falls_ill` (`missionActorSlot: 'patient'`, 2 turns)
 
 ---
@@ -375,7 +378,7 @@ idle
 
 ### Generic Task Roles Notes
 
-- **3 new `WorkRole` values**: `gather_food` · `gather_stone` · `gather_lumber` (total WorkRole union: **12 values**, including `keth_thara` added in Phase 3.5)
+- **`WorkRole` union** is now **20 values**: `farmer` · `trader` · `guard` · `craftsman` · `healer` · `builder` · `away` · `keth_thara` · `gather_food` · `gather_stone` · `gather_lumber` · `priest_solar` · `wheel_singer` · `voice_of_wheel` · `blacksmith` · `tailor` · `brewer` · `miller` · `herder` · `unassigned`
 - **`gatherYield(skill)`** helper in `resources.ts`: base 1; +1 if skill ≥ 26 (Good); +1 if skill ≥ 63 (Excellent) → 1–3 range
 - **Skill mappings**: `gather_food` uses `plants`; `gather_stone` and `gather_lumber` use `custom`
 - **Seasonal scaling**: `gather_food` accumulates into `personFood` → gets the food seasonal multiplier like farmers; stone and lumber are written directly to `delta.stone` / `delta.lumber` — **no seasonal scaling**
@@ -724,6 +727,60 @@ interface TraitDefinition {
 
 ---
 
+## Phase 4.2 — Housing & Specialisation Notes
+
+### Dwelling Tiers
+
+- **4 private dwelling tiers** (`DWELLING_IDS`): `wattle_hut` · `cottage` · `homestead` · `compound`
+- Each tier provides shelter capacity for a household; higher tiers hold more members
+- **`applyDwellingClaims(completedBuildings, allBuildings, households, people)`** — 3-pass fairness algorithm called each dawn by the store after construction completes:
+  - **Pass 1 (scheme-owned)**: if a completed building already has `ownerHouseholdId` set (purchased via scheme), link it directly to that household
+  - **Pass 2 (player-built / unowned)**: assign the first homeless household; priority given to largest households
+  - **Pass 3 (propagation)**: set `person.claimedBuildingId` for every household member; clear stale refs to demolished buildings
+- Exported from `construction.ts` alongside `DWELLING_IDS` set and `findAvailableWorkerSlotIndex`
+
+### Worker Slot Caps
+
+- **`workerSlots?: number`** on `BuildingDef` — limits how many settlers may staff that building in the given role
+- **`workerRole?: WorkRole`** — ties the slot cap to a specific `WorkRole`; buildings without this field have no slot enforcement
+- **`findAvailableWorkerSlotIndex(buildings, role)`** — returns the index of the first building that still has an open slot for `role`; returns `−1` if all slots are full; used by `assignRole` in the store to gate new role assignments
+- Slot caps per production building: `stable` 2 herders · `mill` 2 millers · `smithy` 2 blacksmiths · `tannery` 2 tailors · `brewery` 2 brewers
+
+### Specialisation Roles (Phase 4.2)
+
+5 new `WorkRole` values linking settlers to their matching buildings:
+
+| Role | Building | Resource/effect |
+|------|----------|-----------------|
+| `blacksmith` | `smithy` | goods production (steel conversion) |
+| `tailor` | `tannery` | goods production (leather/cloth) |
+| `brewer` | `brewery` | goods production (brewed goods) |
+| `miller` | `mill` | goods production (milled grain) |
+| `herder` | `stable` | cattle yield bonus |
+
+### `person.claimedBuildingId`
+
+- **`claimedBuildingId?: string`** on `Person` — the `instanceId` of the dwelling this person's household claims
+- Set by `applyDwellingClaims` Pass 3; cleared when the building is demolished
+- Serialised as a plain string — no Map handling needed
+- Old saves default to `undefined` gracefully
+
+### Founding Settlers
+
+- **Founding settlers** now start with `gather_food` (Forager) role, not `farmer`
+- No Tilled Fields exist at game start, so assigning farmers would produce nothing useful; foragers get the same gather logic from day 1
+- `FOUNDER_ROLES` constant in `game-store.ts` uses `gather_food`; `seedCouncil()` selects oldest foragers
+
+### Key Files (Phase 4.2)
+
+| File | Purpose |
+|------|---------|
+| `src/simulation/buildings/construction.ts` | `applyDwellingClaims`, `findAvailableWorkerSlotIndex`, `DWELLING_IDS` |
+| `src/simulation/buildings/building-definitions.ts` | `workerSlots` / `workerRole` on the 5 new specialisation buildings + 4 dwelling tiers |
+| `tests/buildings/dwelling-claims.test.ts` | 15 tests — Pass 1/2/3, `findAvailableWorkerSlotIndex` slot cap, old-save `undefined` guard |
+
+---
+
 ## Misc — Genetics Variation & Trait Expansion Notes
 
 ### Bloodline Variation (added March 2026)
@@ -842,4 +899,5 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/personality/scheme-engine.test.ts` — 63/63 passing (scheme generation, trait weighting, progress ticking, climax event firing, SCHEME_GENERATE_INTERVAL)
 - `tests/world/factions.test.ts` — 35/35 passing (eligibility by type, strength formula, DEMAND_STRENGTH_THRESHOLD, formation/dissolution)
 - `tests/population/happiness.test.ts` — 99/99 passing (all factor categories, material/social/purpose/trait, devout amplification, desertion gate, family departure, settlement morale)
-- **Total: 1231/1231 passing across 37 test files**
+- `tests/buildings/dwelling-claims.test.ts` — 15/15 passing (`applyDwellingClaims` Pass 1 scheme-owned, Pass 2 player-built/homeless priority, Pass 3 `person.claimedBuildingId` propagation, demolition cleanup, old dwelling freed on scheme upgrade)
+- **Total: 1251/1251 passing across 38 test files**

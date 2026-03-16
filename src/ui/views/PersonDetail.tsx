@@ -17,10 +17,10 @@
  *                (defaults to nothing if not provided)
  */
 
-import { useState } from 'react';
+
 import { useGameStore } from '../../stores/game-store';
 import Portrait from '../components/Portrait';
-import FamilyTree from './FamilyTree';
+
 import { CULTURE_LABELS } from '../../simulation/population/culture';
 import type { EthnicGroup, HouseholdRole, SchemeType } from '../../simulation/population/person';
 import { getSkillRating, getDerivedSkill } from '../../simulation/population/person';
@@ -31,6 +31,7 @@ import { ROLE_LABELS, ROLE_COLORS } from '../shared/role-display';
 import { getAmbitionLabel, getAmbitionIntensityClass } from '../../simulation/population/ambitions';
 import { computeOpinionBreakdown, getEffectiveOpinion } from '../../simulation/population/opinions';
 import { computeHappiness, computeHappinessFactors, getHappinessLabel, getHappinessColor } from '../../simulation/population/happiness';
+import { BUILDING_CATALOG, getBuildingDisplayName } from '../../simulation/buildings/building-definitions';
 
 // ─── Bloodline colours ────────────────────────────────────────────────────────
 
@@ -90,6 +91,7 @@ function schemeTypeLabel(type: SchemeType): string {
     case 'scheme_befriend_person':  return 'Befriending';
     case 'scheme_undermine_person': return 'Undermining';
     case 'scheme_tutor_person':     return 'Tutoring';
+    case 'scheme_build_dwelling':   return 'Planning a home';
   }
 }
 // ─── Skill display helpers ───────────────────────────────────────────────────────
@@ -181,10 +183,11 @@ interface PersonDetailProps {
   onClose: () => void;
   /** Called when the user navigates to a linked person. If omitted, navigation does nothing. */
   onNavigate?: (id: string) => void;
+  /** Called when the user opens the Family Tree & Household overlay. */
+  onOpenFamilyTree?: (id: string) => void;
 }
 
-export default function PersonDetail({ personId, onClose, onNavigate }: PersonDetailProps) {
-  const [showTree, setShowTree] = useState(false);
+export default function PersonDetail({ personId, onClose, onNavigate, onOpenFamilyTree }: PersonDetailProps) {
 
   const person = useGameStore(s => s.gameState?.people.get(personId));
   const graveyard = useGameStore(s => s.gameState?.graveyard ?? []);
@@ -923,23 +926,54 @@ export default function PersonDetail({ personId, onClose, onNavigate }: PersonDe
           );
         })()}
 
-        {/* Family tree toggle */}
-        <button
-          onClick={() => setShowTree(v => !v)}
-          className="w-full text-left text-xs text-stone-400 hover:text-stone-200 flex items-center gap-1 mb-2"
-        >
-          <span className="text-stone-600">{showTree ? '▼' : '▶'}</span>
-          {showTree ? 'Hide' : 'Show'} Family Tree
-        </button>
+        {/* Housing */}
+        {(() => {
+          const claimedBuilding = person.claimedBuildingId
+            ? gameState?.settlement.buildings.find(b => b.instanceId === person.claimedBuildingId)
+            : null;
+          const claimedDef = claimedBuilding ? BUILDING_CATALOG[claimedBuilding.defId] : null;
+          const currentYear   = gameState?.currentYear ?? 1;
+          const showExpectation = !person.claimedBuildingId && person.age >= 18 && currentYear >= 5;
+          if (claimedBuilding && claimedDef) {
+            return (
+              <>
+                <SectionHeading>Housing</SectionHeading>
+                <div className="flex items-center gap-2 bg-amber-950/40 border border-amber-800/50 rounded px-2 py-1.5 mb-2 text-xs">
+                  <span className="text-amber-400 text-base">🏠</span>
+                  <div>
+                    <div className="text-amber-200 font-medium">
+                      {getBuildingDisplayName(claimedBuilding.defId, claimedBuilding.style)}
+                    </div>
+                    <div className="text-stone-500">Private dwelling</div>
+                  </div>
+                </div>
+              </>
+            );
+          }
+          if (showExpectation) {
+            return (
+              <>
+                <SectionHeading>Housing</SectionHeading>
+                <div className="flex items-center gap-2 bg-stone-800/60 border border-stone-700 rounded px-2 py-1.5 mb-2 text-xs">
+                  <span className="text-stone-500 text-base">⛺</span>
+                  <div>
+                    <div className="text-stone-400">Living communally</div>
+                    <div className="text-amber-600 mt-0.5">Seeking a home of their own</div>
+                  </div>
+                </div>
+              </>
+            );
+          }
+          return null;
+        })()}
 
-        {showTree && (
-          <FamilyTree
-            rootPersonId={personId}
-            onSelectPerson={id => {
-              onNavigate?.(id);
-            }}
-          />
-        )}
+        {/* Family Tree & Household overlay launcher */}
+        <button
+          onClick={() => onOpenFamilyTree?.(personId)}
+          className="w-full py-0.5 rounded border border-amber-800 text-amber-500 hover:bg-amber-950/40 hover:text-amber-300 text-[10px] flex items-center justify-center gap-1 mb-1 transition-colors"
+        >
+          🌳 Family Tree &amp; Household
+        </button>
 
       </div>
     </aside>

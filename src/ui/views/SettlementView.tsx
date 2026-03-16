@@ -92,6 +92,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   industry: 'Industry',
   defence:  'Defence',
   social:   'Social',
+  dwelling: 'Dwelling',
 };
 
 const CATEGORY_COLOR: Record<string, string> = {
@@ -100,6 +101,7 @@ const CATEGORY_COLOR: Record<string, string> = {
   industry: 'bg-blue-900/60 text-blue-300',
   defence:  'bg-red-900/60 text-red-300',
   social:   'bg-purple-900/60 text-purple-300',
+  dwelling: 'bg-rose-900/60 text-rose-300',
 };
 
 const STYLE_LABEL: Record<BuildingStyle, string> = {
@@ -143,6 +145,13 @@ function BuildingCard({ building }: { building: BuiltBuilding }) {
   const def = BUILDING_CATALOG[building.defId];
   if (!def) return null;
   const displayName = getBuildingDisplayName(building.defId, building.style);
+  const workerCount = (building.assignedWorkerIds ?? []).length;
+  const workerCap   = def.workerSlots ?? 0;
+  const isAtCap     = workerCap > 0 && workerCount >= workerCap;
+  const households  = useGameStore(s => s.gameState?.households);
+  const ownerName   = building.ownerHouseholdId
+    ? (households?.get(building.ownerHouseholdId)?.name ?? 'Household')
+    : null;
 
   return (
     <div className="bg-stone-800 border border-stone-700 rounded p-3 mb-2">
@@ -160,6 +169,20 @@ function BuildingCard({ building }: { building: BuiltBuilding }) {
         </span>
       </div>
       <p className="text-xs text-slate-500 mt-1">{def.description}</p>
+      {workerCap > 0 && (
+        <div className="flex items-center gap-2 mt-1.5 text-xs">
+          <span className="text-slate-500">Workers:</span>
+          <span className={isAtCap ? 'text-amber-400 font-semibold' : 'text-slate-400'}>
+            {workerCount} / {workerCap}
+          </span>
+          {ownerName && (
+            <span className="ml-auto text-amber-700 italic text-[10px]">⌂ {ownerName}</span>
+          )}
+        </div>
+      )}
+      {workerCap === 0 && ownerName && (
+        <div className="mt-1.5 text-[10px] text-amber-700 italic">⌂ {ownerName}</div>
+      )}
     </div>
   );
 }
@@ -654,39 +677,57 @@ export default function SettlementView() {
         )}
 
         <div className="flex-1 overflow-y-auto">
-          {buildableIds.map(defId => {
-            const def    = BUILDING_CATALOG[defId];
-            const style  = def.hasStyleVariants
-              ? (pendingStyle[defId] ?? 'imanian')
-              : null;
-            const check  = canBuild(settlement, defId, style);
-
+          {(['civic', 'food', 'industry', 'social', 'defence', 'dwelling'] as const).map(category => {
+            const ids = buildableIds.filter(id => BUILDING_CATALOG[id]?.category === category);
+            if (ids.length === 0) return null;
+            const dwellingBuiltCount = category === 'dwelling'
+              ? settlement.buildings.filter(b => BUILDING_CATALOG[b.defId]?.category === 'dwelling').length
+              : 0;
             return (
-              <div key={defId}>
-                {def.hasStyleVariants && (
-                  <div className="flex gap-1 mb-1 mt-1">
-                    {(['imanian', 'sauromatian'] as BuildingStyle[]).map(s => (
-                      <button
-                        key={s}
-                        onClick={() => setPendingStyle(prev => ({ ...prev, [defId]: s }))}
-                        className={`text-xs px-2 py-0.5 rounded transition-colors ${
-                          (pendingStyle[defId] ?? 'imanian') === s
-                            ? 'bg-amber-800 text-amber-200'
-                            : 'bg-stone-700 text-slate-400 hover:bg-stone-600'
-                        }`}
-                      >
-                        {STYLE_LABEL[s]}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <BuildMenuItem
-                  defId={defId}
-                  style={style}
-                  allowed={canManage && check.ok}
-                  reason={!canManage ? undefined : check.ok ? undefined : check.reason}
-                  onBuild={() => handleBuild(defId)}
-                />
+              <div key={category} className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`text-xs px-1.5 py-0.5 rounded font-semibold ${CATEGORY_COLOR[category]}`}>
+                    {CATEGORY_LABEL[category]}
+                  </span>
+                  {category === 'dwelling' && dwellingBuiltCount > 0 && (
+                    <span className="text-xs text-stone-500">{dwellingBuiltCount} standing</span>
+                  )}
+                </div>
+                {ids.map(defId => {
+                  const def   = BUILDING_CATALOG[defId];
+                  const style = def?.hasStyleVariants
+                    ? (pendingStyle[defId] ?? 'imanian')
+                    : null;
+                  const check = canBuild(settlement, defId, style);
+                  return (
+                    <div key={defId}>
+                      {def?.hasStyleVariants && (
+                        <div className="flex gap-1 mb-1 mt-1">
+                          {(['imanian', 'sauromatian'] as BuildingStyle[]).map(s => (
+                            <button
+                              key={s}
+                              onClick={() => setPendingStyle(prev => ({ ...prev, [defId]: s }))}
+                              className={`text-xs px-2 py-0.5 rounded transition-colors ${
+                                (pendingStyle[defId] ?? 'imanian') === s
+                                  ? 'bg-amber-800 text-amber-200'
+                                  : 'bg-stone-700 text-slate-400 hover:bg-stone-600'
+                              }`}
+                            >
+                              {STYLE_LABEL[s]}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <BuildMenuItem
+                        defId={defId}
+                        style={style}
+                        allowed={canManage && check.ok}
+                        reason={!canManage ? undefined : check.ok ? undefined : check.reason}
+                        onBuild={() => handleBuild(defId)}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             );
           })}

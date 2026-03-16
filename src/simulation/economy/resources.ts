@@ -132,13 +132,30 @@ export function calculateProduction(
       case 'guard':
       case 'builder':
       case 'away':
+      case 'keth_thara':
+      case 'priest_solar':
+      case 'wheel_singer':
+      case 'voice_of_wheel':
+      // Specialists \u2014 base contribution is 0; building roleProductionBonus adds all yield.
+      case 'blacksmith':
+      case 'tailor':
+      case 'brewer':
+      case 'miller':
+      case 'herder':
       case 'unassigned': break;
     }
 
-    // Per-role building bonuses (not seasonally scaled — steady workshop output).
+    // Per-role building bonuses.
+    // food and goods flow through personFood/personGoods so seasonal scaling applies.
+    // All other resources (steel, lumber, stone, etc.) are added directly to delta.
     const roleBonus = getRoleProductionBonus(buildings, person.role);
     personGoods += roleBonus.goods ?? 0;
     personFood  += roleBonus.food  ?? 0;
+    for (const [key, value] of Object.entries(roleBonus) as [keyof ResourceStock, number][]) {
+      if (key !== 'food' && key !== 'goods') {
+        delta[key] += Math.floor(value * happMult);
+      }
+    }
 
     // Apply happiness multiplier to this person's food and goods contribution.
     delta.food  += personFood  * happMult;

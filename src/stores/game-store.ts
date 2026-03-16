@@ -31,6 +31,7 @@ import type { InformalUnionStyle } from '../simulation/population/marriage';
 import { applyMarriageOpinionFloor, initializeBaselineOpinions } from '../simulation/population/opinions';
 import { generateAmbition } from '../simulation/population/ambitions';
 import { seedFoundingRelationships } from '../simulation/population/named-relationships';
+import { initializeHouseholds } from '../simulation/population/household';
 import { createFertilityProfile } from '../simulation/genetics/fertility';
 import { ETHNIC_DISTRIBUTIONS } from '../data/ethnic-distributions';
 import {
@@ -39,6 +40,8 @@ import {
   assignBuilder as buildingAssignBuilder,
   removeBuilder as buildingRemoveBuilder,
   cancelConstruction,
+  applyDwellingClaims,
+  findAvailableWorkerSlotIndex,
 } from '../simulation/buildings/construction';
 import { hasBuilding } from '../simulation/buildings/building-effects';
 import type {
@@ -165,18 +168,22 @@ const SAVE_KEY = 'palusteria_save';
 /** Standard Imanian sex-ratio modifier: equal probability of male/female offspring. */
 const IMANIAN_GENDER_RATIO = 0.5;
 
-/** Role and age-range configuration for each male founding settler. */
+/** Role and age-range configuration for each male founding settler.
+ * Settlers who will eventually farm start as foragers — the settlement begins
+ * without Tilled Fields, so farming slots don't exist yet. Once a Fields
+ * building is constructed the player can re-assign them to 'farmer'.
+ */
 const FOUNDER_ROLES: ReadonlyArray<{ role: WorkRole; ageMin: number; ageMax: number }> = [
-  { role: 'farmer', ageMin: 17, ageMax: 23 },
-  { role: 'farmer', ageMin: 22, ageMax: 32 },
-  { role: 'farmer', ageMin: 22, ageMax: 35 },
-  { role: 'farmer', ageMin: 25, ageMax: 40 },
-  { role: 'farmer', ageMin: 25, ageMax: 40 },
-  { role: 'farmer', ageMin: 30, ageMax: 45 },
-  { role: 'farmer', ageMin: 45, ageMax: 65 },
-  { role: 'trader', ageMin: 22, ageMax: 32 },
-  { role: 'trader', ageMin: 22, ageMax: 32 },
-  { role: 'guard',  ageMin: 25, ageMax: 42 },
+  { role: 'gather_food', ageMin: 17, ageMax: 23 },
+  { role: 'gather_food', ageMin: 22, ageMax: 32 },
+  { role: 'gather_food', ageMin: 22, ageMax: 35 },
+  { role: 'gather_food', ageMin: 25, ageMax: 40 },
+  { role: 'gather_food', ageMin: 25, ageMax: 40 },
+  { role: 'gather_food', ageMin: 30, ageMax: 45 },
+  { role: 'gather_food', ageMin: 45, ageMax: 65 },
+  { role: 'trader',      ageMin: 22, ageMax: 32 },
+  { role: 'trader',      ageMin: 22, ageMax: 32 },
+  { role: 'guard',       ageMin: 25, ageMax: 42 },
 ];
 
 /**
@@ -245,17 +252,17 @@ function sampleImanianGenetics(rng: SeededRNG): Person['genetics'] {
 
 /**
  * Auto-selects 5 founding council members: the guard, both traders,
- * and the 2 oldest farmers.
+ * and the 2 oldest foragers.
  */
 function seedCouncil(people: Map<string, Person>): string[] {
   const all = Array.from(people.values());
-  const guard   = all.filter(p => p.role === 'guard');
-  const traders = all.filter(p => p.role === 'trader');
-  const farmers = all
-    .filter(p => p.role === 'farmer')
+  const guard    = all.filter(p => p.role === 'guard');
+  const traders  = all.filter(p => p.role === 'trader');
+  const foragers = all
+    .filter(p => p.role === 'gather_food')
     .sort((a, b) => b.age - a.age)
     .slice(0, 2);
-  return [...guard, ...traders, ...farmers].map(p => p.id);
+  return [...guard, ...traders, ...foragers].map(p => p.id);
 }
 
 // ─── Initial game state factory ───────────────────────────────────────────────
@@ -410,6 +417,11 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
     }
   }
 
+  // Seed households for all founding persons before building initial state.
+  const { updatedPeople: peopleWithHouseholds, newHouseholds: foundingHouseholds } =
+    initializeHouseholds(people, 0);
+  for (const [id, p] of peopleWithHouseholds) people.set(id, p);
+
   const initialGameState: GameState = {
     version: '1.0.0',
     seed: resolvedSeed,
@@ -427,13 +439,15 @@ function createInitialState(config: GameConfig, settlementName: string, seed?: n
     pendingEvents: [],
     councilMemberIds: seedCouncil(people),
     deferredEvents: [],
-    households: new Map(),
+    households: foundingHouseholds,
     config,
     flags: { creoleEmergedNotified: false },
     identityPressure: { companyPressureTurns: 0, tribalPressureTurns: 0 },
     factions: [],
     activityLog: [],
     debugSettings: defaultDebugSettings(),
+    communalResourceMinimum: { lumber: 15, stone: 5 },
+    buildingWorkersInitialized: true,
   };
 
   // ── Seed opinions and ambitions at game start ──────────────────────────────
@@ -534,31 +548,50 @@ export const useGameStore = create<GameStore>((set, get) => {
         dawnResult.desertionCandidateIds.length >= 3 &&
         !(gameState.massDesertionWarningFired ?? false);
 
-      const postDawnState: GameState = {
-        ...gameState,
-        people: dawnResult.updatedPeople,
-        graveyard: [...gameState.graveyard, ...dawnResult.newGraveyardEntries],
-        households: (() => {
-          if (dawnResult.updatedHouseholds.size === 0) return gameState.households;
-          const merged = new Map(gameState.households);
-          for (const [id, h] of dawnResult.updatedHouseholds) {
-            merged.set(id, h);
-          }
-          return merged;
-        })(),
-        settlement: {
-          ...gameState.settlement,
-          populationCount: dawnResult.populationCount,
-          buildings: (() => {
-            let blds = [...gameState.settlement.buildings];
-            // Remove replaced buildings first.
-            for (const removedId of dawnResult.removedBuildingIds) {
-              blds = blds.filter(b => b.defId !== removedId);
-            }
-            return [...blds, ...dawnResult.completedBuildings];
-          })(),
-          constructionQueue: dawnResult.updatedConstructionQueue,
-        },
+      const postDawnState: GameState = (() => {
+        // ── Pre-compute buildings so household assignment can see the full set ──
+        let allBuildings = [...gameState.settlement.buildings];
+        for (const removedId of dawnResult.removedBuildingIds) {
+          allBuildings = allBuildings.filter(b => b.defId !== removedId);
+        }
+        allBuildings = [...allBuildings, ...dawnResult.completedBuildings];
+
+        // ── Merge household updates from dawn ──────────────────────────────────
+        const households = new Map(gameState.households);
+        for (const [id, h] of dawnResult.updatedHouseholds) {
+          households.set(id, h);
+        }
+        // New households from succession splits and birth assignments must also be added.
+        for (const [id, h] of dawnResult.newHouseholds) {
+          households.set(id, h);
+        }
+        for (const id of dawnResult.dissolvedHouseholdIds) {
+          households.delete(id);
+        }
+
+        // ── Claim dwellings for households that don't have one ─────────────────
+        const {
+          buildings: claimedBuildings,
+          households: claimedHouseholds,
+          people,
+        } = applyDwellingClaims(
+          dawnResult.completedBuildings,
+          allBuildings,
+          households,
+          dawnResult.updatedPeople,
+        );
+
+        return {
+          ...gameState,
+          people,
+          graveyard: [...gameState.graveyard, ...dawnResult.newGraveyardEntries],
+          households: claimedHouseholds,
+          settlement: {
+            ...gameState.settlement,
+            populationCount: dawnResult.populationCount,
+            buildings: claimedBuildings,
+            constructionQueue: dawnResult.updatedConstructionQueue,
+          },
         culture: {
           ...gameState.culture,
           languages: dawnResult.updatedLanguageFractions,
@@ -664,7 +697,14 @@ export const useGameStore = create<GameStore>((set, get) => {
                 description: `**${name}** gained the trait: ${tc.gained!.replace(/_/g, ' ')}.`,
               };
             });
-          const combined = [...gameState.activityLog, ...relEntries, ...schemeEntries, ...factionEntries, ...ambitionEntries, ...roleEntries, ...traitEntries];
+          const successionEntries = dawnResult.successionLogEntries.map(e => ({
+            turn: gameState.turnNumber,
+            type: e.type,
+            personId: e.personId,
+            targetId: e.targetId,
+            description: e.description,
+          }));
+          const combined = [...gameState.activityLog, ...relEntries, ...schemeEntries, ...factionEntries, ...ambitionEntries, ...roleEntries, ...traitEntries, ...successionEntries];
           return combined.slice(-30); // FIFO cap
         })(),
         factions: dawnResult.updatedFactions,
@@ -676,7 +716,8 @@ export const useGameStore = create<GameStore>((set, get) => {
           : dawnResult.newLowMoraleTurns === 0
             ? false
             : (gameState.massDesertionWarningFired ?? false),
-      };
+        };
+      })();
 
       // Drain any deferred events whose turn has arrived, and prepend them
       // to the normal draw so they are resolved first.
@@ -805,8 +846,16 @@ export const useGameStore = create<GameStore>((set, get) => {
         if (ev) happinessBoundEvents.push({ ...ev, boundActors: {} } as BoundEvent);
       }
 
+      // Inject Sauromatian succession council events (one per household needing a player decision).
+      const successionBoundEvents: BoundEvent[] = dawnResult.pendingSauromatianCouncilEventHouseholdIds
+        .map(() => {
+          const ev = getEventById('hh_succession_council');
+          return ev ? ({ ...ev, boundActors: {} } as BoundEvent) : null;
+        })
+        .filter((e): e is BoundEvent => e !== null);
+
       // Deferred events are prepended so they resolve before new draws.
-      const allPending: BoundEvent[] = [...deferredBoundEvents, ...schemeBoundEvents, ...factionBoundEvents, ...happinessBoundEvents, ...boundDrawn];
+      const allPending: BoundEvent[] = [...deferredBoundEvents, ...schemeBoundEvents, ...factionBoundEvents, ...happinessBoundEvents, ...successionBoundEvents, ...boundDrawn];
 
       // One-time creole emergence notification.
       const showCreoleNotification =
@@ -990,9 +1039,35 @@ export const useGameStore = create<GameStore>((set, get) => {
       if (!gameState) return;
       const person = gameState.people.get(personId);
       if (!person) return;
+
       const updatedPeople = new Map(gameState.people);
+
+      // Remove person from any building slot they currently occupy
+      let updatedBuildings = gameState.settlement.buildings.map(b => {
+        const workers = b.assignedWorkerIds ?? [];
+        return workers.includes(personId)
+          ? { ...b, assignedWorkerIds: workers.filter(id => id !== personId) }
+          : b.assignedWorkerIds === workers ? b : { ...b, assignedWorkerIds: workers };
+      });
+
+      // If the new role maps to a building workerRole, slot them into an available building
+      const matchIdx = findAvailableWorkerSlotIndex(updatedBuildings, role);
+      if (matchIdx >= 0) {
+        updatedBuildings = updatedBuildings.map((bld, i) =>
+          i === matchIdx
+            ? { ...bld, assignedWorkerIds: [...(bld.assignedWorkerIds ?? []), personId] }
+            : bld
+        );
+      }
+
       updatedPeople.set(personId, { ...person, role, roleAssignedTurn: gameState.turnNumber });
-      set({ gameState: { ...gameState, people: updatedPeople } });
+      set({
+        gameState: {
+          ...gameState,
+          people: updatedPeople,
+          settlement: { ...gameState.settlement, buildings: updatedBuildings },
+        },
+      });
     },
 
     arrangeInformalUnion(manId, womanId, style) {
@@ -1053,9 +1128,12 @@ export const useGameStore = create<GameStore>((set, get) => {
         updatedPeople.set(flooredB.id, flooredB);
       }
 
-      // Apply household changes.
+      // Apply household changes (merge + optional dissolution).
       const updatedHouseholds = new Map(gameState.households);
       updatedHouseholds.set(result.household.id, result.household);
+      if (result.dissolvedHouseholdId) {
+        updatedHouseholds.delete(result.dissolvedHouseholdId);
+      }
 
       const updatedState: GameState = {
         ...gameState,

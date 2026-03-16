@@ -355,4 +355,44 @@ export const HOUSEHOLD_EVENTS: GameEvent[] = [
       },
     ],
   },
+
+  // ─── Sauromatian succession council ─────────────────────────────────────────
+
+  {
+    id: 'hh_succession_council',
+    title: 'The Household at a Crossroads',
+    category: 'domestic',
+    prerequisites: [],
+    weight: 1,           // never drawn — injected programmatically on Sauromatian head death
+    cooldown: 0,
+    isUnique: false,
+    isDeferredOutcome: true,
+    description:
+      'The head of the household is gone. The wife-council gathers. Sons stand at ' +
+      'the threshold — they may honour tradition and hold together under one roof, ' +
+      'or they may each claim their share of the inheritance and strike out alone.',
+    choices: [
+      {
+        id: 'hold_together',
+        label: 'The wife-council holds — the household remains one.',
+        description:
+          'The sons bow to the council\'s authority. The eldest takes his father\'s ' +
+          'seat at the fire, but the women\'s voices carry the household forward. ' +
+          'No property is divided.',
+        consequences: [
+          { type: 'modify_opinion', target: 'settlement', value: 3 },
+        ],
+      },
+      {
+        id: 'divide_inheritance',
+        label: 'The sons divide the inheritance and go their own ways.',
+        description:
+          'Each adult son takes his family and his share. The old household shrinks ' +
+          'to the women and the youngest children. New hearths are kindled.',
+        consequences: [
+          { type: 'modify_opinion', target: 'settlement', value: -2 },
+        ],
+      },
+    ],
+  },
 ];

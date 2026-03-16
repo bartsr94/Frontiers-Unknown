@@ -21,7 +21,7 @@ import type { TraitId } from '../personality/traits';
 import { CONVERSATIONAL_THRESHOLD } from '../culture/language-acquisition';
 import { SAUROMATIAN_CULTURE_IDS } from './culture';
 import { getSauromatianFraction, getImanianFraction } from '../genetics/gender-ratio';
-import { createHousehold, addToHousehold, countWives } from './household';
+import { createHousehold, addToHousehold, countWives, mergeHouseholds, deriveHouseholdName } from './household';
 import { getEffectiveOpinion, MARRIAGE_REFUSAL_THRESHOLD } from './opinions';
 
 // ─── Marriage Types ───────────────────────────────────────────────────────────
@@ -85,8 +85,13 @@ export interface MarriageResult {
   eventRecord: EventRecord;
   /** The resulting household (created or updated). Caller must persist to state.households. */
   household: Household;
-  /** True if this marriage created a brand-new household; false if bride joined existing. */
+  /** True if this marriage created a brand-new household; false if an existing one was updated. */
   householdCreated: boolean;
+  /**
+   * ID of the household that was dissolved during the marriage merge.
+   * null when there was no household to dissolve (e.g. both parties had none).
+   */
+  dissolvedHouseholdId: string | null;
 }
 
 // ─── Language Compatibility ──────────────────────────────────────────────────
@@ -297,43 +302,87 @@ export function performMarriage(
   const man = personA.sex === 'male' ? personA : personB;
   const woman = personA.sex === 'female' ? personA : personB;
 
-  // Determine household tradition: Sauromatian bride → sauromatian tradition
+  // Determine which tradition governs household direction
   const womanIsSauromatian =
     SAUROMATIAN_CULTURE_IDS.has(woman.heritage.primaryCulture) ||
     woman.heritage.primaryCulture === 'settlement_native';
   const tradition: HouseholdTradition = womanIsSauromatian ? 'sauromatian' : 'imanian';
 
-  // Build or update the household
+  // ── Merge households ────────────────────────────────────────────────────────
+  // Under the new lifecycle system BOTH parties already have a household.
+  // Sauromatian: man joins woman's household.  Imanian/Ansberite: woman joins man's.
   let household: Household;
-  let householdCreated: boolean;
-  const existingHousehold = man.householdId
-    ? (state.households.get(man.householdId) ?? null)
-    : null;
+  let householdCreated = false;
+  let dissolvedHouseholdId: string | null = null;
 
-  if (existingHousehold) {
-    // Man already has a household — add the bride to it
-    let updated = addToHousehold(existingHousehold, woman.id);
-    // If no senior wife is designated yet, she becomes it
-    if (updated.seniorWifeId === null) {
-      updated = { ...updated, seniorWifeId: woman.id };
+  const manHousehold   = man.householdId   ? state.households.get(man.householdId)   : null;
+  const womanHousehold = woman.householdId ? state.households.get(woman.householdId) : null;
+
+  if (tradition === 'sauromatian') {
+    // Woman's household receives; man's dissolves (or is created if missing)
+    if (womanHousehold && manHousehold && womanHousehold.id !== manHousehold.id) {
+      const merge = mergeHouseholds(
+        womanHousehold.id, manHousehold.id,
+        state.households, state.people,
+      );
+      household = merge.updatedHouseholds.get(womanHousehold.id) ?? womanHousehold;
+      dissolvedHouseholdId = merge.dissolvedHouseholdId;
+    } else if (womanHousehold) {
+      household = addToHousehold(womanHousehold, man.id);
+    } else {
+      const created = createHousehold({
+        name: '',
+        tradition,
+        headId: man.id,
+        seniorWifeId: woman.id,
+        foundedTurn: state.turnNumber,
+        isAutoNamed: true,
+      });
+      household = addToHousehold(addToHousehold(created, man.id), woman.id);
+      householdCreated = true;
     }
-    household = updated;
-    householdCreated = false;
+    // Ensure head & seniorWife are set
+    if (!household.headId) household = { ...household, headId: man.id };
+    if (!household.seniorWifeId) household = { ...household, seniorWifeId: woman.id };
   } else {
-    // Create a new household; man is head, woman is first (senior) wife
-    const householdName =
-      tradition === 'sauromatian'
-        ? `${woman.familyName ?? woman.givenName} Ashkaran`
-        : `House of ${man.familyName ?? man.givenName}`;
-    const created = createHousehold({
-      name: householdName,
-      tradition,
-      headId: man.id,
-      seniorWifeId: woman.id,
-      foundedTurn: state.turnNumber,
-    });
-    household = addToHousehold(addToHousehold(created, man.id), woman.id);
-    householdCreated = true;
+    // Imanian / Ansberite: man's household receives; woman's dissolves
+    if (manHousehold && womanHousehold && manHousehold.id !== womanHousehold.id) {
+      const merge = mergeHouseholds(
+        manHousehold.id, womanHousehold.id,
+        state.households, state.people,
+      );
+      household = merge.updatedHouseholds.get(manHousehold.id) ?? manHousehold;
+      dissolvedHouseholdId = merge.dissolvedHouseholdId;
+    } else if (manHousehold) {
+      household = addToHousehold(manHousehold, woman.id);
+    } else {
+      const created = createHousehold({
+        name: '',
+        tradition,
+        headId: man.id,
+        seniorWifeId: woman.id,
+        foundedTurn: state.turnNumber,
+        isAutoNamed: true,
+      });
+      household = addToHousehold(addToHousehold(created, man.id), woman.id);
+      householdCreated = true;
+    }
+    // Ensure head & seniorWife are set
+    if (!household.headId) household = { ...household, headId: man.id };
+    if (!household.seniorWifeId) household = { ...household, seniorWifeId: woman.id };
+  }
+
+  // Designate first wife if none yet
+  if (!household.seniorWifeId) {
+    household = { ...household, seniorWifeId: woman.id };
+  }
+
+  // Refresh auto-name
+  const nameMap = new Map(state.people);
+  nameMap.set(man.id, man);
+  nameMap.set(woman.id, woman);
+  if (household.isAutoNamed) {
+    household = { ...household, name: deriveHouseholdName(household, nameMap) };
   }
 
   // Determine each person's household role
@@ -381,7 +430,7 @@ export function performMarriage(
     involvedPersonIds: [personA.id, personB.id],
   };
 
-  return { updatedPersonA, updatedPersonB, opinionChanges, eventRecord, household, householdCreated };
+  return { updatedPersonA, updatedPersonB, opinionChanges, eventRecord, household, householdCreated, dissolvedHouseholdId };
 }
 
 // ─── Marriageability Query ────────────────────────────────────────────────────

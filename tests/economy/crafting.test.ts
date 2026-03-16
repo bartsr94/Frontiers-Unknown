@@ -26,7 +26,7 @@ function makeResources(overrides: Partial<ResourceStock> = {}): ResourceStock {
 }
 
 function makeBuilding(defId: BuiltBuilding['defId']): BuiltBuilding {
-  return { defId, instanceId: `${defId}_0`, builtTurn: 0, style: null };
+  return { defId, instanceId: `${defId}_0`, builtTurn: 0, style: null, claimedByPersonIds: [], ownerHouseholdId: null, assignedWorkerIds: [] };
 }
 
 const WORKSHOP = makeBuilding('workshop');

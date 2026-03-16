@@ -18,6 +18,11 @@ export const ROLE_LABELS: Record<WorkRole, string> = {
   priest_solar:   'Solar Priest',
   wheel_singer:   'Wheel Singer',
   voice_of_wheel: 'Voice of the Wheel',
+  blacksmith:     'Blacksmith',
+  tailor:         'Tailor',
+  brewer:         'Brewer',
+  miller:         'Miller',
+  herder:         'Herder',
   unassigned:     'Unassigned',
 };
 
@@ -36,5 +41,10 @@ export const ROLE_COLORS: Record<WorkRole, string> = {
   priest_solar:   'bg-yellow-700 text-yellow-100',
   wheel_singer:   'bg-teal-900 text-teal-200',
   voice_of_wheel: 'bg-indigo-900 text-indigo-200',
+  blacksmith:     'bg-stone-600 text-orange-300',
+  tailor:         'bg-violet-800 text-violet-300',
+  brewer:         'bg-amber-800 text-amber-200',
+  miller:         'bg-yellow-800 text-yellow-200',
+  herder:         'bg-green-800 text-green-300',
   unassigned:     'bg-stone-800 text-stone-400',
 };

@@ -253,6 +253,11 @@ export type WorkRole =
   | 'priest_solar'   // Male Orthodox minister; generates Company standing bonus annually
   | 'wheel_singer'   // Sacred Wheel practitioner; generates fertility bonus each turn
   | 'voice_of_wheel' // Syncretic mediator; reduces religious tension; requires hiddenWheelEmerged
+  | 'blacksmith'     // Works at Smithy; produces steel and goods
+  | 'tailor'         // Works at Tannery; produces goods
+  | 'brewer'         // Works at Brewery; produces goods and settlement morale
+  | 'miller'         // Works at Mill; multiplies food output
+  | 'herder'         // Works at Stable; manages cattle and horses
   | 'unassigned';
 
 /** A person's social standing within the settlement community. */
@@ -370,7 +375,8 @@ export type SchemeType =
   | 'scheme_convert_faith'    // Religious advocacy; may culminate in conversion
   | 'scheme_befriend_person'  // Social bonding; SILENT — friend bond forms at 1.0
   | 'scheme_undermine_person' // Social sabotage; undermining event at climax
-  | 'scheme_tutor_person';    // Mentoring focus; SILENT skill boost + notification
+  | 'scheme_tutor_person'     // Mentoring focus; SILENT skill boost + notification
+  | 'scheme_build_dwelling';  // Housing scheme; fires sch_dwelling_request at climax
 
 /**
  * A private project a character is quietly pursuing.
@@ -721,6 +727,14 @@ export interface Person {
    * claims; happiness scoring treats null as "living communally".
    */
   claimedBuildingId: string | null;
+
+  /**
+   * In-game year the person joined the settlement.
+   * Founders and children born in-settlement = their birth year (or year 1 for founders).
+   * Immigrants = the year they arrived.
+   * Used to compute housing-expectation pressure in the happiness system.
+   */
+  joinedYear: number;
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
@@ -836,5 +850,6 @@ export function createPerson(options: CreatePersonOptions = {}, rng?: SeededRNG)
     opinionSustainedSince: options.opinionSustainedSince ?? {},
     lowHappinessTurns: options.lowHappinessTurns ?? 0,
     claimedBuildingId: options.claimedBuildingId ?? null,
+    joinedYear: options.joinedYear ?? 1,
   };
 }

@@ -1,6 +1,6 @@
 # Housing, Ownership & Specialisation — Design Document
 
-**Status:** Design / Pre-implementation  
+**Status:** ✅ Complete · March 2026  
 **Depends on:** Phase 4.1 (Happiness System) — complete  
 **Touches:** `buildings/`, `economy/`, `population/person.ts`, `population/happiness.ts`, `personality/scheme-engine.ts`, `turn/game-state.ts`, `stores/`
 

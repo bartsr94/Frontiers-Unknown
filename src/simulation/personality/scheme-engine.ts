@@ -35,6 +35,7 @@ const PROGRESS_RATE: Record<SchemeType, number> = {
   scheme_court_person:     0.04, // multiplied by opinion_factor below
   scheme_convert_faith:    0.025,
   scheme_undermine_person: 0.04,
+  scheme_build_dwelling:   0.01, // 100-turn long-range project
 };
 
 // Intermediate event progress thresholds
@@ -45,6 +46,17 @@ const RUMOURS_SPREADING_PROGRESS = 0.50;
 const COURT_OPINION_MIN   = 50;
 const CONVERT_OPINION_MIN = 30;
 const BEFRIEND_OPINION_MIN = 40;
+
+// ─── Scheme Context (optional extra state for schemes that need world knowledge) ──────
+
+export interface SchemeContext {
+  /** Household map — used to check if person's household already has a dwelling. */
+  households?: Map<string, { dwellingBuildingId: string | null; productionBuildingIds: string[] }>;
+  /** Current in-game year — dwelling schemes only start after year 2. */
+  currentYear?: number;
+  /** Settlement resources — check lumber availability before dwelling scheme. */
+  settlementLumber?: number;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -128,6 +140,7 @@ export function generateScheme(
   people: Map<string, Person>,
   currentTurn: number,
   rng: SeededRNG,
+  context?: SchemeContext,
 ): PersonScheme | null {
   // 1. scheme_court_person — passionate or romantic; unmarried; opinion ≥ 50 for a target
   if (hasTrait(person, 'passionate', 'romantic') && person.spouseIds.length === 0) {
@@ -190,6 +203,22 @@ export function generateScheme(
     }
   }
 
+  // 6. scheme_build_dwelling — proud or ambitious; adult; household has no home yet
+  if (
+    !hasTrait(person, 'content') &&
+    hasTrait(person, 'proud', 'ambitious') &&
+    person.age >= 18 &&
+    person.householdId !== null &&
+    (context?.currentYear ?? 0) >= 2 &&
+    (context?.settlementLumber ?? 0) >= 10
+  ) {
+    const household = context?.households?.get(person.householdId);
+    if (household && household.dwellingBuildingId === null) {
+      // Use person.id as target (self-scheme — no external target)
+      return { type: 'scheme_build_dwelling', targetId: person.id, progress: 0, startedTurn: currentTurn, revealedToPlayer: false };
+    }
+  }
+
   return null;
 }
 
@@ -227,6 +256,7 @@ export function processSchemes(
   currentTurn: number,
   rng: SeededRNG,
   debugSettings?: DebugSettings,
+  context?: SchemeContext,
 ): SchemeProcessResult {
   const updatedPeople = new Map<string, Person>();
   const pendingSchemeEvents: SchemePendingEvent[] = [];
@@ -236,7 +266,7 @@ export function processSchemes(
   if (currentTurn % SCHEME_GENERATE_INTERVAL === 0) {
     for (const [id, person] of people) {
       if (person.activeScheme !== null) continue;
-      const newScheme = generateScheme(person, people, currentTurn, rng);
+      const newScheme = generateScheme(person, people, currentTurn, rng, context);
       if (newScheme) {
         const updated = updatedPeople.get(id) ?? person;
         updatedPeople.set(id, { ...updated, activeScheme: newScheme });
@@ -400,6 +430,15 @@ function resolveSchemeCompletion(
         eventId: 'sch_undermining_climax',
         silent: false,
       };
+
+    case 'scheme_build_dwelling':
+      // SILENT: fires an activity log entry; the player is notified but no
+      // event card is shown — a separate dwelling-request event can be wired later.
+      return {
+        updatedPerson: person,
+        eventId: null,
+        silent: true,
+      };
   }
 }
 
@@ -425,6 +464,8 @@ function resolveFailureCondition(
   target: Person | undefined,
   _people: Map<string, Person>,
 ): boolean {
+  // Self-schemes never fail due to missing target.
+  if (scheme.type === 'scheme_build_dwelling') return false;
   if (!target) return true; // target left the settlement
 
   switch (scheme.type) {
@@ -472,5 +513,6 @@ function schemeLabel(type: SchemeType): string {
     case 'scheme_befriend_person':  return 'befriending';
     case 'scheme_undermine_person': return 'undermining';
     case 'scheme_tutor_person':     return 'tutoring';
+    case 'scheme_build_dwelling':   return 'planning a homestead';
   }
 }

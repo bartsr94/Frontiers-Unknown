@@ -243,6 +243,8 @@ function applyConsequence(
         parentIds: removePerson.parentIds,
         childrenIds: removePerson.childrenIds,
         heritage: removePerson.heritage,
+        portraitVariant: removePerson.portraitVariant ?? 1,
+        ageAtDeath: Math.floor(removePerson.age),
       };
       // Clean up household membership.
       let updatedHouseholds = state.households;
