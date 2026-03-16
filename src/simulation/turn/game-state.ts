@@ -397,6 +397,13 @@ export type ReligiousPolicy =
   | 'wheel_permitted'        // Wheel ceremonies officially recognised.
   | 'hidden_wheel_recognized'; // Syncretic faith given formal standing. Requires hiddenWheelEmerged.
 
+/**
+ * The settlement's courtship customs policy.
+ * Controls whether Sauromatian women's seek_companion ambitions can form
+ * and how aggressively the courtship opinion drifts apply.
+ */
+export type CourtshipNorms = 'traditional' | 'mixed' | 'open';
+
 /** The physical settlement: its location, constructions, and resource stockpile. */
 export interface Settlement {
   /** Player-chosen display name of the settlement. */
@@ -420,6 +427,12 @@ export interface Settlement {
   populationCount: number;
   /** The player's current religious mandate for the settlement. Defaults to 'tolerant'. */
   religiousPolicy: ReligiousPolicy;
+  /**
+   * The settlement's courtship norms policy. Controls whether Sauromatian women's
+   * seek_companion ambitions can form and affects courtship opinion drift rates.
+   * Defaults to 'mixed' — the natural state of a blended settlement.
+   */
+  courtshipNorms: CourtshipNorms;
 }
 
 // ─── Turn & Season ────────────────────────────────────────────────────────────

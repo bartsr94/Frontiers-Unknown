@@ -257,6 +257,7 @@ export function processPregnancies(
     const childBloodline = averageBloodlines(
       mother.heritage.bloodline,
       father.heritage.bloodline,
+      rng,
     );
 
     // --- Childbirth risk ---

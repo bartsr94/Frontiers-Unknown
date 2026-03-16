@@ -332,4 +332,70 @@ export const SCHEME_EVENTS: GameEvent[] = [
     ],
   },
 
+  // ── Sauromatian courtship open climax ────────────────────────────────────────
+
+  {
+    id: 'sch_sauro_courtship_open',
+    title: 'She Was Never Hiding It',
+    category: 'personal',
+    prerequisites: [],
+    actorRequirements: [
+      { slot: 'schemer', criteria: { sex: 'female', sauromatianHeritage: true, minAge: 16 } },
+      { slot: 'target',  criteria: { sex: 'male', minAge: 18 } },
+    ],
+    weight: 1,
+    cooldown: 0,
+    isUnique: false,
+    isDeferredOutcome: true,
+    description:
+      '{schemer} does not look remotely ashamed when {schemer.her} attention toward {target} ' +
+      'is discussed openly. {schemer.She} looks, if anything, impatient. In {schemer.her} view ' +
+      '{schemer.she} has been courteous enough — {schemer.she} gave {target} time to notice her, ' +
+      '{schemer.she} arranged proximity, {schemer.she} let him think it was his idea. That any ' +
+      'of this required bringing to you is, to {schemer.her}, the puzzle. ' +
+      '{target} is wearing a different expression entirely.',
+    choices: [
+      {
+        id: 'acknowledge_formally',
+        label: 'Acknowledge her interest formally — this deserves a real answer.',
+        description: 'She is taken seriously. He is consulted.',
+        consequences: [
+          { type: 'modify_opinion', target: '{schemer}', value: 10 },
+          { type: 'modify_opinion', target: '{target}',  value: 8  },
+        ],
+        deferredEventId: 'rel_sauro_courtship_clarified',
+        deferredTurns: 2,
+        pendingText: '{target} has been given time to form his answer. You will hear it soon.',
+      },
+      {
+        id: 'affirm_publicly',
+        label: 'Affirm it publicly — announce before the settlement that you support the match.',
+        description: 'A bold move. She glows. Some others bridle at the pressure.',
+        consequences: [
+          { type: 'modify_opinion', target: '{schemer}', value: 25 },
+          { type: 'modify_opinion', target: '{target}',  value: 12 },
+          { type: 'modify_opinion_labeled', target: '{schemer}', value: -5, params: { label: 'Public pressure' } },
+          { type: 'clear_ambition', target: '{schemer}', value: 0 },
+        ],
+      },
+      {
+        id: 'step_back',
+        label: 'Step back — this is between them, not you.',
+        description: 'Minimal involvement. The ambition continues unresolved.',
+        consequences: [
+          { type: 'modify_opinion', target: '{schemer}', value: 5 },
+        ],
+      },
+      {
+        id: 'caution_her',
+        label: 'Caution her — direct pursuit unsettles the Imanian settlers.',
+        description: 'She will take it as a criticism of her customs. Because it is.',
+        consequences: [
+          { type: 'modify_opinion', target: '{schemer}', value: -10 },
+          { type: 'modify_cultural_blend', target: 'settlement', value: 0.01 },
+        ],
+      },
+    ],
+  },
+
 ];

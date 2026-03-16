@@ -8,6 +8,7 @@ import {
   generateAmbition,
   clearAmbition,
   getAmbitionLabel,
+  determineAmbitionType,
 } from '../../src/simulation/population/ambitions';
 import { createRNG } from '../../src/utils/rng';
 
@@ -314,7 +315,8 @@ describe('clearAmbition', () => {
 
 describe('getAmbitionLabel', () => {
   const cases: Array<[PersonAmbition['type'], string]> = [
-    ['seek_spouse',          'Seeking a companion'],
+    ['seek_spouse',          'Seeking a spouse'],
+    ['seek_companion',       'Seeking a companion'],
     ['seek_council',         'Seeking a council seat'],
     ['seek_seniority',       'Seeking senior-wife standing'],
     ['seek_cultural_duty',   'Called to keth-thara'],
@@ -334,5 +336,154 @@ describe('getAmbitionLabel', () => {
 describe('AMBITION_FIRING_THRESHOLD', () => {
   it('is 0.7', () => {
     expect(AMBITION_FIRING_THRESHOLD).toBe(0.7);
+  });
+});
+
+// ─── determineAmbitionType — seek_companion ───────────────────────────────────
+
+describe('determineAmbitionType — seek_companion (Sauromatian)', () => {
+  function makeSauroWoman(id: string, overrides: Partial<Person> = {}): Person {
+    return makePerson(id, {
+      sex: 'female',
+      age: 18,
+      spouseIds: [],
+      heritage: {
+        bloodline: { imanian: 0, kiswani_riverfolk: 0, kiswani_bayuk: 0, kiswani_haisla: 1,
+                     hanjoda_stormcaller: 0, hanjoda_bloodmoon: 0, hanjoda_talon: 0, hanjoda_emrasi: 0 },
+        primaryCulture: 'kiswani_haisla',
+        culturalFluency: new Map(),
+        ethnicGroup: 'kiswani_haisla',
+      },
+      ...overrides,
+    });
+  }
+
+  it('generates seek_companion for eligible Sauromatian woman under mixed norms', () => {
+    const rng = createRNG(42);
+    const woman = makeSauroWoman('w');
+    const man = makePerson('m', { sex: 'male', age: 25, spouseIds: [] });
+    const state = makeState({
+      people: new Map([['w', woman], ['m', man]]),
+      settlement: { courtshipNorms: 'mixed' },
+    });
+    const result = determineAmbitionType(woman, state, rng);
+    expect(result?.type).toBe('seek_companion');
+    expect(result?.targetPersonId).toBe('m');
+  });
+
+  it('generates seek_companion under open norms', () => {
+    const rng = createRNG(42);
+    const woman = makeSauroWoman('w');
+    const man = makePerson('m', { sex: 'male', age: 25, spouseIds: [] });
+    const state = makeState({
+      people: new Map([['w', woman], ['m', man]]),
+      settlement: { courtshipNorms: 'open' },
+    });
+    const result = determineAmbitionType(woman, state, rng);
+    expect(result?.type).toBe('seek_companion');
+  });
+
+  it('does NOT generate seek_companion under traditional norms', () => {
+    const rng = createRNG(42);
+    const woman = makeSauroWoman('w');
+    const man = makePerson('m', { sex: 'male', age: 25, spouseIds: [] });
+    const state = makeState({
+      people: new Map([['w', woman], ['m', man]]),
+      settlement: { courtshipNorms: 'traditional' },
+    });
+    const result = determineAmbitionType(woman, state, rng);
+    expect(result?.type).not.toBe('seek_companion');
+  });
+
+  it('does NOT generate seek_companion if woman is already married', () => {
+    const rng = createRNG(42);
+    const woman = makeSauroWoman('w', { spouseIds: ['husband'] });
+    const man = makePerson('m', { sex: 'male', age: 25, spouseIds: [] });
+    const state = makeState({
+      people: new Map([['w', woman], ['m', man]]),
+      settlement: { courtshipNorms: 'mixed' },
+    });
+    const result = determineAmbitionType(woman, state, rng);
+    expect(result?.type).not.toBe('seek_companion');
+  });
+
+  it('does NOT generate seek_companion for a non-Sauromatian woman', () => {
+    const rng = createRNG(42);
+    const woman = makePerson('w', { sex: 'female', age: 18, spouseIds: [] });
+    const man = makePerson('m', { sex: 'male', age: 25, spouseIds: [] });
+    const state = makeState({
+      people: new Map([['w', woman], ['m', man]]),
+      settlement: { courtshipNorms: 'mixed' },
+    });
+    const result = determineAmbitionType(woman, state, rng);
+    expect(result?.type).not.toBe('seek_companion');
+  });
+});
+
+// ─── evaluateAmbition — seek_companion ───────────────────────────────────────
+
+describe('evaluateAmbition — seek_companion', () => {
+  it('returns "fulfilled" when target became a spouse', () => {
+    const woman = makePerson('w', {
+      spouseIds: ['m'],
+      ambition: makeAmbition({ type: 'seek_companion', targetPersonId: 'm', formedTurn: 1 }),
+    });
+    const man = makePerson('m', { sex: 'male', spouseIds: ['w'] });
+    const state = makeState({ turnNumber: 5, people: new Map([['w', woman], ['m', man]]) });
+    expect(evaluateAmbition(woman, state)).toBe('fulfilled');
+  });
+
+  it('returns "fulfilled" when target is a concubine in the same household', () => {
+    const woman = makePerson('w', {
+      householdId: 'hh1',
+      ambition: makeAmbition({ type: 'seek_companion', targetPersonId: 'm', formedTurn: 1 }),
+    });
+    const man = makePerson('m', { sex: 'male', householdId: 'hh1', householdRole: 'concubine' });
+    const state = makeState({ turnNumber: 5, people: new Map([['w', woman], ['m', man]]) });
+    expect(evaluateAmbition(woman, state)).toBe('fulfilled');
+  });
+
+  it('returns "failed" when target is gone (dead/left)', () => {
+    const woman = makePerson('w', {
+      ambition: makeAmbition({ type: 'seek_companion', targetPersonId: 'gone', formedTurn: 1 }),
+    });
+    const state = makeState({ turnNumber: 5, people: new Map([['w', woman]]) });
+    expect(evaluateAmbition(woman, state)).toBe('failed');
+  });
+
+  it('returns "failed" when target married someone else', () => {
+    const woman = makePerson('w', {
+      ambition: makeAmbition({ type: 'seek_companion', targetPersonId: 'm', formedTurn: 1 }),
+    });
+    const man = makePerson('m', { sex: 'male', spouseIds: ['other'] });
+    const state = makeState({ turnNumber: 5, people: new Map([['w', woman], ['m', man]]) });
+    expect(evaluateAmbition(woman, state)).toBe('failed');
+  });
+
+  it('returns "ongoing" when target exists and is still unmarried', () => {
+    const woman = makePerson('w', {
+      ambition: makeAmbition({ type: 'seek_companion', targetPersonId: 'm', formedTurn: 1 }),
+    });
+    const man = makePerson('m', { sex: 'male', spouseIds: [] });
+    const state = makeState({ turnNumber: 5, people: new Map([['w', woman], ['m', man]]) });
+    expect(evaluateAmbition(woman, state)).toBe('ongoing');
+  });
+
+  it('returns "failed" after 30 turns (seek_companion stale limit)', () => {
+    const woman = makePerson('w', {
+      ambition: makeAmbition({ type: 'seek_companion', targetPersonId: 'm', formedTurn: 1 }),
+    });
+    const man = makePerson('m', { sex: 'male', spouseIds: [] });
+    const state = makeState({ turnNumber: 32, people: new Map([['w', woman], ['m', man]]) });
+    expect(evaluateAmbition(woman, state)).toBe('failed');
+  });
+});
+
+// ─── getAmbitionLabel — seek_companion (with target) ─────────────────────────
+
+describe('getAmbitionLabel — seek_companion with target', () => {
+  it('includes the target ID in the label', () => {
+    const a = makeAmbition({ type: 'seek_companion', targetPersonId: 'person_123' });
+    expect(getAmbitionLabel(a)).toBe('Seeking a companion — person_123');
   });
 });

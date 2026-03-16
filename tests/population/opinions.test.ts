@@ -10,6 +10,7 @@ import {
   initializeFamilyOpinions,
   applyOpinionDrift,
   applySharedRoleOpinionDrift,
+  applyCourtshipOpinionDrift,
   decayOpinions,
   applyMarriageOpinionFloor,
   findMarriageRefuser,
@@ -919,5 +920,155 @@ describe('computeOpinionBreakdown — kinship labels', () => {
     const breakdown = computeOpinionBreakdown(a, b);
     const kinshipLabels = ['Spouse', 'Your child', 'Your parent', 'Full sibling', 'Half sibling'];
     expect(breakdown.some(l => kinshipLabels.includes(l.label))).toBe(false);
+  });
+});
+
+// ─── applyCourtshipOpinionDrift ──────────────────────────────────────────────────────────
+
+function makeSauroPerson(id: string, overrides: Partial<Person> = {}): Person {
+  return makePerson(id, {
+    sex: 'female',
+    heritage: {
+      bloodline: { imanian: 0, kiswani_riverfolk: 0, kiswani_bayuk: 0, kiswani_haisla: 1,
+                  hanjoda_stormcaller: 0, hanjoda_bloodmoon: 0, hanjoda_talon: 0, hanjoda_emrasi: 0 },
+      primaryCulture: 'kiswani_haisla',
+      culturalFluency: new Map(),
+      ethnicGroup: 'kiswani_haisla',
+    },
+    ...overrides,
+  });
+}
+
+describe('applyCourtshipOpinionDrift — Rule 1 (active pursuit drift)', () => {
+  it('increases pursuer→target opinion by +1 per turn', () => {
+    const target = makePerson('t', { sex: 'male', spouseIds: [] });
+    const pursuer = makeSauroPerson('p', {
+      spouseIds: [],
+      ambition: { type: 'seek_companion', intensity: 0.8, targetPersonId: 't', formedTurn: 0 },
+      relationships: new Map([['t', 10]]),
+    });
+    const people = new Map([['p', pursuer], ['t', target]]);
+    const result = applyCourtshipOpinionDrift(people, 'mixed', 1);
+    expect(result.get('p')!.relationships.get('t')).toBe(11);
+    // target’s opinion of pursuer is not changed by Rule 1 (one-directional)
+    expect(result.get('t')!.relationships.get('p')).toBeUndefined();
+  });
+
+  it('doubles the drift to +2 under open norms', () => {
+    const target = makePerson('t', { sex: 'male', spouseIds: [] });
+    const pursuer = makeSauroPerson('p', {
+      spouseIds: [],
+      ambition: { type: 'seek_companion', intensity: 0.8, targetPersonId: 't', formedTurn: 0 },
+      relationships: new Map([['t', 5]]),
+    });
+    const people = new Map([['p', pursuer], ['t', target]]);
+    const result = applyCourtshipOpinionDrift(people, 'open', 1);
+    expect(result.get('p')!.relationships.get('t')).toBe(7);
+    // target’s opinion only changes via Rule 3 (discomfort), not Rule 1
+    expect(result.get('t')!.relationships.get('p')).toBeUndefined();
+  });
+
+  it('seek_spouse ambition also triggers Rule 1', () => {
+    const target = makePerson('t', { sex: 'male', spouseIds: [] });
+    const pursuer = makeSauroPerson('p', {
+      spouseIds: [],
+      ambition: { type: 'seek_spouse', intensity: 0.8, targetPersonId: 't', formedTurn: 0 },
+      relationships: new Map([['t', 0]]),
+    });
+    const people = new Map([['p', pursuer], ['t', target]]);
+    const result = applyCourtshipOpinionDrift(people, 'mixed', 1);
+    expect(result.get('p')!.relationships.get('t')).toBe(1);
+  });
+});
+
+describe('applyCourtshipOpinionDrift — Rule 2 (proximity drift)', () => {
+  it('adds +1 on even turns for unmarried Sauro woman in same household as unmarried male', () => {
+    const target = makePerson('t', { sex: 'male', spouseIds: [], householdId: 'hh1' });
+    const woman  = makeSauroPerson('w', {
+      spouseIds: [],
+      householdId: 'hh1',
+      ambition: null,
+      relationships: new Map([['t', 5]]),
+    });
+    const people = new Map([['w', woman], ['t', target]]);
+    const result = applyCourtshipOpinionDrift(people, 'mixed', 2); // even turn
+    expect(result.get('w')!.relationships.get('t')).toBe(6);
+  });
+
+  it('does NOT add proximity drift on odd turns', () => {
+    const target = makePerson('t', { sex: 'male', spouseIds: [], householdId: 'hh1' });
+    const woman  = makeSauroPerson('w', {
+      spouseIds: [],
+      householdId: 'hh1',
+      ambition: null,
+      relationships: new Map([['t', 5]]),
+    });
+    const people = new Map([['w', woman], ['t', target]]);
+    const result = applyCourtshipOpinionDrift(people, 'mixed', 3); // odd turn
+    expect(result.get('w')!.relationships.get('t')).toBe(5); // unchanged
+  });
+
+  it('does NOT apply proximity drift if woman is already married', () => {
+    const target = makePerson('t', { sex: 'male', spouseIds: [], householdId: 'hh1' });
+    const woman  = makeSauroPerson('w', {
+      spouseIds: ['husband'],
+      householdId: 'hh1',
+      ambition: null,
+      relationships: new Map([['t', 5]]),
+    });
+    const people = new Map([['w', woman], ['t', target]]);
+    const result = applyCourtshipOpinionDrift(people, 'mixed', 2);
+    expect(result.get('w')!.relationships.get('t')).toBe(5); // unchanged
+  });
+});
+
+describe('applyCourtshipOpinionDrift — Rule 3 (Imanian discomfort)', () => {
+  it('applies −1 per turn to Imanian Orthodox man being actively pursued, when opinion is below 30', () => {
+    const man = makePerson('m', {
+      sex: 'male',
+      religion: 'imanian_orthodox',
+      spouseIds: [],
+      relationships: new Map([['p', 15]]),
+    });
+    const pursuer = makeSauroPerson('p', {
+      spouseIds: [],
+      ambition: { type: 'seek_companion', intensity: 0.8, targetPersonId: 'm', formedTurn: 0 },
+    });
+    const people = new Map([['m', man], ['p', pursuer]]);
+    const result = applyCourtshipOpinionDrift(people, 'mixed', 1);
+    expect(result.get('m')!.relationships.get('p')).toBe(14);
+  });
+
+  it('does NOT apply discomfort when man’s opinion of pursuer is already ≤30 (threshold crossed)', () => {
+    const man = makePerson('m', {
+      sex: 'male',
+      religion: 'imanian_orthodox',
+      spouseIds: [],
+      relationships: new Map([['p', 35]]),
+    });
+    const pursuer = makeSauroPerson('p', {
+      spouseIds: [],
+      ambition: { type: 'seek_companion', intensity: 0.8, targetPersonId: 'm', formedTurn: 0 },
+    });
+    const people = new Map([['m', man], ['p', pursuer]]);
+    const result = applyCourtshipOpinionDrift(people, 'mixed', 1);
+    // Opinion is 35 which is ≥30; no discomfort should apply, only Rule 1 drift
+    expect(result.get('m')!.relationships.get('p')).toBeGreaterThanOrEqual(35);
+  });
+
+  it('does NOT apply discomfort if man is already sposued to the pursuer', () => {
+    const man = makePerson('m', {
+      sex: 'male',
+      religion: 'imanian_orthodox',
+      spouseIds: ['p'],
+      relationships: new Map([['p', 15]]),
+    });
+    const pursuer = makeSauroPerson('p', {
+      spouseIds: ['m'],
+      ambition: { type: 'seek_companion', intensity: 0.8, targetPersonId: 'm', formedTurn: 0 },
+    });
+    const people = new Map([['m', man], ['p', pursuer]]);
+    const result = applyCourtshipOpinionDrift(people, 'mixed', 1);
+    expect(result.get('m')!.relationships.get('p')).toBe(15); // unchanged
   });
 });

@@ -33,6 +33,7 @@ import { IDENTITY_EVENTS }      from './definitions/identity';
 import { SCHEME_EVENTS }        from './definitions/schemes';
 import { FACTION_EVENTS }       from './definitions/factions';
 import { HAPPINESS_EVENTS }     from './definitions/happiness';
+import { WEDDING_EVENTS }       from './definitions/weddings';
 
 // ─── Master event deck ────────────────────────────────────────────────────────
 
@@ -52,6 +53,7 @@ export const ALL_EVENTS: GameEvent[] = [
   ...SCHEME_EVENTS,
   ...FACTION_EVENTS,
   ...HAPPINESS_EVENTS,
+  ...WEDDING_EVENTS,
 ];
 
 // ─── Prerequisite checking ────────────────────────────────────────────────────
@@ -213,6 +215,17 @@ function checkPrerequisite(prereq: EventPrerequisite, state: GameState): boolean
       return factionType
         ? factions.some(f => f.type === factionType)
         : factions.length > 0;
+    }
+    case 'has_rival_seekers': {
+      const targetCounts = new Map<string, number>();
+      for (const person of state.people.values()) {
+        if (!person.ambition) continue;
+        if (person.ambition.type !== 'seek_companion' && person.ambition.type !== 'seek_spouse') continue;
+        const tid = person.ambition.targetPersonId;
+        if (!tid) continue;
+        targetCounts.set(tid, (targetCounts.get(tid) ?? 0) + 1);
+      }
+      return Array.from(targetCounts.values()).some(c => c >= 2);
     }
     default:
       return true;

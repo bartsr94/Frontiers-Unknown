@@ -207,8 +207,8 @@ export const RELATIONSHIP_EVENTS: GameEvent[] = [
       { type: 'has_person_with_ambition', params: { ambitionId: 'seek_spouse' } },
     ],
     actorRequirements: [
-      { slot: 'admirer', criteria: { minAge: 16 } },
-      { slot: 'beloved', criteria: { minAge: 16 } },
+      { slot: 'admirer', criteria: { minAge: 16, hasAmbitionType: 'seek_spouse' } },
+      { slot: 'beloved', criteria: { minAge: 16, resolveFromAmbitionTarget: 'admirer' } },
     ],
     weight: 2,
     cooldown: 8,
@@ -231,9 +231,11 @@ export const RELATIONSHIP_EVENTS: GameEvent[] = [
       {
         id: 'arrange_formally',
         label: 'Take this to the marriage council and arrange it properly.',
-        description: 'A formal match if both are eligible. Slower but legitimate.',
+        description: 'A formal match if both are eligible.',
         consequences: [
           { type: 'modify_opinion', target: '{admirer}', value: 20 },
+          { type: 'perform_marriage', target: '{admirer}', params: { partnerSlot: '{beloved}' } },
+          { type: 'clear_ambition', target: '{admirer}' },
         ],
       },
       {
@@ -703,6 +705,457 @@ export const RELATIONSHIP_EVENTS: GameEvent[] = [
         description: 'Defers judgment but earns some trust.',
         consequences: [
           { type: 'modify_opinion', target: '{dissenter}', value: 8 },
+        ],
+      },
+    ],
+  },
+
+  // ── Sauromatian courtship events ─────────────────────────────────────────────
+
+  {
+    id: 'rel_sauro_woman_pursues',
+    title: "She's Made Her Interest Known",
+    category: 'personal',
+    prerequisites: [
+      { type: 'has_person_with_ambition', params: { ambitionId: 'seek_companion' } },
+    ],
+    actorRequirements: [
+      { slot: 'pursuer', criteria: { sex: 'female', sauromatianHeritage: true, maritalStatus: 'unmarried', minAge: 16, hasAmbitionType: 'seek_companion' } },
+      { slot: 'subject', criteria: { sex: 'male', maritalStatus: 'unmarried', minAge: 18 } },
+    ],
+    weight: 3,
+    cooldown: 6,
+    isUnique: false,
+    description:
+      '{pursuer} has made {pursuer.her} interest in {subject} plain — not coyly but in ' +
+      'the Sauromatian way, directly and without apparent shame. {pursuer.She} is spending ' +
+      'time near him, bringing him small attentions, asking other women how he sleeps. ' +
+      '{subject} has noticed. Whether he is flattered or alarmed depends on the man.',
+    choices: [
+      {
+        id: 'let_run',
+        label: 'Let it run its course — Sauromatian custom working as it should.',
+        description: 'No player interference. The attention may well deepen on its own.',
+        consequences: [
+          { type: 'modify_opinion_pair', target: '{pursuer}', value: 8, params: { slotB: '{subject}', label: 'Shared attention', valueB: 5 } },
+        ],
+      },
+      {
+        id: 'encourage',
+        label: 'Encourage her — arrange work in the same area.',
+        description: 'More proximity, more opportunity.',
+        consequences: [
+          { type: 'modify_opinion', target: '{pursuer}', value: 10 },
+          { type: 'modify_opinion_pair', target: '{pursuer}', value: 6, params: { slotB: '{subject}', label: 'Shared work' } },
+        ],
+      },
+      {
+        id: 'caution',
+        label: 'Caution her — the settlement needs discipline, not distraction.',
+        description: 'Gently imposes Imanian norms. She will not thank you for it.',
+        consequences: [
+          { type: 'modify_opinion', target: '{pursuer}', value: -12 },
+          { type: 'modify_cultural_blend', target: 'settlement', value: -0.01 },
+        ],
+      },
+      {
+        id: 'speak_to_subject',
+        label: 'Speak to {subject} — ask how he feels about this.',
+        description: 'Player learns whether the man is receptive or resistant.',
+        skillCheck: { skill: 'diplomacy', difficulty: 30, actorSelection: 'best_council' },
+        onSuccess: [
+          { type: 'modify_opinion', target: '{subject}', value: 8 },
+        ],
+        onFailure: [
+          { type: 'modify_opinion', target: '{subject}', value: -5 },
+        ],
+        deferredEventId: 'rel_sauro_courtship_clarified',
+        deferredTurns: 2,
+        consequences: [],
+        successText: '{subject} appreciated being consulted. His answer was honest, if complicated.',
+        failureText: '{subject} found the conversation awkward. He gave you little to go on.',
+        pendingText: '{subject} is thinking it over. You will have your answer soon enough.',
+      },
+    ],
+  },
+
+  {
+    id: 'rel_sauro_courtship_clarified',
+    title: 'Where He Stands',
+    category: 'personal',
+    isDeferredOutcome: true,
+    actorRequirements: [
+      { slot: 'subject', criteria: { sex: 'male', minAge: 18 } },
+      { slot: 'pursuer', criteria: { sex: 'female', sauromatianHeritage: true, minAge: 16 }, isOptional: true },
+    ],
+    weight: 1,
+    cooldown: 0,
+    isUnique: false,
+    description:
+      '{subject} has had time to think. Whether {subject.he} is drawn to {pursuer} or ' +
+      'unsettled by {pursuer.her} attention, {subject.he} comes to you now with a clear answer. ' +
+      '{subject.He} will not be evasive about it.',
+    choices: [
+      {
+        id: 'acknowledge_bond',
+        label: 'He is open to it — acknowledge the bond informally.',
+        description: 'No ceremony, but a real understanding between them.',
+        consequences: [
+          { type: 'modify_opinion_pair', target: '{subject}', value: 15, params: { slotB: '{pursuer}', label: 'Mutual understanding' } },
+        ],
+      },
+      {
+        id: 'formalise_betrothal',
+        label: 'Formalise this as a betrothal now.',
+        description: 'A significant step. Clears the ambition entirely.',
+        consequences: [
+          { type: 'modify_opinion_pair', target: '{subject}', value: 25, params: { slotB: '{pursuer}', label: 'Betrothed' } },
+          { type: 'clear_ambition', target: '{pursuer}', value: 0 },
+        ],
+      },
+      {
+        id: 'reassure_subject',
+        label: 'Reassure {subject} — he owes nothing.',
+        description: 'He walks away unburdened. She walks away disappointed.',
+        consequences: [
+          { type: 'modify_opinion', target: '{subject}', value: 10 },
+          { type: 'modify_opinion', target: '{pursuer}', value: -8 },
+        ],
+      },
+      {
+        id: 'encourage_time',
+        label: 'Encourage him to give it more time.',
+        description: 'A modest hope left open. Not a rejection, not a promise.',
+        consequences: [
+          { type: 'modify_opinion_pair', target: '{subject}', value: 3, params: { slotB: '{pursuer}', label: 'Lingering possibility' } },
+          { type: 'modify_opinion', target: '{pursuer}', value: -5 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'rel_imanian_courtship_conflict',
+    title: 'It Is Not Our Way',
+    category: 'personal',
+    prerequisites: [
+      { type: 'has_person_with_ambition', params: { ambitionId: 'seek_companion' } },
+    ],
+    actorRequirements: [
+      { slot: 'dissenter', criteria: { sex: 'male', minAge: 18, maritalStatus: 'unmarried', religion: 'imanian_orthodox' } },
+      { slot: 'pursuer',   criteria: { sex: 'female', sauromatianHeritage: true, minAge: 16, hasAmbitionType: 'seek_companion' } },
+    ],
+    weight: 2,
+    cooldown: 10,
+    isUnique: false,
+    description:
+      '{dissenter} comes to you with the blunt discomfort of a man who does not know how ' +
+      'to ask for what he needs tactfully. The women here — {pursuer} specifically — pursue ' +
+      'in ways that violate everything his upbringing told him about how such things should work. ' +
+      '{dissenter.He} is not angry. But {dissenter.he} is asking you to do something.',
+    choices: [
+      {
+        id: 'explain_custom',
+        label: "Explain Sauromatian custom — ask him to keep an open mind.",
+        description: 'He feels heard. Whether he truly listens is another matter.',
+        consequences: [
+          { type: 'modify_opinion', target: '{dissenter}', value: 5 },
+        ],
+        deferredEventId: 'rel_imanian_gradual_acceptance',
+        deferredTurns: 4,
+        pendingText: '{dissenter} has taken it under consideration. Time will tell.',
+      },
+      {
+        id: 'validate_separation',
+        label: 'Validate his feelings — create more social separation.',
+        description: 'Expensive in goodwill toward your Sauromatian settlers, but he will feel safe.',
+        consequences: [
+          { type: 'modify_opinion', target: '{dissenter}', value: 15 },
+          { type: 'modify_opinion', target: '{pursuer}', value: -8 },
+          { type: 'modify_cultural_blend', target: 'settlement', value: 0.02 },
+        ],
+      },
+      {
+        id: 'match_him',
+        label: 'Arrange a formal introduction to a willing Sauromatian woman.',
+        description: 'Skip the uncertainty — bring them together directly.',
+        consequences: [
+          { type: 'modify_opinion', target: '{dissenter}', value: 20 },
+          { type: 'modify_opinion', target: '{pursuer}', value: 10 },
+        ],
+      },
+      {
+        id: 'firm_stand',
+        label: "Tell him this is her home too — he adjusts, or he is unhappy.",
+        description: 'She will appreciate the defence. He will resent it.',
+        consequences: [
+          { type: 'modify_opinion', target: '{dissenter}', value: -15 },
+          { type: 'modify_opinion', target: '{pursuer}', value: 8 },
+          { type: 'modify_cultural_blend', target: 'settlement', value: -0.02 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'rel_imanian_gradual_acceptance',
+    title: 'He Has Watched, and Decided',
+    category: 'personal',
+    isDeferredOutcome: true,
+    actorRequirements: [
+      { slot: 'dissenter', criteria: { sex: 'male', minAge: 18, religion: 'imanian_orthodox' } },
+    ],
+    weight: 1,
+    cooldown: 0,
+    isUnique: false,
+    description:
+      '{dissenter} has had time to observe. Perhaps the Sauromatian women\'s directness is ' +
+      'not what {dissenter.he} feared. Perhaps it is worse in person than in principle. ' +
+      'You will know from {dissenter.his} face before {dissenter.he} speaks.',
+    choices: [
+      {
+        id: 'resolve',
+        label: 'Hear what he has decided.',
+        description: 'The outcome rests on how well your council read the situation.',
+        skillCheck: { skill: 'custom', difficulty: 35, actorSelection: 'best_council' },
+        onSuccess: [
+          { type: 'modify_opinion', target: '{dissenter}', value: 12 },
+          { type: 'modify_opinion', target: '{dissenter}', value: 3 },
+        ],
+        onFailure: [
+          { type: 'modify_opinion', target: '{dissenter}', value: -5 },
+        ],
+        consequences: [],
+        successText: '{dissenter} has found his footing. His discomfort has not vanished, but he has stopped fighting it.',
+        failureText: '{dissenter} came away no more settled than before. The friction will continue.',
+      },
+    ],
+  },
+
+  {
+    id: 'rel_keth_aval_request',
+    title: 'A Proper Test',
+    category: 'personal',
+    prerequisites: [
+      { type: 'has_person_with_ambition', params: { ambitionId: 'seek_spouse' } },
+      { type: 'min_population', params: { value: 5 } },
+    ],
+    actorRequirements: [
+      { slot: 'tester',    criteria: { sex: 'female', sauromatianHeritage: true, minAge: 25, maxAge: 50 } },
+      { slot: 'subject',   criteria: { sex: 'male', maritalStatus: 'unmarried', minAge: 18 } },
+      { slot: 'petitioner', criteria: { sex: 'female', sauromatianHeritage: true, maritalStatus: 'unmarried', minAge: 16, hasAmbitionType: 'seek_spouse' } },
+    ],
+    weight: 1,
+    cooldown: 12,
+    isUnique: false,
+    description:
+      '{tester} comes to you with a request that {tester.she} frames as cultural duty: ' +
+      'before {petitioner} can commit to {subject}, her family needs to know he is capable. ' +
+      'This is the Keth-Aval — the testing visit of Sauromatian tradition. {tester} will ' +
+      'spend a fortnight in close company with {subject}. {tester.She} is not asking for ' +
+      'your blessing, exactly. But {tester.she} is asking that you not object.',
+    choices: [
+      {
+        id: 'allow',
+        label: 'Allow it — this is Sauromatian custom and it is not your business.',
+        description: 'The test proceeds. The result will come in time.',
+        consequences: [
+          { type: 'modify_opinion', target: '{tester}',    value: 10 },
+          { type: 'modify_opinion', target: '{petitioner}', value: 8 },
+          { type: 'modify_opinion', target: '{subject}',   value: 5 },
+        ],
+        deferredEventId: 'rel_keth_aval_outcome',
+        deferredTurns: 3,
+        pendingText: 'The Keth-Aval is underway. The settlement watches quietly.',
+      },
+      {
+        id: 'allow_with_reservations',
+        label: 'Allow it, but make your discomfort clear.',
+        description: 'The test proceeds but you have put your mark on it.',
+        consequences: [
+          { type: 'modify_opinion', target: '{tester}',    value: 5 },
+          { type: 'modify_opinion', target: '{petitioner}', value: 4 },
+          { type: 'modify_cultural_blend', target: 'settlement', value: 0.01 },
+        ],
+        deferredEventId: 'rel_keth_aval_outcome',
+        deferredTurns: 3,
+        pendingText: 'The Keth-Aval proceeds, under a slight cloud.',
+      },
+      {
+        id: 'decline',
+        label: 'Decline — this settlement follows a single standard.',
+        description: 'Clean and principled. They will not forgive it easily.',
+        consequences: [
+          { type: 'modify_opinion', target: '{tester}',    value: -15 },
+          { type: 'modify_opinion', target: '{petitioner}', value: -12 },
+          { type: 'modify_cultural_blend', target: 'settlement', value: 0.03 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'rel_keth_aval_outcome',
+    title: 'The Verdict',
+    category: 'personal',
+    isDeferredOutcome: true,
+    actorRequirements: [
+      { slot: 'tester',    criteria: { sex: 'female', sauromatianHeritage: true, minAge: 25 } },
+      { slot: 'subject',   criteria: { sex: 'male', minAge: 18 } },
+      { slot: 'petitioner', criteria: { sex: 'female', sauromatianHeritage: true, minAge: 16 } },
+    ],
+    weight: 1,
+    cooldown: 0,
+    isUnique: false,
+    description:
+      '{tester} has drawn {tester.her} conclusions. Whether {tester.she} reports privately ' +
+      'or lets the outcome show in how {tester.she} carries {tester.herself}, the settlement ' +
+      'notices. {petitioner} hears it first.',
+    choices: [
+      {
+        id: 'resolve_verdict',
+        label: 'Hear the verdict.',
+        description: 'Your council\'s diplomatic skill determines whether the result is handled well.',
+        skillCheck: { skill: 'bargaining', difficulty: 30, actorSelection: 'best_council' },
+        onSuccess: [
+          { type: 'modify_opinion_pair', target: '{petitioner}', value: 15, params: { slotB: '{subject}', label: 'Keth-Aval approved' } },
+          { type: 'modify_opinion', target: '{tester}', value: 5 },
+        ],
+        onFailure: [
+          { type: 'modify_opinion', target: '{petitioner}', value: -10 },
+          { type: 'modify_opinion', target: '{subject}',    value: -8 },
+        ],
+        consequences: [],
+        successText: 'The test went well. {tester} reported this with undisguised satisfaction. {petitioner} glows.',
+        failureText: '{tester} voiced concerns. {petitioner} received them quietly. The match is not dead, but it carries doubt now.',
+      },
+    ],
+  },
+
+  {
+    id: 'rel_sauro_rival_claimants',
+    title: 'Two Women, One Man',
+    category: 'personal',
+    prerequisites: [
+      { type: 'has_rival_seekers' },
+    ],
+    actorRequirements: [
+      { slot: 'claimant_a', criteria: { sex: 'female', sauromatianHeritage: true, minAge: 16, hasAmbitionType: 'seek_companion' } },
+      { slot: 'claimant_b', criteria: { sex: 'female', sauromatianHeritage: true, minAge: 16, sameAmbitionTargetAs: 'claimant_a' } },
+      { slot: 'subject',    criteria: { sex: 'male', minAge: 18, resolveFromAmbitionTarget: 'claimant_a' } },
+    ],
+    weight: 2,
+    cooldown: 8,
+    isUnique: false,
+    description:
+      '{claimant_a} and {claimant_b} have both set their attention on {subject}. Among ' +
+      'Sauromatians this would be resolved by custom — they would either agree to share ' +
+      'him or one would yield. But they have not agreed yet, and the daily friction is ' +
+      'visible. {subject} is finding the whole situation either flattering or exhausting, ' +
+      'depending on the man.',
+    choices: [
+      {
+        id: 'let_them_settle',
+        label: 'Let the women work it out — this is their custom.',
+        description: 'Your council\'s cultural knowledge determines whether the agreement holds.',
+        skillCheck: { skill: 'custom', difficulty: 40, actorSelection: 'best_council' },
+        onSuccess: [
+          { type: 'modify_opinion_pair', target: '{claimant_a}', value: 10, params: { slotB: '{claimant_b}', label: 'Reached agreement' } },
+        ],
+        onFailure: [
+          { type: 'modify_opinion_pair', target: '{claimant_a}', value: -15, params: { slotB: '{claimant_b}', label: 'Simmering rivalry' } },
+        ],
+        consequences: [],
+        successText: 'They reached a resolution quietly, in the Sauromatian way. The tension has lifted.',
+        failureText: 'No agreement came. They are polite in front of {subject} and silent to each other everywhere else.',
+      },
+      {
+        id: 'arrange_multi_wife',
+        label: 'Arrange a formal multi-wife household — bring both in.',
+        description: '{subject} had no say in this. He may feel that way for some time.',
+        consequences: [
+          { type: 'modify_opinion', target: '{claimant_a}', value: 20 },
+          { type: 'modify_opinion', target: '{claimant_b}', value: 20 },
+          { type: 'modify_opinion', target: '{subject}',    value: -5 },
+        ],
+      },
+      {
+        id: 'consult_subject',
+        label: 'Speak to {subject} — his preference matters.',
+        description: 'He appreciates being asked. The more favoured woman will have her moment soon.',
+        consequences: [
+          { type: 'modify_opinion', target: '{subject}', value: 15 },
+        ],
+        deferredEventId: 'rel_mutual_attraction',
+        deferredTurns: 2,
+        pendingText: '{subject} has made his preference known privately. A meeting will follow.',
+      },
+      {
+        id: 'discourage_both',
+        label: 'Discourage both — the settlement cannot afford this distraction.',
+        description: 'They will not thank you. {subject} will.',
+        consequences: [
+          { type: 'modify_opinion', target: '{claimant_a}', value: -10 },
+          { type: 'modify_opinion', target: '{claimant_b}', value: -10 },
+          { type: 'modify_opinion', target: '{subject}',    value: 5 },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'rel_child_outside_marriage',
+    title: 'A Child Before Vows',
+    category: 'personal',
+    isDeferredOutcome: true,
+    actorRequirements: [
+      { slot: 'mother', criteria: { sex: 'female', sauromatianHeritage: true, minAge: 16, maritalStatus: 'unmarried' } },
+      { slot: 'father', criteria: { sex: 'male', minAge: 18 }, isOptional: true },
+    ],
+    weight: 1,
+    cooldown: 0,
+    isUnique: false,
+    description:
+      'A child was born last night. The camp knows — children have their own networks for ' +
+      'these things. {mother} is well, the child is healthy. There is no household around ' +
+      'them yet and no ceremony, just a new life and the question of where it fits.',
+    choices: [
+      {
+        id: 'say_nothing',
+        label: 'Say nothing — this needs no comment from you.',
+        description: 'Sauromatian norm: no stigma, no comment needed.',
+        consequences: [
+          { type: 'modify_opinion', target: '{mother}', value: 4 },
+        ],
+      },
+      {
+        id: 'welcome_publicly',
+        label: 'Welcome the child publicly — a good thing for the settlement.',
+        description: 'She will feel the warmth of it. The Company will note the loosening of standards.',
+        consequences: [
+          { type: 'modify_opinion', target: '{mother}', value: 12 },
+          { type: 'modify_cultural_blend', target: 'settlement', value: -0.01 },
+          { type: 'modify_standing', target: 'company', value: -1 },
+        ],
+      },
+      {
+        id: 'encourage_arrangement',
+        label: 'Encourage a formal arrangement between the two.',
+        description: 'A gentle push toward something lasting.',
+        consequences: [
+          { type: 'modify_opinion', target: '{mother}', value: 8 },
+          { type: 'modify_opinion', target: '{father}', value: 6 },
+        ],
+        followUpEventId: 'rel_mutual_attraction',
+      },
+      {
+        id: 'expect_bonds',
+        label: 'Express that the settlement expects formal bonds for new children.',
+        description: 'The Company will appreciate the order. She will not.',
+        consequences: [
+          { type: 'modify_opinion', target: '{mother}', value: -8 },
+          { type: 'modify_cultural_blend', target: 'settlement', value: 0.02 },
+          { type: 'modify_standing', target: 'company', value: 1 },
         ],
       },
     ],

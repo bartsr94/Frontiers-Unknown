@@ -62,7 +62,6 @@ interface FilterState {
 // Roles that can be assigned manually. 'builder' and 'away' are managed by
 // their respective systems and are locked from direct assignment.
 const ASSIGNABLE_ROLES: WorkRole[] = [
-  'farmer',
   'gather_food',
   'gather_stone',
   'gather_lumber',
@@ -70,6 +69,7 @@ const ASSIGNABLE_ROLES: WorkRole[] = [
   'craftsman',
   'healer',
   'guard',
+  'farmer',
   'herder',
   'blacksmith',
   'tailor',
@@ -408,9 +408,9 @@ export default function PeopleView() {
             style={style}
             onClick={e => e.stopPropagation()}
           >
-            {/* Farming & Gathering group */}
-            <div className="px-2 py-0.5 text-[9px] text-stone-500 uppercase tracking-wider font-semibold mt-0.5">Farming &amp; Gathering</div>
-            {(['farmer', 'gather_food', 'gather_stone', 'gather_lumber'] satisfies WorkRole[]).map(r => (
+            {/* Gathering group */}
+            <div className="px-2 py-0.5 text-[9px] text-stone-500 uppercase tracking-wider font-semibold mt-0.5">Gathering</div>
+            {(['gather_food', 'gather_stone', 'gather_lumber'] satisfies WorkRole[]).map(r => (
               <button
                 key={r}
                 onClick={() => { assignRole(person.id, r); setRolePickerId(null); setPickerPos(null); }}
@@ -438,7 +438,7 @@ export default function PeopleView() {
             ))}
             {/* Trades group */}
             <div className="px-2 py-0.5 text-[9px] text-stone-500 uppercase tracking-wider font-semibold mt-1 border-t border-stone-700 pt-1">Trades</div>
-            {(['herder', 'blacksmith', 'tailor', 'brewer', 'miller'] satisfies WorkRole[]).map(r => {
+            {(['farmer', 'herder', 'blacksmith', 'tailor', 'brewer', 'miller'] satisfies WorkRole[]).map(r => {
               const buildings = gameState?.settlement.buildings ?? [];
               const matchBuildings = buildings.filter(b => BUILDING_CATALOG[b.defId]?.workerRole === r);
               const totalSlots = matchBuildings.reduce((sum, b) => sum + (BUILDING_CATALOG[b.defId]?.workerSlots ?? 0), 0);

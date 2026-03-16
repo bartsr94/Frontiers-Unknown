@@ -20,6 +20,7 @@ import { averageBloodlines, blendTraitDistributions } from '../../simulation/gen
 import { resolveGenderRatio } from '../../simulation/genetics/gender-ratio';
 import type { Person } from '../../simulation/population/person';
 import { getOpinion, MARRIAGE_REFUSAL_THRESHOLD } from '../../simulation/population/opinions';
+import { SAUROMATIAN_CULTURE_IDS } from '../../simulation/population/culture';
 
 // ─── Mini helpers ─────────────────────────────────────────────────────────────
 
@@ -418,6 +419,12 @@ export default function MarriageDialog({ onClose }: MarriageDialogProps) {
                 {langCompat === 'partial' && (
                   <p className="mt-2 text-stone-400 text-xs border border-stone-600 rounded px-2 py-1 bg-stone-900/40">
                     ◌ Partial understanding — communication will take effort.
+                  </p>
+                )}
+                {SAUROMATIAN_CULTURE_IDS.has(selectedFemale.heritage.primaryCulture) &&
+                  !SAUROMATIAN_CULTURE_IDS.has(selectedMale.heritage.primaryCulture) && (
+                  <p className="mt-2 text-teal-400 text-xs border border-teal-800 rounded px-2 py-1 bg-teal-950/40">
+                    ◈ Sauromatian courtship may precede a formal arrangement — this is expected, not a complication.
                   </p>
                 )}
               </div>

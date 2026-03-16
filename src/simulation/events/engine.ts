@@ -7,7 +7,7 @@
  * `src/simulation/events/definitions/`.
  */
 
-import type { SkillId, DerivedSkillId, TraitId, CultureId, ReligionId, SocialStatus, WorkRole, HouseholdRole } from '../population/person';
+import type { SkillId, DerivedSkillId, TraitId, CultureId, ReligionId, SocialStatus, WorkRole, HouseholdRole, AmbitionId } from '../population/person';
 
 // ─── Consequence Types ───────────────────────────────────────────────────────
 
@@ -99,7 +99,15 @@ export type ConsequenceType =
    * Used by settlement-level happiness events (town meeting, etc.).
    * No `target` or `value` needed.
    */
-  | 'reset_low_morale';
+  | 'reset_low_morale'
+  /**
+   * Performs a marriage between two actors.
+   * `target` = slot token for one party (e.g. `'{groom}'`).
+   * `params.partnerSlot` = slot token for the other party (e.g. `'{bride}'`).
+   * Silently skipped if `canMarry` returns false (e.g., opinion gate not met,
+   * already married, too closely related).
+   */
+  | 'perform_marriage';
 
 // ─── Event Category ──────────────────────────────────────────────────────────
 
@@ -174,7 +182,9 @@ export type PrerequisiteType =
   /** True when tribalPressureTurns (Imanian-zone seasons) is >= the given value (params: { turns: number }). */
   | 'min_tribal_pressure_turns'
   /** True when at least one faction of the given type is active (params?: { type: FactionType }; omit to check any faction). */
-  | 'has_active_faction';
+  | 'has_active_faction'
+  /** True when two or more Sauromatian women hold seek_companion or seek_spouse ambitions targeting the same man. */
+  | 'has_rival_seekers';
 
 // ─── Prerequisite & Requirement Interfaces ────────────────────────────────────
 
@@ -226,6 +236,30 @@ export interface ActorCriteria {
    * Useful for selecting "native" settlers regardless of their specific sub-group.
    */
   sauromatianHeritage?: boolean;
+  /**
+   * Requires this actor's ambition.targetPersonId to match the named slot's
+   * ambition.targetPersonId. Both must have non-null ambition targets.
+   * Used to ensure two women are chasing the same man.
+   */
+  sameAmbitionTargetAs?: string;
+  /**
+   * Requires this actor to BE the person pointed to by the named slot's
+   * ambition.targetPersonId. Used to bind the shared target as a third actor.
+   */
+  resolveFromAmbitionTarget?: string;
+  /**
+   * Person must have an active ambition of this type.
+   * Useful for selecting specifically the person whose ambition drives the event.
+   */
+  hasAmbitionType?: AmbitionId;
+  /**
+   * This person must appear in the `childrenIds` array of the person already
+   * bound to the named slot. Slots are resolved in declaration order, so the
+   * parent slot must be declared before the child slot.
+   * Skipped during pre-flight (`canResolveActors`) when `boundActors` is absent;
+   * enforced during actual actor selection.
+   */
+  childOfSlot?: string;
 }
 
 /**
@@ -409,8 +443,9 @@ export interface EventConsequence {
    * - add_trait / remove_trait: the TraitId string
    * - trigger_event: the follow-up event ID string
    * - kill_person / wound_person / start_pregnancy: ignored (use `target`)
+   * - perform_marriage / reset_low_morale / clear_ambition: not used; omit or set to 0
    */
-  value: number | string | boolean;
+  value?: number | string | boolean;
   /**
    * Optional extra parameters used by complex consequence types.
    * add_person keys: sex, ethnicGroup, minAge, maxAge, religion, socialStatus

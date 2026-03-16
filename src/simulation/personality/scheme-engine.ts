@@ -19,6 +19,7 @@
 import type { Person, PersonScheme, SchemeType, SkillId } from '../population/person';
 import type { NamedRelationshipType } from '../population/person';
 import { getEffectiveOpinion } from '../population/opinions';
+import { SAUROMATIAN_CULTURE_IDS } from '../population/culture';
 import type { SeededRNG } from '../../utils/rng';
 import { clamp } from '../../utils/math';
 import { debugLog } from '../../utils/debug-logger';
@@ -142,6 +143,22 @@ export function generateScheme(
   rng: SeededRNG,
   context?: SchemeContext,
 ): PersonScheme | null {
+  // 1a. scheme_court_person (Sauromatian women) — active seek_companion ambition unlocks
+  //     courtship scheme at a lower opinion threshold (25 vs 50).
+  if (
+    person.sex === 'female' &&
+    SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture) &&
+    person.spouseIds.length === 0 &&
+    person.ambition?.type === 'seek_companion'
+  ) {
+    const candidates = candidatesWithOpinion(person, people, 25)
+      .filter(c => c.sex === 'male' && c.spouseIds.length === 0);
+    const target = pickBestTarget(person, candidates, rng);
+    if (target) {
+      return { type: 'scheme_court_person', targetId: target.id, progress: 0, startedTurn: currentTurn, revealedToPlayer: false };
+    }
+  }
+
   // 1. scheme_court_person — passionate or romantic; unmarried; opinion ≥ 50 for a target
   if (hasTrait(person, 'passionate', 'romantic') && person.spouseIds.length === 0) {
     const candidates = candidatesWithOpinion(person, people, COURT_OPINION_MIN)
@@ -410,12 +427,14 @@ function resolveSchemeCompletion(
       };
     }
 
-    case 'scheme_court_person':
+    case 'scheme_court_person': {
+      const isSauro = SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture);
       return {
         updatedPerson: { ...person, activeScheme: { ...scheme, revealedToPlayer: true } },
-        eventId: 'sch_courtship_discovered',
+        eventId: isSauro ? 'sch_sauro_courtship_open' : 'sch_courtship_discovered',
         silent: false,
       };
+    }
 
     case 'scheme_convert_faith':
       return {

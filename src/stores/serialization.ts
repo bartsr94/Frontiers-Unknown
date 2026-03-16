@@ -169,6 +169,7 @@ export function deserializeGameState(json: string): GameState {
     settlement: {
       ...(s.settlement as typeof s.settlement),
       religiousPolicy: ((s.settlement as Partial<typeof s.settlement>).religiousPolicy) ?? 'tolerant',
+      courtshipNorms:  ((s.settlement as Partial<typeof s.settlement>).courtshipNorms)  ?? 'mixed',
       buildings: (s.settlement as typeof s.settlement).buildings.map(b => ({
         ...b,
         ownerHouseholdId:  (b as Partial<typeof b>).ownerHouseholdId  ?? null,

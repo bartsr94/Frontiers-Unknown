@@ -18,7 +18,7 @@ import {
 } from '../../simulation/buildings/building-effects';
 import { getAvailableCrafts, CRAFT_RECIPES, validateCraft } from '../../simulation/economy/crafting';
 import type { CraftRecipeId } from '../../simulation/economy/crafting';
-import type { BuildingId, BuildingStyle, BuiltBuilding, ConstructionProject, ResourceType, ReligiousPolicy } from '../../simulation/turn/game-state';
+import type { BuildingId, BuildingStyle, BuiltBuilding, ConstructionProject, ResourceType, ReligiousPolicy, CourtshipNorms } from '../../simulation/turn/game-state';
 import { RESOURCE_EMOJI } from '../shared/resource-display';
 import { computeReligiousTension } from '../../simulation/population/culture';
 import { IdentityScale } from '../components/IdentityScale';
@@ -344,6 +344,75 @@ const POLICY_LABELS: Record<ReligiousPolicy, string> = {
   wheel_permitted:         'Wheel Permitted',
   hidden_wheel_recognized: 'Hidden Wheel Recognized',
 };
+
+const COURTSHIP_LABELS: Record<CourtshipNorms, string> = {
+  traditional: 'Traditional (Imanian)',
+  mixed:       'Mixed (Settled)',
+  open:        'Open (Sauromatian)',
+};
+
+const COURTSHIP_DESCRIPTIONS: Record<CourtshipNorms, string> = {
+  traditional: 'Marriages arranged by family elders. Courtship by women is frowned upon.',
+  mixed:       'Family approval expected, but individuals may show interest openly.',
+  open:        'Women may pursue directly. Matches follow Sauromatian custom.',
+};
+
+function CourtshipPanel({ disabled }: { disabled: boolean }) {
+  const gameState         = useGameStore(s => s.gameState);
+  const setCourtshipNorms = useGameStore(s => s.setCourtshipNorms);
+
+  if (!gameState) return null;
+
+  const norms = gameState.settlement.courtshipNorms ?? 'mixed';
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Courtship Custom</p>
+      <select
+        disabled={disabled}
+        value={norms}
+        onChange={e => setCourtshipNorms(e.target.value as CourtshipNorms)}
+        className="w-full text-xs bg-stone-800 border border-stone-600 text-slate-300 rounded px-2 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {(['traditional', 'mixed', 'open'] as CourtshipNorms[]).map(n => (
+          <option key={n} value={n}>{COURTSHIP_LABELS[n]}</option>
+        ))}
+      </select>
+      <p className="text-xs text-slate-500">{COURTSHIP_DESCRIPTIONS[norms]}</p>
+    </div>
+  );
+}
+
+function CourtshipNudgeBanner() {
+  const pending             = useGameStore(s => s.pendingCourtshipNudge);
+  const setCourtshipNorms   = useGameStore(s => s.setCourtshipNorms);
+  const dismissNudge        = useGameStore(s => s.dismissCourtshipNudge);
+
+  if (!pending) return null;
+
+  return (
+    <div className="mt-2 p-2 bg-indigo-950/70 border border-indigo-700 rounded text-xs text-indigo-200 space-y-2">
+      <p>
+        <span className="font-semibold">Sauromatian custom:</span> Recognising the Hidden Wheel
+        sits uneasily with strict Imanian courtship norms. Consider shifting to Mixed custom.
+      </p>
+      <div className="flex gap-2">
+        <button
+          onClick={() => { setCourtshipNorms('mixed'); dismissNudge(); }}
+          className="flex-1 px-2 py-1 bg-indigo-700 hover:bg-indigo-600 rounded text-white"
+        >
+          Shift to Mixed
+        </button>
+        <button
+          onClick={dismissNudge}
+          className="flex-1 px-2 py-1 bg-stone-700 hover:bg-stone-600 rounded text-slate-300"
+        >
+          Keep Traditional
+        </button>
+      </div>
+    </div>
+  );
+}
 
 const FAITH_LABELS: Record<string, string> = {
   imanian_orthodox:       'Solar Church',
@@ -756,6 +825,9 @@ export default function SettlementView() {
           />
           <div className="border-b border-stone-700 my-4" />
           <ReligionPanel disabled={!canManage} />
+          <div className="border-b border-stone-700 my-4" />
+          <CourtshipPanel disabled={!canManage} />
+          <CourtshipNudgeBanner />
         </div>
       </div>
 

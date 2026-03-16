@@ -31,8 +31,17 @@ import type { SeededRNG } from '../../utils/rng';
 /**
  * Returns true if the person satisfies every populated field in `criteria`.
  * Use this for both eligibility gates (no RNG) and search loops.
+ *
+ * `boundActors` and `people` are optional — required only when criteria includes
+ * `sameAmbitionTargetAs` or `resolveFromAmbitionTarget` (which depend on already-
+ * resolved slots). When omitted those two checks are skipped (pre-flight mode).
  */
-export function matchesCriteria(person: Person, criteria: ActorCriteria): boolean {
+export function matchesCriteria(
+  person: Person,
+  criteria: ActorCriteria,
+  boundActors?: Record<string, string>,
+  people?: Map<string, Person>,
+): boolean {
   // Away and keth_thara persons are off-site and cannot be selected for any event slot.
   if (person.role === 'away' || person.role === 'keth_thara') return false;
   if (criteria.sex !== undefined && person.sex !== criteria.sex) return false;
@@ -55,6 +64,30 @@ export function matchesCriteria(person: Person, criteria: ActorCriteria): boolea
   }
   if (criteria.sauromatianHeritage === true &&
       !SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture)) return false;
+  if (criteria.hasAmbitionType !== undefined &&
+      person.ambition?.type !== criteria.hasAmbitionType) return false;
+
+  // Ambition-target cross-slot criteria (require resolved context)
+  if (criteria.sameAmbitionTargetAs !== undefined && boundActors && people) {
+    const refId = boundActors[criteria.sameAmbitionTargetAs];
+    const ref = refId ? people.get(refId) : undefined;
+    if (!ref?.ambition?.targetPersonId) return false;
+    if (person.ambition?.targetPersonId !== ref.ambition.targetPersonId) return false;
+  }
+
+  if (criteria.resolveFromAmbitionTarget !== undefined && boundActors && people) {
+    const refId = boundActors[criteria.resolveFromAmbitionTarget];
+    const ref = refId ? people.get(refId) : undefined;
+    const expectedId = ref?.ambition?.targetPersonId;
+    if (!expectedId || person.id !== expectedId) return false;
+  }
+
+  if (criteria.childOfSlot !== undefined && boundActors && people) {
+    const parentId = boundActors[criteria.childOfSlot];
+    const parent = parentId ? people.get(parentId) : undefined;
+    if (!parent || !parent.childrenIds.includes(person.id)) return false;
+  }
+
   return true;
 }
 
@@ -109,9 +142,10 @@ export function selectActor(
   state: GameState,
   rng: SeededRNG,
   excludeIds: string[] = [],
+  boundActors?: Record<string, string>,
 ): Person | null {
   const pool = Array.from(state.people.values()).filter(
-    p => !excludeIds.includes(p.id) && matchesCriteria(p, criteria),
+    p => !excludeIds.includes(p.id) && matchesCriteria(p, criteria, boundActors, state.people),
   );
   if (pool.length === 0) return null;
   const idx = rng.nextInt(0, pool.length - 1);
@@ -137,7 +171,7 @@ export function resolveActors(
 
   for (const req of requirements) {
     const required = req.required !== false; // default true
-    const person = selectActor(req.criteria, state, rng, claimedIds);
+    const person = selectActor(req.criteria, state, rng, claimedIds, result);
     if (person === null) {
       if (required) return null;
       // Optional slot — leave empty, continue

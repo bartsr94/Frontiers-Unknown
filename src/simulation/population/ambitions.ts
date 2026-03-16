@@ -73,10 +73,27 @@ export function evaluateAmbition(
 
   const { type, targetPersonId, formedTurn } = person.ambition;
 
-  // Stale after 40 turns regardless of type
-  if (state.turnNumber - formedTurn > 40) return 'failed';
+  // seek_companion stales after 30 turns; all others after 40
+  const staleLimit = type === 'seek_companion' ? 30 : 40;
+  if (state.turnNumber - formedTurn > staleLimit) return 'failed';
 
   switch (type) {
+    case 'seek_companion': {
+      if (!targetPersonId) return 'failed';
+      const target = state.people.get(targetPersonId);
+      if (!target) return 'failed';
+      // Fulfilled if target became a spouse or concubine in her household
+      if (person.spouseIds.includes(targetPersonId)) return 'fulfilled';
+      if (
+        target.householdId !== null &&
+        target.householdId === person.householdId &&
+        target.householdRole === 'concubine'
+      ) return 'fulfilled';
+      // Failed if target married someone else entirely
+      if (target.spouseIds.length > 0 && !person.spouseIds.includes(target.spouseIds[0]!)) return 'failed';
+      return 'ongoing';
+    }
+
     case 'seek_spouse': {
       if (!targetPersonId) return 'failed';
       const target = state.people.get(targetPersonId);
@@ -170,11 +187,12 @@ export function evaluateAmbition(
  * Determines what ambition type (if any) a person would naturally develop.
  * Checked in priority order — first match wins.
  *
- * 1. `seek_spouse`         — unmarried adult ≥ 18, opinion ≥ 40 of eligible partner
+ * 0. `seek_companion`      — Sauromatian woman, unmarried ≥ 16, pursues an available man (pre-marriage phase)
+ * 1. `seek_spouse`         — unmarried adult ≥ 18, opinion threshold (5 for Sauro women, 25 otherwise)
  * 2. `seek_council`        — not on council, leadership OR diplomacy ≥ 46 (Very Good)
  * 3. `seek_seniority`      — wife in household with ≥ 3 wives, hostile opinion of senior wife
  * 4. `seek_cultural_duty`  — Sauromatian male age 16–24, not already on keth-thara
- * 5. `seek_informal_union` — non-Sauromatian male ≥ 18, opinion ≥ 50 of eligible woman
+ * 5. `seek_informal_union` — non-Sauromatian male ≥ 18, opinion ≥ 25 of eligible woman
  */
 export function determineAmbitionType(
   person: Person,
@@ -186,17 +204,51 @@ export function determineAmbitionType(
   if (person.role === 'away') return null;
   if (person.socialStatus === 'thrall') return null;
 
+  // 0. seek_companion — Sauromatian woman actively pursues an available man
+  //    (the pre-marriage testing phase; checked first for eligible women)
+  if (
+    person.sex === 'female' &&
+    SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture) &&
+    person.spouseIds.length === 0 &&
+    person.age >= 16 &&
+    person.socialStatus !== 'thrall'
+  ) {
+    // Only form if courtshipNorms allows it
+    const norms = state.settlement.courtshipNorms ?? 'mixed';
+    if (norms !== 'traditional') {
+      const companionTargets = Array.from(state.people.values()).filter(
+        other =>
+          other.id !== person.id &&
+          other.sex === 'male' &&
+          other.spouseIds.length === 0 &&
+          other.age >= 18 &&
+          getEffectiveOpinion(person, other.id) >= 0,
+      );
+      if (companionTargets.length > 0) {
+        const target = companionTargets[rng.nextInt(0, companionTargets.length - 1)]!;
+        return { type: 'seek_companion', targetPersonId: target.id };
+      }
+    }
+  }
+
   // 1. seek_spouse — unmarried adult with at least a neutral opinion of an eligible partner.
-  // Threshold kept low (20) so Imanian men can develop this ambition toward Sauromatian women
-  // even when language/culture differences create a modest initial opinion gap.
+  // Threshold differentiated by culture:
+  //   - Sauromatian women: 5 (she builds from near-neutral)
+  //   - Imanian / orthodox: 25 (formal courtship requires meaningful positive regard)
   if (person.spouseIds.length === 0 && person.age >= 18) {
+    const isSauroFemale =
+      person.sex === 'female' &&
+      SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture);
+    const spouseOpinionThreshold = isSauroFemale ? 5 : 25;
+
+    // Sauromatian women also require the target to have room for another wife
     const candidates = Array.from(state.people.values()).filter(
       other =>
         other.id !== person.id &&
         other.sex !== person.sex &&
         other.spouseIds.length === 0 &&
         other.age >= 16 &&
-        getEffectiveOpinion(person, other.id) >= 20,
+        getEffectiveOpinion(person, other.id) >= spouseOpinionThreshold,
     );
     if (candidates.length > 0) {
       const target = candidates[rng.nextInt(0, candidates.length - 1)]!;
@@ -366,7 +418,17 @@ export function clearAmbition(person: Person): Person {
  */
 export function getAmbitionLabel(ambition: PersonAmbition): string {
   switch (ambition.type) {
-    case 'seek_spouse':          return 'Seeking a companion';
+    case 'seek_companion': {
+      const targetName = ambition.targetPersonId
+        ? (() => {
+            // nameOf helper is not available here; return the ID as a fallback
+            // (PersonDetail resolves the name when displaying)
+            return ambition.targetPersonId;
+          })()
+        : null;
+      return `Seeking a companion${targetName ? ` — ${targetName}` : ''}`;
+    }
+    case 'seek_spouse':          return 'Seeking a spouse';
     case 'seek_council':         return 'Seeking a council seat';
     case 'seek_seniority':       return 'Seeking senior-wife standing';
     case 'seek_cultural_duty':   return 'Called to keth-thara';

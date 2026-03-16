@@ -19,6 +19,7 @@
 import type { Person, OpinionModifier } from '../population/person';
 import type { TraitId } from '../personality/traits';
 import { TRAIT_CONFLICTS, TRAIT_SHARED_BONUS } from '../../data/trait-affinities';
+import { SAUROMATIAN_CULTURE_IDS } from './culture';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -514,6 +515,117 @@ export function applySharedRoleOpinionDrift(
       if (bKnowsA) {
         const pBNow = updated.get(b.id)!;
         updated.set(b.id, { ...pBNow, relationships: new Map(pBNow.relationships).set(a.id, clamp(curBA)) });
+      }
+    }
+  }
+
+  return updated;
+}
+
+// ─── Courtship opinion drift ─────────────────────────────────────────────────
+
+/**
+ * Per-turn opinion adjustments driven by Sauromatian courtship dynamics.
+ *
+ * Rule 1 — Active pursuit: Sauromatian woman with seek_companion/seek_spouse
+ *   ambition aimed at a specific man → both gain +1/turn toward each other.
+ *
+ * Rule 2 — Proximity without pursuit: unmarried Sauromatian woman co-habiting
+ *   with an unmarried man (same household) and opinion ≥ 0 → accumulates +0.5
+ *   toward him (applied every other turn via turnNumber parity, avoiding floats).
+ *
+ * Rule 3 — Imanian discomfort: Imanian-primary, imanian_orthodox man whose
+ *   opinion of a pursuing Sauromatian woman is < 30 → loses 1/turn. Stops when
+ *   he marries her or his opinion drops below −20 (hard refusal state).
+ *
+ * Rates are doubled when courtshipNorms === 'open', halved-equivalent for
+ * 'traditional' (seek_companion cannot form, so Rule 1 rarely triggers).
+ * This function is O(n) for Rule 1/3 and O(n²) guarded by OPINION_TRACK_CAP.
+ */
+export function applyCourtshipOpinionDrift(
+  people: Map<string, Person>,
+  courtshipNorms: 'traditional' | 'mixed' | 'open' = 'mixed',
+  turnNumber = 0,
+): Map<string, Person> {
+  if (people.size > OPINION_TRACK_CAP) return people;
+
+  const multiplier = courtshipNorms === 'open' ? 2 : 1;
+  const updated = new Map(people);
+
+  const applyDelta = (personId: string, targetId: string, delta: number) => {
+    const p = updated.get(personId);
+    if (!p) return;
+    const cur = p.relationships.get(targetId) ?? 0;
+    const next = Math.max(-100, Math.min(100, cur + delta));
+    if (next !== cur) {
+      updated.set(personId, {
+        ...p,
+        relationships: new Map(p.relationships).set(targetId, next),
+      });
+    }
+  };
+
+  for (const person of Array.from(people.values())) {
+    // Rule 1: Active pursuit drift (Sauromatian woman → target, and target → her)
+    if (
+      person.sex === 'female' &&
+      SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture) &&
+      person.ambition &&
+      (person.ambition.type === 'seek_companion' || person.ambition.type === 'seek_spouse') &&
+      person.ambition.targetPersonId
+    ) {
+      const targetId = person.ambition.targetPersonId;
+      if (people.has(targetId)) {
+        applyDelta(person.id, targetId, 1 * multiplier);
+      }
+    }
+
+    // Rule 2: Proximity without explicit pursuit (every-other-turn soft +0.5)
+    if (
+      person.sex === 'female' &&
+      SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture) &&
+      person.spouseIds.length === 0 &&
+      person.householdId &&
+      (!person.ambition || (person.ambition.type !== 'seek_companion' && person.ambition.type !== 'seek_spouse'))
+    ) {
+      // Apply +1 on every other turn to simulate +0.5/turn average
+      if (turnNumber % 2 === 0) {
+        for (const other of Array.from(people.values())) {
+          if (
+            other.sex === 'male' &&
+            other.householdId === person.householdId &&
+            other.spouseIds.length === 0 &&
+            (person.relationships.get(other.id) ?? 0) >= 0
+          ) {
+            applyDelta(person.id, other.id, 1); // net +0.5/turn
+          }
+        }
+      }
+    }
+
+    // Rule 3: Imanian discomfort from Sauromatian pursuit
+    if (
+      person.sex === 'male' &&
+      !SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture) &&
+      person.religion === 'imanian_orthodox'
+    ) {
+      // Check if any Sauromatian woman has seek_companion targeting him
+      for (const pursuer of Array.from(people.values())) {
+        if (
+          pursuer.sex === 'female' &&
+          SAUROMATIAN_CULTURE_IDS.has(pursuer.heritage.primaryCulture) &&
+          pursuer.ambition?.type === 'seek_companion' &&
+          pursuer.ambition.targetPersonId === person.id
+        ) {
+          const curOpinion = person.relationships.get(pursuer.id) ?? 0;
+          // Stop if already married her or if opinion is already a hard refusal
+          if (person.spouseIds.includes(pursuer.id)) continue;
+          if (curOpinion < -20) continue;
+          if (curOpinion < 30) {
+            applyDelta(person.id, pursuer.id, -1 * multiplier);
+          }
+          break; // one active pursuer per man is enough
+        }
       }
     }
   }

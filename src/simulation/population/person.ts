@@ -302,6 +302,7 @@ export type HouseholdTradition =
  * - seek_skill_mastery    — person in VG skill tier strives to reach Excellent
  * - seek_legacy           — ageing parent wants all adult children settled
  * - seek_autonomy         — Sauromatian-heritage person chafes under Company authority
+ * - seek_companion        — Sauromatian woman pursues a specific man in the pre-marriage testing phase
  */
 export type AmbitionId =
   | 'seek_spouse'
@@ -313,7 +314,8 @@ export type AmbitionId =
   | 'seek_faith_influence'
   | 'seek_skill_mastery'
   | 'seek_legacy'
-  | 'seek_autonomy';
+  | 'seek_autonomy'
+  | 'seek_companion';
 
 /**
  * A personal goal held by a character.

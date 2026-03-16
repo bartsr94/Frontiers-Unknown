@@ -14,8 +14,8 @@
  *   DUSK   → seasonal effects, quota check (autumn), tribe updates
  */
 
-import type { GameState, Season, ResourceStock, GraveyardEntry, BuiltBuilding, ConstructionProject, QuotaStatus, Household } from './game-state';
-import type { Person, WorkRole } from '../population/person';
+import type { GameState, Season, ResourceStock, GraveyardEntry, BuiltBuilding, ConstructionProject, QuotaStatus, Household, BuildingId, ActivityLogEntry, Faction } from './game-state';
+import type { Person, WorkRole, NamedRelationshipType } from '../population/person';
 import type { SeededRNG } from '../../utils/rng';
 import { clamp } from '../../utils/math';
 import {
@@ -47,6 +47,7 @@ import {
   getLanguageDriftMultiplier,
   getBuildingCulturePull,
   getSkillGrowthBonuses,
+  hasBuilding,
 } from '../buildings/building-effects';
 import { calculateSpoilage } from '../economy/spoilage';
 import {
@@ -55,7 +56,7 @@ import {
   getQuotaEventId,
   applyQuotaResult,
 } from '../economy/company';
-import { applyOpinionDrift, applySharedRoleOpinionDrift, decayOpinions, decayOpinionModifiers, initializeBaselineOpinions } from '../population/opinions';
+import { applyOpinionDrift, applyCourtshipOpinionDrift, applySharedRoleOpinionDrift, decayOpinions, decayOpinionModifiers, initializeBaselineOpinions } from '../population/opinions';
 import { processNamedRelationships } from '../population/named-relationships';
 import { processSchemes } from '../personality/scheme-engine';
 import {
@@ -72,6 +73,7 @@ import type { FactionProcessResult } from '../world/factions';
 import { computeTraitCategoryBoosts, applyTraitOpinionEffects, getTraitSkillGrowthBonuses } from '../personality/trait-behavior';
 import { applyTemporaryTraitExpiry, checkEarnedTraitAcquisition } from '../personality/assignment';
 import { applyHappinessTracking } from '../population/happiness';
+import type { EventCategory } from '../events/engine';
 import {
   assignChildToHousehold,
   pruneOrphanedHouseholds,
@@ -140,7 +142,7 @@ export interface DawnResult {
   /** Buildings completed this dawn (added to Settlement.buildings by the store). */
   completedBuildings: BuiltBuilding[];
   /** Building IDs removed because a completed building replaced them (upgrade chain). */
-  removedBuildingIds: import('./game-state').BuildingId[];
+  removedBuildingIds: BuildingId[];
   /** Updated construction queue after this season's progress. */
   updatedConstructionQueue: ConstructionProject[];
   /** Overcrowding ratio this dawn (populationCount / shelterCapacity). */
@@ -157,7 +159,7 @@ export interface DawnResult {
   /** IDs of households dissolved this dawn (pruned empty households, succession merges). */
   dissolvedHouseholdIds: string[];
   /** Activity log entries for household succession events (head died, new head named, split-offs). */
-  successionLogEntries: import('./game-state').ActivityLogEntry[];
+  successionLogEntries: ActivityLogEntry[];
   /** Household IDs of Sauromatian successions awaiting a council decision event. */
   pendingSauromatianCouncilEventHouseholdIds: string[];
   /** New Ashka-Melathi bonds formed this dawn: [householdId, personAId, personBId]. */
@@ -178,7 +180,7 @@ export interface DawnResult {
    * Per-EventCategory multipliers driven by the settlement's social/personality
    * composition. Passed to drawEvents() as weightBoosts in the store.
    */
-  traitCategoryBoosts: Partial<Record<import('../events/engine').EventCategory, number>>;
+  traitCategoryBoosts: Partial<Record<EventCategory, number>>;
   /**
    * Persons whose WorkRole was auto-assigned by idle role-seeking this turn.
    * The store updates roleAssignedTurn for each entry.
@@ -192,7 +194,7 @@ export interface DawnResult {
     type: 'relationship_formed' | 'relationship_dissolved';
     personId: string;
     targetId: string;
-    relationshipType: import('../population/person').NamedRelationshipType;
+    relationshipType: NamedRelationshipType;
     description: string;
   }>;
   /**
@@ -214,7 +216,7 @@ export interface DawnResult {
    * Updated factions list after membership/strength/demand processing.
    * Replaces GameState.factions in the store.
    */
-  updatedFactions: import('./game-state').Faction[];
+  updatedFactions: Faction[];
   /**
    * Faction events to inject into the pending queue (e.g. fac_faction_demands).
    */
@@ -235,6 +237,12 @@ export interface DawnResult {
   happinessMultipliers: Map<string, number>;
   /** Updated lowMoraleTurns value to apply to GameState. */
   newLowMoraleTurns: number;
+  /**
+   * Births that occurred this dawn, exposed for programmatic event injection.
+   * Each entry records the child's ID, mother's ID, and optional father's ID.
+   * Used by the store to inject rel_child_outside_marriage for unwed Sauromatian mothers.
+   */
+  newBirths: Array<{ childId: string; motherId: string; fatherId: string | null }>;
 }
 
 /** Data returned by processDusk(). The store applies these to GameState. */
@@ -394,10 +402,11 @@ function mergePeopleUpdates(
 
 interface DemographicsResult {
   births: BirthNotification[];
+  newBirths: Array<{ childId: string; motherId: string; fatherId: string | null }>;
   newGraveyardEntries: GraveyardEntry[];
   updatedHouseholds: Map<string, Household>;
   newHouseholds: Map<string, Household>;
-  successionLogEntries: import('./game-state').ActivityLogEntry[];
+  successionLogEntries: ActivityLogEntry[];
   pendingSauromatianCouncilEvents: string[];
 }
 
@@ -416,10 +425,11 @@ function processDemographicPhase(
 ): DemographicsResult {
   const newGraveyardEntries: GraveyardEntry[] = [];
   const births: BirthNotification[] = [];
+  const newBirths: Array<{ childId: string; motherId: string; fatherId: string | null }> = [];
   // Working household map — we accumulate household changes here
   const updatedHouseholds = new Map(state.households);
   const newHouseholds = new Map<string, Household>();
-  const successionLogEntries: import('./game-state').ActivityLogEntry[] = [];
+  const successionLogEntries: ActivityLogEntry[] = [];
   const pendingSauromatianCouncilEvents: string[] = [];
 
   // Resolve due pregnancies.
@@ -429,6 +439,8 @@ function processDemographicPhase(
     rng,
     state.culture.languageDiversityTurns,
   );
+
+  const stateHouseholds = state.households ?? new Map<string, Household>();
 
   for (const result of birthResults) {
     const mother = updatedPeople.get(result.motherId);
@@ -461,7 +473,6 @@ function processDemographicPhase(
     );
     // Sync newHouseholds: any household added to updatedHouseholds that wasn't
     // in state.households is a newly-created one
-    const stateHouseholds = state.households ?? new Map<string, Household>();
     for (const [hhId, hh] of updatedHouseholds) {
       if (!stateHouseholds.has(hhId) && !newHouseholds.has(hhId)) {
         newHouseholds.set(hhId, hh);
@@ -496,6 +507,11 @@ function processDemographicPhase(
       childFamilyName: namedChild.familyName,
       motherId: result.motherId,
       motherSurvived: !result.motherDied,
+    });
+    newBirths.push({
+      childId: namedChild.id,
+      motherId: result.motherId,
+      fatherId: father?.id ?? null,
     });
   }
 
@@ -575,6 +591,7 @@ function processDemographicPhase(
 
   return {
     births,
+    newBirths,
     newGraveyardEntries,
     updatedHouseholds,
     newHouseholds,
@@ -663,8 +680,10 @@ function processHouseholdBonds(
 function processOpinionSystems(
   updatedPeople: Map<string, Person>,
   turnNumber: number,
+  courtshipNorms: 'traditional' | 'mixed' | 'open' = 'mixed',
 ): void {
   mergePeopleUpdates(updatedPeople, applyOpinionDrift(updatedPeople));
+  mergePeopleUpdates(updatedPeople, applyCourtshipOpinionDrift(updatedPeople, courtshipNorms, turnNumber));
   mergePeopleUpdates(updatedPeople, applySharedRoleOpinionDrift(updatedPeople));
   mergePeopleUpdates(updatedPeople, decayOpinions(updatedPeople));
   mergePeopleUpdates(updatedPeople, decayOpinionModifiers(updatedPeople));
@@ -743,9 +762,9 @@ function resolveIdleRoleSeeking(
   buildings: BuiltBuilding[],
   currentTurn: number,
 ): Array<{ personId: string; role: WorkRole }> {
-  const hasFields        = buildings.some(b => b.defId === 'fields');
-  const hasTradingPost   = buildings.some(b => b.defId === 'trading_post');
-  const hasWorkshop      = buildings.some(b => b.defId === 'workshop');
+  const hasFields        = hasBuilding(buildings, 'fields');
+  const hasTradingPost   = hasBuilding(buildings, 'trading_post');
+  const hasWorkshop      = hasBuilding(buildings, 'workshop');
 
   const results: Array<{ personId: string; role: WorkRole }> = [];
 
@@ -816,6 +835,16 @@ function resolveIdleRoleSeeking(
  *   9.   Cultural blend, religion distribution, religious tension, hidden wheel.
  *   9.6  Cultural identity pressure.
  */
+/**
+ * Core dawn-phase processor. Returns a `DawnResult` describing all population,
+ * cultural, economic, and social changes that occurred this turn.
+ *
+ * Internally, `updatedPeople` is a **mutable working map** built from a shallow
+ * clone of `state.people`. Helper functions receive this map and mutate it
+ * in-place for performance (births add entries; deaths remove them). The map
+ * is finalised into the immutable `DawnResult.updatedPeople` return value.
+ * No other part of `state` is mutated.
+ */
 export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
   // 1. Clone people Map and age each person by one season (0.25 years).
   const updatedPeople = new Map<string, Person>();
@@ -835,6 +864,7 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
   // 2–4. Demographics: births, conception, natural death, child mortality.
   const {
     births,
+    newBirths,
     newGraveyardEntries,
     updatedHouseholds: demoHouseholds,
     newHouseholds: demoNewHouseholds,
@@ -945,7 +975,7 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
   );
 
   // 8.8–8.9. Social systems: opinions and ambitions.
-  processOpinionSystems(updatedPeople, state.turnNumber);
+  processOpinionSystems(updatedPeople, state.turnNumber, state.settlement.courtshipNorms ?? 'mixed');
   const ambitionEntries = processAmbitionSystems(updatedPeople, state, rng, state.turnNumber);
 
   // 8.85. Trait-driven opinion drift (jealousy, envy, charm etc.)
@@ -988,7 +1018,7 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
   // 8.9. Trait expiry and earned trait acquisition.
   const traitChanges: Array<{ personId: string; gained?: string; lost?: string }> = [];
   const currentBuiltBuildingIds = new Set(currentBuildings.map(b => b.defId));
-  const settlementHasBuilding = (id: string) => currentBuiltBuildingIds.has(id as import('../../simulation/buildings/building-definitions').BuildingId);
+  const settlementHasBuilding = (id: string) => currentBuiltBuildingIds.has(id as BuildingId);
 
   // Expiry pass
   mergePeopleUpdates(updatedPeople, applyTemporaryTraitExpiry(updatedPeople, state.turnNumber));
@@ -1086,6 +1116,7 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     desertionCandidateIds,
     happinessMultipliers,
     newLowMoraleTurns,
+    newBirths,
   };
 }
 

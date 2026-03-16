@@ -871,3 +871,58 @@ describe('company_standing_below prerequisite', () => {
   });
 });
 
+// ─── has_rival_seekers ────────────────────────────────────────────────────────
+
+describe('checkPrerequisite — has_rival_seekers', () => {
+  function makePersonWithAmbition(
+    id: string,
+    targetId: string,
+    type: 'seek_companion' | 'seek_spouse' = 'seek_companion',
+  ): Person {
+    return {
+      ...makePerson({ id, ambition: {
+        type, intensity: 0.8, targetPersonId: targetId, formedTurn: 0,
+      } }),
+    } as Person;
+  }
+
+  it('returns true when two people share the same ambition targetPersonId', () => {
+    const a = makePersonWithAmbition('a', 'target');
+    const b = makePersonWithAmbition('b', 'target');
+    const event = makeEvent({ prerequisites: [{ type: 'has_rival_seekers' }] });
+    const state = makeState({ people: new Map([['a', a], ['b', b]]) });
+    expect(isEventEligible(event, state)).toBe(true);
+  });
+
+  it('returns false when no shared targets exist', () => {
+    const a = makePersonWithAmbition('a', 'target1');
+    const b = makePersonWithAmbition('b', 'target2');
+    const event = makeEvent({ prerequisites: [{ type: 'has_rival_seekers' }] });
+    const state = makeState({ people: new Map([['a', a], ['b', b]]) });
+    expect(isEventEligible(event, state)).toBe(false);
+  });
+
+  it('returns false when only one person has a seek_companion ambition', () => {
+    const a = makePersonWithAmbition('a', 'target');
+    const event = makeEvent({ prerequisites: [{ type: 'has_rival_seekers' }] });
+    const state = makeState({ people: new Map([['a', a]]) });
+    expect(isEventEligible(event, state)).toBe(false);
+  });
+
+  it('returns false when no person has any ambition', () => {
+    const a = makePerson({ id: 'a', ambition: null });
+    const b = makePerson({ id: 'b', ambition: null });
+    const event = makeEvent({ prerequisites: [{ type: 'has_rival_seekers' }] });
+    const state = makeState({ people: new Map([['a', a as Person], ['b', b as Person]]) });
+    expect(isEventEligible(event, state)).toBe(false);
+  });
+
+  it('also triggers for seek_spouse ambition sharing the same target', () => {
+    const a = makePersonWithAmbition('a', 'target', 'seek_spouse');
+    const b = makePersonWithAmbition('b', 'target', 'seek_spouse');
+    const event = makeEvent({ prerequisites: [{ type: 'has_rival_seekers' }] });
+    const state = makeState({ people: new Map([['a', a], ['b', b]]) });
+    expect(isEventEligible(event, state)).toBe(true);
+  });
+});
+

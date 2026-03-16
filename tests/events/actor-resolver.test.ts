@@ -452,3 +452,113 @@ describe('matchesCriteria — householdRole', () => {
     expect(matchesCriteria(p, { householdRole: 'head' })).toBe(false);
   });
 });
+
+// ─── hasAmbitionType ──────────────────────────────────────────────────────────
+
+describe('matchesCriteria — hasAmbitionType', () => {
+  it('passes when person has the required ambition type', () => {
+    const p = makePerson({
+      ambition: { type: 'seek_companion', intensity: 0.5, targetPersonId: null, formedTurn: 0 },
+    });
+    expect(matchesCriteria(p, { hasAmbitionType: 'seek_companion' })).toBe(true);
+  });
+
+  it('fails when person ambition type differs', () => {
+    const p = makePerson({
+      ambition: { type: 'seek_spouse', intensity: 0.5, targetPersonId: null, formedTurn: 0 },
+    });
+    expect(matchesCriteria(p, { hasAmbitionType: 'seek_companion' })).toBe(false);
+  });
+
+  it('fails when person has no ambition', () => {
+    const p = makePerson({ ambition: null });
+    expect(matchesCriteria(p, { hasAmbitionType: 'seek_companion' })).toBe(false);
+  });
+
+  it('passes any person when criterion is absent', () => {
+    const p = makePerson({ ambition: null });
+    expect(matchesCriteria(p, {})).toBe(true);
+  });
+});
+
+// ─── sameAmbitionTargetAs ─────────────────────────────────────────────────────
+
+describe('matchesCriteria — sameAmbitionTargetAs', () => {
+  it('passes when both persons share the same ambition targetPersonId', () => {
+    const target = makePerson({ sex: 'male', age: 25 });
+    const a = makePerson({
+      sex: 'female',
+      ambition: { type: 'seek_companion', intensity: 0.8, targetPersonId: target.id, formedTurn: 0 },
+    });
+    const b = makePerson({
+      sex: 'female',
+      ambition: { type: 'seek_companion', intensity: 0.8, targetPersonId: target.id, formedTurn: 0 },
+    });
+    const people = new Map([[a.id, a], [b.id, b], [target.id, target]]);
+    const boundActors: Record<string, string> = { claimant_a: a.id };
+    // b should pass the sameAmbitionTargetAs: 'claimant_a' criterion
+    expect(matchesCriteria(b, { sameAmbitionTargetAs: 'claimant_a' }, boundActors, people)).toBe(true);
+  });
+
+  it('fails when ambition targets differ', () => {
+    const t1 = makePerson({ sex: 'male', age: 25 });
+    const t2 = makePerson({ sex: 'male', age: 25 });
+    const a = makePerson({
+      sex: 'female',
+      ambition: { type: 'seek_companion', intensity: 0.8, targetPersonId: t1.id, formedTurn: 0 },
+    });
+    const b = makePerson({
+      sex: 'female',
+      ambition: { type: 'seek_companion', intensity: 0.8, targetPersonId: t2.id, formedTurn: 0 },
+    });
+    const people = new Map([[a.id, a], [b.id, b], [t1.id, t1], [t2.id, t2]]);
+    const boundActors: Record<string, string> = { claimant_a: a.id };
+    expect(matchesCriteria(b, { sameAmbitionTargetAs: 'claimant_a' }, boundActors, people)).toBe(false);
+  });
+
+  it('fails when the reference slot person has no ambition', () => {
+    const a = makePerson({ sex: 'female', ambition: null });
+    const b = makePerson({
+      sex: 'female',
+      ambition: { type: 'seek_companion', intensity: 0.8, targetPersonId: 'x', formedTurn: 0 },
+    });
+    const people = new Map([[a.id, a], [b.id, b]]);
+    const boundActors: Record<string, string> = { claimant_a: a.id };
+    expect(matchesCriteria(b, { sameAmbitionTargetAs: 'claimant_a' }, boundActors, people)).toBe(false);
+  });
+});
+
+// ─── resolveFromAmbitionTarget ────────────────────────────────────────────────
+
+describe('matchesCriteria — resolveFromAmbitionTarget', () => {
+  it('passes when person id matches the ambition targetPersonId of the reference slot', () => {
+    const subject = makePerson({ sex: 'male', age: 25 });
+    const claimant = makePerson({
+      sex: 'female',
+      ambition: { type: 'seek_companion', intensity: 0.8, targetPersonId: subject.id, formedTurn: 0 },
+    });
+    const people = new Map([[claimant.id, claimant], [subject.id, subject]]);
+    const boundActors: Record<string, string> = { claimant_a: claimant.id };
+    expect(matchesCriteria(subject, { resolveFromAmbitionTarget: 'claimant_a' }, boundActors, people)).toBe(true);
+  });
+
+  it('fails when person id does not match the ambition target', () => {
+    const correct  = makePerson({ sex: 'male', age: 25 });
+    const wrong    = makePerson({ sex: 'male', age: 25 });
+    const claimant = makePerson({
+      sex: 'female',
+      ambition: { type: 'seek_companion', intensity: 0.8, targetPersonId: correct.id, formedTurn: 0 },
+    });
+    const people = new Map([[claimant.id, claimant], [correct.id, correct], [wrong.id, wrong]]);
+    const boundActors: Record<string, string> = { claimant_a: claimant.id };
+    expect(matchesCriteria(wrong, { resolveFromAmbitionTarget: 'claimant_a' }, boundActors, people)).toBe(false);
+  });
+
+  it('fails when the reference slot person has no ambition target', () => {
+    const subject  = makePerson({ sex: 'male', age: 25 });
+    const claimant = makePerson({ sex: 'female', ambition: null });
+    const people = new Map([[claimant.id, claimant], [subject.id, subject]]);
+    const boundActors: Record<string, string> = { claimant_a: claimant.id };
+    expect(matchesCriteria(subject, { resolveFromAmbitionTarget: 'claimant_a' }, boundActors, people)).toBe(false);
+  });
+});

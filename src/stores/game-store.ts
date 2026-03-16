@@ -11,9 +11,9 @@
  */
 
 import { create } from 'zustand';
-import { createPerson } from '../simulation/population/person';
-import { generateName } from '../simulation/population/naming';
 import { processDawn, processDusk } from '../simulation/turn/turn-processor';
+import type { DawnResult } from '../simulation/turn/turn-processor';
+import { createInitialState } from '../simulation/turn/initial-state';
 import { addResourceStocks, clampResourceStock, emptyResourceStock } from '../simulation/economy/resources';
 import { validateTrade, executeTribeTradeLogic } from '../simulation/economy/trade';
 import type { TradeOffer } from '../simulation/economy/trade';
@@ -25,15 +25,9 @@ import { filterEligibleEvents, drawEvents, ALL_EVENTS, drainDeferredEvents, getE
 import { applyEventChoice } from '../simulation/events/resolver';
 import type { ApplyChoiceResult } from '../simulation/events/resolver';
 import { createRNG } from '../utils/rng';
-import { createTribe, TRIBE_PRESETS } from '../simulation/world/tribes';
 import { canMarry, performMarriage, formConcubineRelationship } from '../simulation/population/marriage';
 import type { InformalUnionStyle } from '../simulation/population/marriage';
-import { applyMarriageOpinionFloor, initializeBaselineOpinions } from '../simulation/population/opinions';
-import { generateAmbition } from '../simulation/population/ambitions';
-import { seedFoundingRelationships } from '../simulation/population/named-relationships';
-import { initializeHouseholds } from '../simulation/population/household';
-import { createFertilityProfile } from '../simulation/genetics/fertility';
-import { ETHNIC_DISTRIBUTIONS } from '../data/ethnic-distributions';
+import { applyMarriageOpinionFloor } from '../simulation/population/opinions';
 import {
   canBuild,
   startConstruction as buildingStartConstruction,
@@ -48,28 +42,20 @@ import type {
   GameState,
   TurnPhase,
   ResourceStock,
-  Settlement,
   SettlementCulture,
   CompanyRelation,
   GameConfig,
-  GameFlags,
   BuildingId,
   BuildingStyle,
   ReligiousPolicy,
+  ActivityLogEntry,
 } from '../simulation/turn/game-state';
-import type { Person, WorkRole, CultureId } from '../simulation/population/person';
-import { ETHNIC_GROUP_PRIMARY_LANGUAGE, ETHNIC_GROUP_CULTURE } from '../simulation/population/person';
-import type { GameEvent, SkillCheckResult } from '../simulation/events/engine';
+import type { Person, WorkRole } from '../simulation/population/person';
+import { SAUROMATIAN_CULTURE_IDS } from '../simulation/population/culture';
+import type { SkillCheckResult } from '../simulation/events/engine';
 import type { BoundEvent } from '../simulation/events/engine';
 import { resolveActors } from '../simulation/events/actor-resolver';
-import { generateId } from '../utils/id';
-import { clamp } from '../utils/math';
-import { defaultDebugSettings } from '../simulation/turn/game-state';
 import type { DebugSettings } from '../simulation/turn/game-state';
-import { IMANIAN_TRAITS } from '../simulation/genetics/traits';
-import { TRAIT_CONFLICTS } from '../data/trait-affinities';
-import type { SeededRNG } from '../utils/rng';
-import type { TraitId } from '../simulation/personality/traits';
 
 // Re-export economy types consumed by UI components.
 export type { TradeOffer };
@@ -98,6 +84,11 @@ export interface GameStore {
    * Null when no notification is pending.
    */
   pendingNotification: string | null;
+  /**
+   * Set when the player activates 'hidden_wheel_recognized' policy while
+   * courtshipNorms is 'traditional' — surfaces a UI nudge in SettlementView.
+   */
+  pendingCourtshipNudge: boolean;
   // ── Game lifecycle ────────────────────────────────────────────────────────
   newGame: (config: GameConfig, settlementName: string) => void;
   loadGame: (saveData: string) => void;
@@ -142,6 +133,10 @@ export interface GameStore {
   // ── Religion ───────────────────────────────────────────────────────────────
   /** Update the settlement's religious policy. */
   setReligiousPolicy: (policy: ReligiousPolicy) => void;
+  /** Update the settlement's courtship norms. */
+  setCourtshipNorms: (norms: 'traditional' | 'mixed' | 'open') => void;
+  /** Dismiss the courtship-norms nudge banner. */
+  dismissCourtshipNudge: () => void;
   // ── Expedition Council ─────────────────────────────────────────
   /** Add a person to the Expedition Council (max 7 seats). No-op if already a member. */
   assignCouncilMember: (personId: string) => void;
@@ -163,314 +158,171 @@ import { serializeGameState, deserializeGameState } from './serialization';
 
 const SAVE_KEY = 'palusteria_save';
 
-// ─── Founding settlers ───────────────────────────────────────────────────────
-
-/** Standard Imanian sex-ratio modifier: equal probability of male/female offspring. */
-const IMANIAN_GENDER_RATIO = 0.5;
-
-/** Role and age-range configuration for each male founding settler.
- * Settlers who will eventually farm start as foragers — the settlement begins
- * without Tilled Fields, so farming slots don't exist yet. Once a Fields
- * building is constructed the player can re-assign them to 'farmer'.
- */
-const FOUNDER_ROLES: ReadonlyArray<{ role: WorkRole; ageMin: number; ageMax: number }> = [
-  { role: 'gather_food', ageMin: 17, ageMax: 23 },
-  { role: 'gather_food', ageMin: 22, ageMax: 32 },
-  { role: 'gather_food', ageMin: 22, ageMax: 35 },
-  { role: 'gather_food', ageMin: 25, ageMax: 40 },
-  { role: 'gather_food', ageMin: 25, ageMax: 40 },
-  { role: 'gather_food', ageMin: 30, ageMax: 45 },
-  { role: 'gather_food', ageMin: 45, ageMax: 65 },
-  { role: 'trader',      ageMin: 22, ageMax: 32 },
-  { role: 'trader',      ageMin: 22, ageMax: 32 },
-  { role: 'guard',       ageMin: 25, ageMax: 42 },
-];
+// ─── Pre-store helpers ────────────────────────────────────────────────────────
 
 /**
- * Curated pool of traits that can appear on a founding colonist.
- * Covers virtues, flaws, and aptitudes — no earned, relationship, or
- * mental-state traits.
+ * Collects all activity log entries produced this dawn into a new log array,
+ * applying the rolling 30-entry FIFO cap.
  */
-const FOUNDER_TRAIT_POOL: readonly TraitId[] = [
-  'brave', 'craven', 'patient', 'clever', 'strong', 'proud', 'gregarious',
-  'honest', 'traditional', 'humble', 'content', 'ambitious', 'loyal', 'kind',
-  'generous', 'curious', 'sanguine', 'trusting', 'protective', 'welcoming',
-  'shy', 'stubborn', 'melancholic', 'deceitful', 'greedy', 'suspicious',
-  'jealous', 'wrathful', 'fickle', 'reckless', 'devout', 'cynical',
-  'green_thumb', 'keen_hunter', 'gifted_speaker', 'mentor_hearted', 'folklorist',
-  // Scheme-enabling traits (allow court/befriend schemes to start from founders)
-  'passionate', 'romantic', 'lonely',
-];
-
-/** Returns true if two traits directly conflict with each other. */
-function traitsConflict(a: TraitId, b: TraitId): boolean {
-  return TRAIT_CONFLICTS.some(([ca, cb]) => (ca === a && cb === b) || (ca === b && cb === a));
+function buildActivityLog(
+  existing: ActivityLogEntry[],
+  turn: number,
+  dawnResult: DawnResult,
+): ActivityLogEntry[] {
+  const relEntries = dawnResult.newRelationshipEntries.map(e => ({
+    turn, type: e.type, personId: e.personId, targetId: e.targetId, description: e.description,
+  }));
+  const schemeEntries = dawnResult.newSchemeEntries.map(e => ({
+    turn, type: e.type, personId: e.personId, targetId: e.targetId, description: e.description,
+  }));
+  const factionEntries = dawnResult.newFactionEntries.map(e => ({
+    turn, type: e.type, description: e.description,
+  }));
+  const ambitionEntries = dawnResult.newAmbitionEntries.map(e => ({
+    turn, type: e.type, personId: e.personId, description: e.description,
+  }));
+  const roleEntries = dawnResult.idleRoleAssignments.map(({ personId, role }) => {
+    const p = dawnResult.updatedPeople.get(personId);
+    const name = p ? p.firstName : '(unknown)';
+    return {
+      turn,
+      type: 'role_self_assigned' as const,
+      personId,
+      description: `**${name}** took on the role of ${role.replace(/_/g, ' ')}.`,
+    };
+  });
+  const traitEntries = dawnResult.traitChanges
+    .filter(tc => tc.gained)
+    .map(tc => {
+      const p = dawnResult.updatedPeople.get(tc.personId);
+      const name = p ? p.firstName : '(unknown)';
+      return {
+        turn,
+        type: 'trait_acquired' as const,
+        personId: tc.personId,
+        description: `**${name}** gained the trait: ${tc.gained!.replace(/_/g, ' ')}.`,
+      };
+    });
+  const successionEntries = dawnResult.successionLogEntries.map(e => ({
+    turn, type: e.type, personId: e.personId, targetId: e.targetId, description: e.description,
+  }));
+  return [
+    ...existing,
+    ...relEntries, ...schemeEntries, ...factionEntries, ...ambitionEntries,
+    ...roleEntries, ...traitEntries, ...successionEntries,
+  ].slice(-30);
 }
 
 /**
- * Picks 2 non-conflicting traits from the founder pool using the seeded RNG.
- * Falls back to a single trait if no valid pair is found within 20 attempts.
+ * Merges a `DawnResult` into the previous `GameState`, returning the updated
+ * post-dawn state. Pure: does not mutate either argument.
  */
-function pickFounderTraits(rng: SeededRNG): TraitId[] {
-  const pool = FOUNDER_TRAIT_POOL;
-  const firstIdx = rng.nextInt(0, pool.length - 1);
-  const first = pool[firstIdx]!;
-  let second = first;
-  for (let i = 0; i < 20; i++) {
-    const candidate = pool[rng.nextInt(0, pool.length - 1)]!;
-    if (candidate !== first && !traitsConflict(first, candidate)) {
-      second = candidate;
-      break;
-    }
+function applyDawnResultToState(state: GameState, dawnResult: DawnResult): GameState {
+  const shouldFireDesertion =
+    dawnResult.desertionCandidateIds.length >= 3 &&
+    !(state.massDesertionWarningFired ?? false);
+
+  // Pre-compute the full building list (additions and removals from this dawn).
+  let allBuildings = [...state.settlement.buildings];
+  for (const removedId of dawnResult.removedBuildingIds) {
+    allBuildings = allBuildings.filter(b => b.defId !== removedId);
   }
-  return second === first ? [first] : [first, second];
-}
+  allBuildings = [...allBuildings, ...dawnResult.completedBuildings];
 
-/**
- * Samples a GeneticProfile from the Imanian ethnic distribution.
- * Gives each founding settler a physically distinct but ethnically appropriate appearance.
- */
-function sampleImanianGenetics(rng: SeededRNG): Person['genetics'] {
-  const d = IMANIAN_TRAITS;
-  return {
-    visibleTraits: {
-      skinTone:        clamp(rng.gaussian(d.skinTone.mean, Math.sqrt(d.skinTone.variance)), 0, 1),
-      skinUndertone:   rng.weightedPick(d.skinUndertone.weights),
-      hairColor:       rng.weightedPick(d.hairColor.weights),
-      hairTexture:     rng.weightedPick(d.hairTexture.weights),
-      eyeColor:        rng.weightedPick(d.eyeColor.weights),
-      buildType:       rng.weightedPick(d.buildType.weights),
-      height:          rng.weightedPick(d.height.weights),
-      facialStructure: rng.weightedPick(d.facialStructure.weights),
-    },
-    genderRatioModifier: IMANIAN_GENDER_RATIO,
-    extendedFertility: false,
-  };
-}
+  // Merge household updates (changes, new, dissolved).
+  const households = new Map(state.households);
+  for (const [id, h] of dawnResult.updatedHouseholds) households.set(id, h);
+  for (const [id, h] of dawnResult.newHouseholds) households.set(id, h);
+  for (const id of dawnResult.dissolvedHouseholdIds) households.delete(id);
 
-// ─── Council seeding ─────────────────────────────────────────────────────────
-
-/**
- * Auto-selects 5 founding council members: the guard, both traders,
- * and the 2 oldest foragers.
- */
-function seedCouncil(people: Map<string, Person>): string[] {
-  const all = Array.from(people.values());
-  const guard    = all.filter(p => p.role === 'guard');
-  const traders  = all.filter(p => p.role === 'trader');
-  const foragers = all
-    .filter(p => p.role === 'gather_food')
-    .sort((a, b) => b.age - a.age)
-    .slice(0, 2);
-  return [...guard, ...traders, ...foragers].map(p => p.id);
-}
-
-// ─── Initial game state factory ───────────────────────────────────────────────
-
-function createInitialState(config: GameConfig, settlementName: string, seed?: number): GameState {
-  // Generate a high-quality seed via the Web Crypto API when none is provided.
-  // This avoids Math.random() (forbidden by Hard Rule #1) while still allowing
-  // a deterministic seed to be passed in for replays and testing.
-  const resolvedSeed = seed ?? (crypto.getRandomValues(new Uint32Array(1))[0]! >>> 0);
-  const rng = createRNG(resolvedSeed);
-  const people = new Map<string, Person>();
-
-  // Generate founding male settlers — names, appearance, and traits are all seeded
-  // from the game's RNG so every play-through starts with a different group.
-  for (const { role, ageMin, ageMax } of FOUNDER_ROLES) {
-    const { firstName, familyName } = generateName('male', 'ansberite', '', '', rng);
-    // Traders arrive with a working knowledge of Tradetalk — it would be
-    // absurd to seek trade contacts without any common tongue.
-    const languages: Person['languages'] = role === 'trader'
-      ? [{ language: 'imanian', fluency: 1.0 }, { language: 'tradetalk', fluency: 0.4 }]
-      : [{ language: 'imanian', fluency: 1.0 }];
-
-    const person = createPerson({
-      firstName,
-      familyName,
-      sex: 'male',
-      age: rng.nextInt(ageMin, ageMax),
-      role,
-      socialStatus: 'founding_member',
-      languages,
-      genetics: sampleImanianGenetics(rng),
-      traits: pickFounderTraits(rng),
-    }, rng);
-    people.set(person.id, person);
-  }
-
-  // Optional founding Sauromatian women (enable via GameConfig.includeSauromatianWomen).
-  if (config.includeSauromatianWomen) {
-    // Determine ethnic group from the first selected tribe, or fall back.
-    const firstPresetId = config.startingTribes[0];
-    const firstPreset = firstPresetId ? TRIBE_PRESETS[firstPresetId] : undefined;
-    const sauroGroup = firstPreset?.ethnicGroup ?? 'kiswani_riverfolk';
-    const sauroTraitDist = ETHNIC_DISTRIBUTIONS[sauroGroup];
-
-    // Three women join per starting configuration; names, appearance, and traits
-    // are seeded from the game RNG for variety across play-throughs.
-    const SAURO_AGE_RANGES = [[18, 22], [22, 27], [27, 33]] as const;
-
-    for (const [ageMin, ageMax] of SAURO_AGE_RANGES) {
-      const { firstName, familyName } = generateName(
-        'female',
-        ETHNIC_GROUP_CULTURE[sauroGroup],
-        '',
-        '',
-        rng,
-      );
-      const d = sauroTraitDist;
-      const newWoman = createPerson({
-        firstName,
-        familyName,
-        sex: 'female',
-        age: rng.nextInt(ageMin, ageMax),
-        role: 'unassigned',
-        socialStatus: 'newcomer',
-        genetics: {
-          visibleTraits: {
-            skinTone:        clamp(rng.gaussian(d.skinTone.mean, Math.sqrt(d.skinTone.variance)), 0, 1),
-            skinUndertone:   rng.weightedPick(d.skinUndertone.weights),
-            hairColor:       rng.weightedPick(d.hairColor.weights),
-            hairTexture:     rng.weightedPick(d.hairTexture.weights),
-            eyeColor:        rng.weightedPick(d.eyeColor.weights),
-            buildType:       rng.weightedPick(d.buildType.weights),
-            height:          rng.weightedPick(d.height.weights),
-            facialStructure: rng.weightedPick(d.facialStructure.weights),
-          },
-          genderRatioModifier: 0.14, // Pure Sauromatian
-          extendedFertility: true,
-        },
-        fertility: createFertilityProfile(true),
-        heritage: {
-          bloodline: [{ group: sauroGroup, fraction: 1.0 }],
-          primaryCulture: ETHNIC_GROUP_CULTURE[sauroGroup],
-          culturalFluency: new Map<CultureId, number>([[ETHNIC_GROUP_CULTURE[sauroGroup], 1.0]]),
-        },
-        // Sauromatian women joining a trading company will have picked up some
-        // Tradetalk — it's the lingua franca of cross-tribal commerce.
-        languages: [
-          { language: ETHNIC_GROUP_PRIMARY_LANGUAGE[sauroGroup], fluency: 1.0 },
-          { language: 'tradetalk', fluency: 0.3 },
-        ],
-        religion: 'sacred_wheel',
-        traits: pickFounderTraits(rng),
-      }, rng);
-      people.set(newWoman.id, newWoman);
-    }
-  }
-
-  const initialResources: ResourceStock = {
-    ...emptyResourceStock(),
-    food: 20,
-    gold: 50,
-    goods: 5,
-    cattle: 5,
-    lumber: 20,
-    stone: 10,
-  };
-
-  const settlement: Settlement = {
-    name: settlementName,
-    location: config.startingLocation,
-    buildings: [{ defId: 'camp', instanceId: 'camp_0', builtTurn: 0, style: null, claimedByPersonIds: [] }],
-    constructionQueue: [],
-    resources: initialResources,
-    populationCount: people.size,
-    religiousPolicy: 'tolerant',
-  };
-
-  const culture: SettlementCulture = {
-    languages: new Map([['imanian', 1.0]]),
-    primaryLanguage: 'imanian',
-    religions: new Map([['imanian_orthodox', 1.0]]),
-    religiousTension: 0,
-    culturalBlend: 0,
-    practices: ['imanian_liturgy', 'company_law'],
-    governance: 'patriarchal_imanian',
-    languageDiversityTurns: 0,
-    languageTension: 0,
-    hiddenWheelDivergenceTurns: 0,
-    hiddenWheelSuppressedTurns: 0,
-    hiddenWheelEmerged: false,
-  };
-
-  const company: CompanyRelation = {
-    standing: 60,
-    annualQuotaGold: 20,
-    annualQuotaGoods: 5,
-    consecutiveFailures: 0,
-    supportLevel: 'standard',
-    yearsActive: 0,
-    quotaContributedGold: 0,
-    quotaContributedGoods: 0,
-  };
-
-  // Instantiate tribes from selected presets.
-  const tribes = new Map<string, ReturnType<typeof createTribe>>();
-  for (const presetId of config.startingTribes) {
-    const preset = TRIBE_PRESETS[presetId];
-    if (preset) {
-      const tribe = createTribe(preset);
-      // Starting tribes are known contacts — trade is available immediately.
-      tribes.set(tribe.id, { ...tribe, contactEstablished: true });
-    }
-  }
-
-  // Seed households for all founding persons before building initial state.
-  const { updatedPeople: peopleWithHouseholds, newHouseholds: foundingHouseholds } =
-    initializeHouseholds(people, 0);
-  for (const [id, p] of peopleWithHouseholds) people.set(id, p);
-
-  const initialGameState: GameState = {
-    version: '1.0.0',
-    seed: resolvedSeed,
-    turnNumber: 0,
-    currentSeason: 'spring',
-    currentYear: 1,
+  // Assign completed dwellings to households that don't have one.
+  const {
+    buildings: claimedBuildings,
+    households: claimedHouseholds,
     people,
-    graveyard: [],
-    settlement,
-    culture,
-    tribes,
-    company,
-    eventHistory: [],
-    eventCooldowns: new Map(),
-    pendingEvents: [],
-    councilMemberIds: seedCouncil(people),
-    deferredEvents: [],
-    households: foundingHouseholds,
-    config,
-    flags: { creoleEmergedNotified: false },
-    identityPressure: { companyPressureTurns: 0, tribalPressureTurns: 0 },
-    factions: [],
-    activityLog: [],
-    debugSettings: defaultDebugSettings(),
-    communalResourceMinimum: { lumber: 15, stone: 5 },
-    buildingWorkersInitialized: true,
+  } = applyDwellingClaims(
+    dawnResult.completedBuildings,
+    allBuildings,
+    households,
+    dawnResult.updatedPeople,
+  );
+
+  const turn = state.turnNumber;
+
+  return {
+    ...state,
+    people,
+    graveyard: [...state.graveyard, ...dawnResult.newGraveyardEntries],
+    households: claimedHouseholds,
+    settlement: {
+      ...state.settlement,
+      populationCount: dawnResult.populationCount,
+      buildings: claimedBuildings,
+      constructionQueue: dawnResult.updatedConstructionQueue,
+    },
+    culture: {
+      ...state.culture,
+      languages: dawnResult.updatedLanguageFractions,
+      primaryLanguage:
+        Array.from(dawnResult.updatedLanguageFractions.entries()).sort(
+          (a, b) => b[1] - a[1],
+        )[0]?.[0] ?? state.culture.primaryLanguage,
+      languageTension: dawnResult.newLanguageTension,
+      languageDiversityTurns: dawnResult.newLanguageDiversityTurns,
+      culturalBlend: dawnResult.updatedCultureBlend,
+      religions: dawnResult.updatedReligions,
+      religiousTension: dawnResult.updatedReligiousTension,
+      hiddenWheelDivergenceTurns: dawnResult.updatedHiddenWheelDivergenceTurns,
+      hiddenWheelSuppressedTurns: dawnResult.updatedHiddenWheelSuppressedTurns,
+      // hiddenWheelEmerged is managed by event resolution, not by dawn processing.
+      hiddenWheelEmerged: state.culture.hiddenWheelEmerged,
+    },
+    identityPressure: dawnResult.identityPressureResult.updatedPressure,
+    company: {
+      ...state.company,
+      standing: Math.max(
+        0,
+        Math.min(
+          100,
+          state.company.standing + dawnResult.identityPressureResult.companyStandingDelta,
+        ),
+      ),
+    },
+    tribes: (() => {
+      const deltas = dawnResult.identityPressureResult.tribeDispositionDeltas;
+      if (deltas.length === 0) return state.tribes;
+      const updatedTribes = new Map(state.tribes);
+      for (const { tribeId, delta } of deltas) {
+        const tribe = updatedTribes.get(tribeId);
+        if (tribe) {
+          updatedTribes.set(tribeId, {
+            ...tribe,
+            disposition: Math.max(-100, Math.min(100, tribe.disposition + delta)),
+          });
+        }
+      }
+      return updatedTribes;
+    })(),
+    eventHistory: [
+      ...state.eventHistory,
+      ...dawnResult.births.map(b => ({
+        eventId: 'birth',
+        turnNumber: turn,
+        choiceId: 'born',
+        involvedPersonIds: [b.childId, b.motherId],
+      })),
+    ],
+    activityLog: buildActivityLog(state.activityLog, turn, dawnResult),
+    factions: dawnResult.updatedFactions,
+    lastSettlementMorale: dawnResult.settlementMorale,
+    lowMoraleTurns: dawnResult.newLowMoraleTurns,
+    massDesertionWarningFired: shouldFireDesertion
+      ? true
+      : dawnResult.newLowMoraleTurns === 0
+        ? false
+        : (state.massDesertionWarningFired ?? false),
   };
-
-  // ── Seed opinions and ambitions at game start ──────────────────────────────
-  // Both systems normally run inside processDawn, but we initialize them
-  // here so that Key Opinions and ambition badges are visible immediately
-  // before the player takes their first turn.
-  const opinionsSeeded = initializeBaselineOpinions(initialGameState.people);
-  const seededPeople = new Map(opinionsSeeded);
-  for (const [id, person] of seededPeople) {
-    const ambition = generateAmbition(person, { ...initialGameState, people: seededPeople }, rng);
-    if (ambition) {
-      seededPeople.set(id, { ...person, ambition });
-    }
-  }
-
-  // Seed pre-formed named relationships (friends, rivals, confidants, mentors)
-  // reflecting the group's shared Company journey before arriving at the settlement.
-  const peopleWithRelationships = seedFoundingRelationships(seededPeople, rng);
-
-  return { ...initialGameState, people: peopleWithRelationships };
 }
-
-// ─── Store implementation ────────────────────────────────────────────────────
 
 export const useGameStore = create<GameStore>((set, get) => {
   // Attempt to restore an existing save on first load.
@@ -501,6 +353,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     lastChoiceResult: null,
     lastSpoilage: null,
     pendingNotification: null,
+    pendingCourtshipNudge: false,
 
     // ── Game lifecycle ────────────────────────────────────────────────────
     newGame(config, settlementName) {
@@ -548,176 +401,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         dawnResult.desertionCandidateIds.length >= 3 &&
         !(gameState.massDesertionWarningFired ?? false);
 
-      const postDawnState: GameState = (() => {
-        // ── Pre-compute buildings so household assignment can see the full set ──
-        let allBuildings = [...gameState.settlement.buildings];
-        for (const removedId of dawnResult.removedBuildingIds) {
-          allBuildings = allBuildings.filter(b => b.defId !== removedId);
-        }
-        allBuildings = [...allBuildings, ...dawnResult.completedBuildings];
-
-        // ── Merge household updates from dawn ──────────────────────────────────
-        const households = new Map(gameState.households);
-        for (const [id, h] of dawnResult.updatedHouseholds) {
-          households.set(id, h);
-        }
-        // New households from succession splits and birth assignments must also be added.
-        for (const [id, h] of dawnResult.newHouseholds) {
-          households.set(id, h);
-        }
-        for (const id of dawnResult.dissolvedHouseholdIds) {
-          households.delete(id);
-        }
-
-        // ── Claim dwellings for households that don't have one ─────────────────
-        const {
-          buildings: claimedBuildings,
-          households: claimedHouseholds,
-          people,
-        } = applyDwellingClaims(
-          dawnResult.completedBuildings,
-          allBuildings,
-          households,
-          dawnResult.updatedPeople,
-        );
-
-        return {
-          ...gameState,
-          people,
-          graveyard: [...gameState.graveyard, ...dawnResult.newGraveyardEntries],
-          households: claimedHouseholds,
-          settlement: {
-            ...gameState.settlement,
-            populationCount: dawnResult.populationCount,
-            buildings: claimedBuildings,
-            constructionQueue: dawnResult.updatedConstructionQueue,
-          },
-        culture: {
-          ...gameState.culture,
-          languages: dawnResult.updatedLanguageFractions,
-          primaryLanguage:
-            Array.from(dawnResult.updatedLanguageFractions.entries()).sort(
-              (a, b) => b[1] - a[1],
-            )[0]?.[0] ?? gameState.culture.primaryLanguage,
-          languageTension: dawnResult.newLanguageTension,
-          languageDiversityTurns: dawnResult.newLanguageDiversityTurns,
-          culturalBlend: dawnResult.updatedCultureBlend,
-          religions: dawnResult.updatedReligions,
-          religiousTension: dawnResult.updatedReligiousTension,
-          hiddenWheelDivergenceTurns: dawnResult.updatedHiddenWheelDivergenceTurns,
-          hiddenWheelSuppressedTurns: dawnResult.updatedHiddenWheelSuppressedTurns,
-          hiddenWheelEmerged:
-            dawnResult.shouldFireHiddenWheelEvent
-              ? gameState.culture.hiddenWheelEmerged  // stays as-is until player resolves the event
-              : gameState.culture.hiddenWheelEmerged,
-        },
-        // Apply identity pressure: update counters and passive standing/disposition deltas.
-        identityPressure: dawnResult.identityPressureResult.updatedPressure,
-        company: {
-          ...gameState.company,
-          standing: Math.max(
-            0,
-            Math.min(
-              100,
-              gameState.company.standing + dawnResult.identityPressureResult.companyStandingDelta,
-            ),
-          ),
-        },
-        tribes: (() => {
-          const deltas = dawnResult.identityPressureResult.tribeDispositionDeltas;
-          if (deltas.length === 0) return gameState.tribes;
-          const updatedTribes = new Map(gameState.tribes);
-          for (const { tribeId, delta } of deltas) {
-            const tribe = updatedTribes.get(tribeId);
-            if (tribe) {
-              updatedTribes.set(tribeId, {
-                ...tribe,
-                disposition: Math.max(-100, Math.min(100, tribe.disposition + delta)),
-              });
-            }
-          }
-          return updatedTribes;
-        })(),
-        // Append birth records to event history for genealogy / event-chain queries.
-        eventHistory: [
-          ...gameState.eventHistory,
-          ...dawnResult.births.map(b => ({
-            eventId: 'birth',
-            turnNumber: gameState.turnNumber,
-            choiceId: 'born',
-            involvedPersonIds: [b.childId, b.motherId],
-          })),
-        ],
-        // Append autonomous activity to the rolling activity log (capped at 30).
-        activityLog: (() => {
-          const relEntries = dawnResult.newRelationshipEntries.map(e => ({
-            turn: gameState.turnNumber,
-            type: e.type,
-            personId: e.personId,
-            targetId: e.targetId,
-            description: e.description,
-          }));
-          const schemeEntries = dawnResult.newSchemeEntries.map(e => ({
-            turn: gameState.turnNumber,
-            type: e.type,
-            personId: e.personId,
-            targetId: e.targetId,
-            description: e.description,
-          }));
-          const factionEntries = dawnResult.newFactionEntries.map(e => ({
-            turn: gameState.turnNumber,
-            type: e.type,
-            description: e.description,
-          }));
-          const ambitionEntries = dawnResult.newAmbitionEntries.map(e => ({
-            turn: gameState.turnNumber,
-            type: e.type,
-            personId: e.personId,
-            description: e.description,
-          }));
-          const roleEntries = dawnResult.idleRoleAssignments.map(({ personId, role }) => {
-            const p = dawnResult.updatedPeople.get(personId);
-            const name = p ? p.firstName : '(unknown)';
-            return {
-              turn: gameState.turnNumber,
-              type: 'role_self_assigned' as const,
-              personId,
-              description: `**${name}** took on the role of ${role.replace(/_/g, ' ')}.`,
-            };
-          });
-          const traitEntries = dawnResult.traitChanges
-            .filter(tc => tc.gained)
-            .map(tc => {
-              const p = dawnResult.updatedPeople.get(tc.personId);
-              const name = p ? p.firstName : '(unknown)';
-              return {
-                turn: gameState.turnNumber,
-                type: 'trait_acquired' as const,
-                personId: tc.personId,
-                description: `**${name}** gained the trait: ${tc.gained!.replace(/_/g, ' ')}.`,
-              };
-            });
-          const successionEntries = dawnResult.successionLogEntries.map(e => ({
-            turn: gameState.turnNumber,
-            type: e.type,
-            personId: e.personId,
-            targetId: e.targetId,
-            description: e.description,
-          }));
-          const combined = [...gameState.activityLog, ...relEntries, ...schemeEntries, ...factionEntries, ...ambitionEntries, ...roleEntries, ...traitEntries, ...successionEntries];
-          return combined.slice(-30); // FIFO cap
-        })(),
-        factions: dawnResult.updatedFactions,
-        lastSettlementMorale: dawnResult.settlementMorale,
-        lowMoraleTurns: dawnResult.newLowMoraleTurns,
-        // Lock the mass-desertion flag for the current crisis episode; reset when morale recovers.
-        massDesertionWarningFired: shouldFireDesertion
-          ? true
-          : dawnResult.newLowMoraleTurns === 0
-            ? false
-            : (gameState.massDesertionWarningFired ?? false),
-        };
-      })();
+      const postDawnState: GameState = applyDawnResultToState(gameState, dawnResult);
 
       // Drain any deferred events whose turn has arrived, and prepend them
       // to the normal draw so they are resolved first.
@@ -854,8 +538,27 @@ export const useGameStore = create<GameStore>((set, get) => {
         })
         .filter((e): e is BoundEvent => e !== null);
 
+      // Inject rel_child_outside_marriage for unwed Sauromatian mothers who just gave birth.
+      const childBirthBoundEvents: BoundEvent[] = (dawnResult.newBirths ?? [])
+        .filter(birth => {
+          const mother = stateAfterDrain.people.get(birth.motherId);
+          return (
+            mother !== undefined &&
+            mother.spouseIds.length === 0 &&
+            SAUROMATIAN_CULTURE_IDS.has(mother.heritage.primaryCulture)
+          );
+        })
+        .map(birth => {
+          const ev = getEventById('rel_child_outside_marriage');
+          if (!ev) return null;
+          const boundActors: Record<string, string> = { mother: birth.motherId };
+          if (birth.fatherId) boundActors['father'] = birth.fatherId;
+          return { ...ev, boundActors } as BoundEvent;
+        })
+        .filter((e): e is BoundEvent => e !== null);
+
       // Deferred events are prepended so they resolve before new draws.
-      const allPending: BoundEvent[] = [...deferredBoundEvents, ...schemeBoundEvents, ...factionBoundEvents, ...happinessBoundEvents, ...successionBoundEvents, ...boundDrawn];
+      const allPending: BoundEvent[] = [...deferredBoundEvents, ...schemeBoundEvents, ...factionBoundEvents, ...happinessBoundEvents, ...successionBoundEvents, ...childBirthBoundEvents, ...boundDrawn];
 
       // One-time creole emergence notification.
       const showCreoleNotification =
@@ -1182,6 +885,9 @@ export const useGameStore = create<GameStore>((set, get) => {
     setReligiousPolicy(policy) {
       const { gameState } = get();
       if (!gameState) return;
+      const shouldNudge =
+        policy === 'hidden_wheel_recognized' &&
+        (gameState.settlement.courtshipNorms ?? 'mixed') === 'traditional';
       const updatedState: GameState = {
         ...gameState,
         settlement: { ...gameState.settlement, religiousPolicy: policy },
@@ -1192,7 +898,23 @@ export const useGameStore = create<GameStore>((set, get) => {
       };
       const json = serializeGameState(updatedState);
       localStorage.setItem(SAVE_KEY, json);
+      set({ gameState: updatedState, ...(shouldNudge && { pendingCourtshipNudge: true }) });
+    },
+
+    setCourtshipNorms(norms) {
+      const { gameState } = get();
+      if (!gameState) return;
+      const updatedState: GameState = {
+        ...gameState,
+        settlement: { ...gameState.settlement, courtshipNorms: norms },
+      };
+      const json = serializeGameState(updatedState);
+      localStorage.setItem(SAVE_KEY, json);
       set({ gameState: updatedState });
+    },
+
+    dismissCourtshipNudge() {
+      set({ pendingCourtshipNudge: false });
     },
 
     executeTrade(tribeId, offer, requested) {
@@ -1345,7 +1067,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         if (w) updatedPeople.set(wId, { ...w, role: 'unassigned' });
       }
       // Refund resources.
-      const updatedResources = addResourceStocks(gameState.settlement.resources, refund);
+      const updatedResources = addResourceStocks(gameState.settlement.resources, { ...emptyResourceStock(), ...refund });
       set({
         gameState: {
           ...gameState,

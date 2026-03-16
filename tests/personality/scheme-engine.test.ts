@@ -31,7 +31,6 @@ function makePerson(id: string, overrides: Partial<Person> = {}): Person {
       bloodline: [{ group: 'imanian', fraction: 1.0 }],
       primaryCulture: 'imanian',
       culturalFluency: new Map(),
-      ethnicGroup: 'imanian',
     },
     genetics: {
       skinTone: 0.3,
@@ -956,6 +955,7 @@ describe('generateScheme — turn 0 behaviour', () => {
 describe('scheme event registration in ALL_EVENTS', () => {
   const SCHEME_EVENT_IDS = [
     'sch_courtship_discovered',
+    'sch_sauro_courtship_open',
     'sch_faith_advocacy_noticed',
     'sch_conversion_complete',
     'sch_rumours_spreading',
@@ -997,5 +997,128 @@ describe('scheme event registration in ALL_EVENTS', () => {
     for (const id of SCHEME_EVENT_IDS) {
       expect(getEventById(id)!.isDeferredOutcome).toBe(true);
     }
+  });
+});
+
+// ─── Sauromatian scheme generation ─────────────────────────────────────────────────────────────────
+
+describe('generateScheme — Sauromatian seek_companion priority path', () => {
+  it('Sauromatian woman with seek_companion ambition generates scheme at opinion ≥25', () => {
+    const rng = createRNG(99);
+    let a = makePerson('a', {
+      sex: 'female',
+      heritage: {
+        bloodline: [{ group: 'kiswani_haisla', fraction: 1.0 }],
+        primaryCulture: 'kiswani_haisla',
+        culturalFluency: new Map(),
+      },
+      ambition: { type: 'seek_companion', intensity: 0.8, targetPersonId: null, formedTurn: 0 },
+      spouseIds: [],
+    });
+    const b = makePerson('b', { sex: 'male', spouseIds: [] });
+    a = { ...a, relationships: new Map([[b.id, 25]]) };
+    const people = new Map([['a', a], ['b', b]]);
+
+    const scheme = generateScheme(a, people, 0, rng);
+    expect(scheme).not.toBeNull();
+    expect(scheme!.type).toBe('scheme_court_person');
+    expect(scheme!.targetId).toBe('b');
+  });
+
+  it('Sauromatian woman does NOT generate scheme when opinion is below 25 but Imanian woman needs 50', () => {
+    // The Sauromatian path uses threshold 25; without the Sauro path a male with trait
+    // passionate and opinion 30 would normally also pass. We just confirm the Sauromatian
+    // path fires at 25 where it otherwise would not.
+    const rng = createRNG(99);
+    let a = makePerson('a', {
+      sex: 'female',
+      heritage: {
+        bloodline: [{ group: 'kiswani_haisla', fraction: 1.0 }],
+        primaryCulture: 'kiswani_haisla',
+        culturalFluency: new Map(),
+      },
+      ambition: { type: 'seek_companion', intensity: 0.8, targetPersonId: null, formedTurn: 0 },
+      spouseIds: [],
+    });
+    const b = makePerson('b', { sex: 'male', spouseIds: [] });
+    // Opinion below even the Sauro threshold
+    a = { ...a, relationships: new Map([[b.id, 10]]) };
+    const people = new Map([['a', a], ['b', b]]);
+
+    const scheme = generateScheme(a, people, 0, rng);
+    // scheme_court_person requires opinion ≥25 for Sauro path; result may be null or a different type
+    if (scheme !== null) {
+      expect(scheme.type).not.toBe('scheme_court_person');
+    }
+  });
+});
+
+describe('processSchemes — Sauromatian climax event routing', () => {
+  function makeState(people: Map<string, ReturnType<typeof makePerson>>) {
+    return {
+      turnNumber: 100,
+      people,
+      settlement: { name: 'Test', location: 'marsh', buildings: [], resources: {}, populationCount: people.size, courtshipNorms: 'mixed' },
+      culture: { languages: new Map(), primaryLanguage: 'ansberite', religions: new Map(), religiousTension: 0, culturalBlend: 0, practices: [], governance: 'patriarchal_imanian' },
+      eventHistory: [],
+      eventCooldowns: new Map(),
+      factions: [],
+      activityLog: [],
+      graveyard: [],
+      config: { difficulty: 'normal', startingLocation: 'marsh', includeSauromatianWomen: false, startingTribes: [] },
+      households: new Map(),
+      deferred: [],
+      flags: {},
+      identityPressure: { companyPressureTurns: 0, tribalPressureTurns: 0 },
+      company: { standing: 60, annualQuotaGold: 0, annualQuotaGoods: 0, consecutiveFailures: 0, supportLevel: 'standard', yearsActive: 0 },
+    } as unknown as import('../../src/simulation/turn/game-state').GameState;
+  }
+
+  it('Sauromatian schemer fires sch_sauro_courtship_open on scheme completion', () => {
+    const rng = createRNG(7);
+    const target = makePerson('t', { sex: 'male', age: 25 });
+    const schemer = makePerson('s', {
+      sex: 'female',
+      heritage: {
+        bloodline: [{ group: 'kiswani_haisla', fraction: 1.0 }],
+        primaryCulture: 'kiswani_haisla',
+        culturalFluency: new Map(),
+      },
+      activeScheme: {
+        type: 'scheme_court_person',
+        targetId: target.id,
+        progress: 100, // already complete
+        startedTurn: 1,
+        revealedToPlayer: false,
+      },
+    });
+    const people = new Map([['s', schemer], ['t', target]]);
+    const state = makeState(people);
+
+    const result = processSchemes(people, state.turnNumber, rng);
+    const firedEvent = result.pendingSchemeEvents.find(e => e.eventId === 'sch_sauro_courtship_open');
+    expect(firedEvent).toBeDefined();
+  });
+
+  it('Imanian schemer fires sch_courtship_discovered on scheme completion', () => {
+    const rng = createRNG(7);
+    const target = makePerson('t', { sex: 'female', age: 22 });
+    const schemer = makePerson('s', {
+      sex: 'male',
+      // default heritage is imanian (from makePerson)
+      activeScheme: {
+        type: 'scheme_court_person',
+        targetId: target.id,
+        progress: 100,
+        startedTurn: 1,
+        revealedToPlayer: false,
+      },
+    });
+    const people = new Map([['s', schemer], ['t', target]]);
+    const state = makeState(people);
+
+    const result = processSchemes(people, state.turnNumber, rng);
+    const firedEvent = result.pendingSchemeEvents.find(e => e.eventId === 'sch_courtship_discovered');
+    expect(firedEvent).toBeDefined();
   });
 });

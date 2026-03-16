@@ -17,6 +17,7 @@ import {
 import type { GameState } from '../turn/game-state';
 import { getEffectiveOpinion } from './opinions';
 import { getOvercrowdingRatio } from '../buildings/building-effects';
+import { SAUROMATIAN_CULTURE_IDS } from './culture';
 
 // ─── Factor Types ─────────────────────────────────────────────────────────────
 
@@ -386,6 +387,69 @@ export function computeHappinessFactors(
   if (traits.has('respected_elder'))  factors.push({ label: 'Social standing satisfaction',   delta:  10, category: 'trait' });
   if (traits.has('veteran'))          factors.push({ label: 'Hard-won resilience',            delta:   5, category: 'trait' });
   if (traits.has('healer'))           factors.push({ label: 'Fulfilment in their craft',       delta:   5, category: 'trait' });
+
+  // ── Courtship / Companion factors ────────────────────────────────────────
+  const isSauroFemale =
+    person.sex === 'female' &&
+    SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture);
+  const courtshipNorms = settlement.courtshipNorms ?? 'mixed';
+
+  // Purpose: courtship suppressed under Traditional policy
+  if (
+    isSauroFemale &&
+    person.spouseIds.length === 0 &&
+    person.age >= 16 &&
+    person.age <= 45 &&
+    courtshipNorms === 'traditional'
+  ) {
+    factors.push({ label: 'Courtship suppressed', delta: -6, category: 'purpose' });
+  }
+
+  // Purpose: actively courting at meaningful intensity
+  if (
+    isSauroFemale &&
+    person.ambition &&
+    (person.ambition.type === 'seek_companion' || person.ambition.type === 'seek_spouse') &&
+    person.ambition.intensity >= 0.5
+  ) {
+    factors.push({ label: 'Actively courting', delta: 4, category: 'purpose' });
+  }
+
+  // Social: Imanian discomfort — a Sauromatian woman is pursuing him and he hasn't warmed to her
+  if (
+    person.sex === 'male' &&
+    !SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture) &&
+    person.religion === 'imanian_orthodox'
+  ) {
+    const beingPursued = Array.from(people.values()).some(
+      p =>
+        p.sex === 'female' &&
+        SAUROMATIAN_CULTURE_IDS.has(p.heritage.primaryCulture) &&
+        p.ambition?.type === 'seek_companion' &&
+        p.ambition.targetPersonId === person.id &&
+        getEffectiveOpinion(person, p.id) < 15,
+    );
+    if (beingPursued) {
+      factors.push({ label: 'Unsettled by pursuit', delta: -5, category: 'social' });
+    }
+  }
+
+  // Social: Sauromatian woman has a companion / partner
+  if (isSauroFemale) {
+    const hasCompanion =
+      livingSpouseIds.length > 0 ||
+      // Or a concubine in the same household who is male
+      (person.householdId !== null &&
+        Array.from(people.values()).some(
+          p =>
+            p.sex === 'male' &&
+            p.householdId === person.householdId &&
+            p.householdRole === 'concubine',
+        ));
+    if (hasCompanion) {
+      factors.push({ label: 'Has found a companion', delta: 6, category: 'social' });
+    }
+  }
 
   return factors;
 }

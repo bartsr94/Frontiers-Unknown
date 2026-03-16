@@ -42,6 +42,7 @@ import {
 } from '../population/person';
 import type { DerivedSkillId, SkillId, OpinionModifier } from '../population/person';
 import { addOpinionModifier } from '../population/opinions';
+import { canMarry, performMarriage, applyMarriageOpinionFloor } from '../population/marriage';
 import { generateName } from '../population/naming';
 import { createFertilityProfile } from '../genetics/fertility';
 import { ETHNIC_DISTRIBUTIONS } from '../../data/ethnic-distributions';
@@ -623,6 +624,44 @@ function applyConsequence(
     case 'reset_low_morale': {
       // Resets the settlement-level low-morale streak counter to 0.
       return { ...state, lowMoraleTurns: 0 };
+    }
+
+    case 'perform_marriage': {
+      const personAId = resolveConsequenceTarget(consequence.target, boundActors);
+      const partnerSlotRaw = consequence.params?.partnerSlot as string | undefined;
+      if (!partnerSlotRaw) return state;
+      const personBId = resolveConsequenceTarget(partnerSlotRaw, boundActors);
+      const personA = state.people.get(personAId);
+      const personB = state.people.get(personBId);
+      if (!personA || !personB) return state;
+      const check = canMarry(personA, personB, state);
+      if (!check.allowed) return state;
+      const result = performMarriage(personA, personB, state);
+      const updatedPeople = new Map(state.people);
+      updatedPeople.set(result.updatedPersonA.id, result.updatedPersonA);
+      updatedPeople.set(result.updatedPersonB.id, result.updatedPersonB);
+      for (const change of result.opinionChanges) {
+        const observer = updatedPeople.get(change.observerId);
+        if (!observer) continue;
+        const cur = observer.relationships.get(change.targetId) ?? 0;
+        const rels = new Map(observer.relationships);
+        rels.set(change.targetId, Math.max(-100, Math.min(100, cur + change.delta)));
+        updatedPeople.set(observer.id, { ...observer, relationships: rels });
+      }
+      const updA = updatedPeople.get(result.updatedPersonA.id)!;
+      const updB = updatedPeople.get(result.updatedPersonB.id)!;
+      const [flooredA, flooredB] = applyMarriageOpinionFloor(updA, updB);
+      updatedPeople.set(flooredA.id, flooredA);
+      updatedPeople.set(flooredB.id, flooredB);
+      const updatedHouseholds = new Map(state.households);
+      updatedHouseholds.set(result.household.id, result.household);
+      if (result.dissolvedHouseholdId) updatedHouseholds.delete(result.dissolvedHouseholdId);
+      return {
+        ...state,
+        people: updatedPeople,
+        households: updatedHouseholds,
+        eventHistory: [...state.eventHistory, result.eventRecord],
+      };
     }
 
     // Exhaustiveness guard — compile error if a new ConsequenceType is added without a handler.
