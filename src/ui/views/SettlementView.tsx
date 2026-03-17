@@ -1,11 +1,9 @@
 /**
  * SettlementView — the Settlement tab.
  *
- * Four panels:
- *   Left:    Standing buildings + shelter capacity bar
- *   Centre:  Active construction queue with worker assignment
- *   Right:   Build menu (available + locked buildings)
- *   Far-right: Crafting panel (workshop recipes)
+ * Two-column layout:
+ *   Left  (w-72): Settlement info + communal buildings + construction queue
+ *   Right (flex): Household building grid
  */
 
 import { useState } from 'react';
@@ -16,73 +14,10 @@ import {
   getShelterCapacity,
   getOvercrowdingRatio,
 } from '../../simulation/buildings/building-effects';
-import { getAvailableCrafts, CRAFT_RECIPES, validateCraft } from '../../simulation/economy/crafting';
-import type { CraftRecipeId } from '../../simulation/economy/crafting';
-import type { BuildingId, BuildingStyle, BuiltBuilding, ConstructionProject, ResourceType, ReligiousPolicy, CourtshipNorms } from '../../simulation/turn/game-state';
-import { RESOURCE_EMOJI } from '../shared/resource-display';
-import { computeReligiousTension } from '../../simulation/population/culture';
-import { IdentityScale } from '../components/IdentityScale';
-import { factionLabel } from '../../simulation/world/factions';
-import ActivityFeed from '../components/ActivityFeed';
-import PersonDetail from './PersonDetail';
-
-// ─── Factions Panel ──────────────────────────────────────────────────────────
-
-const FACTION_COLOR: Record<string, string> = {
-  cultural_preservationists: 'text-emerald-300 bg-emerald-950/50 border-emerald-700',
-  company_loyalists:         'text-amber-300  bg-amber-950/50  border-amber-700',
-  orthodox_faithful:         'text-yellow-300 bg-yellow-950/50 border-yellow-700',
-  wheel_devotees:            'text-violet-300 bg-violet-950/50 border-violet-700',
-  community_elders:          'text-stone-300  bg-stone-800/50  border-stone-600',
-  merchant_bloc:             'text-blue-300   bg-blue-950/50   border-blue-700',
-};
-
-function FactionsPanel({ factions, people }: { factions: import('../../simulation/turn/game-state').Faction[]; people: Map<string, import('../../simulation/population/person').Person>; }) {
-  if (factions.length === 0) {
-    return (
-      <p className="text-xs text-stone-500 italic">
-        No factions have formed yet.
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {factions.map(faction => {
-        const colorCls = FACTION_COLOR[faction.type] ?? 'text-stone-300 bg-stone-800/50 border-stone-600';
-        const strengthPct = Math.round(faction.strength * 100);
-        const spokespersonId = faction.memberIds[0];
-        const spokesperson = spokespersonId ? people.get(spokespersonId) : undefined;
-        return (
-          <div key={faction.id} className={`rounded border p-2 text-xs ${colorCls}`}>
-            <div className="font-semibold mb-1">{factionLabel(faction.type)}</div>
-            {spokesperson && (
-              <div className="text-stone-400 mb-1">
-                {faction.memberIds.length} member{faction.memberIds.length !== 1 ? 's' : ''}
-                {' · '}led by {spokesperson.firstName}
-              </div>
-            )}
-            <div className="flex items-center gap-1 mb-1">
-              <span className="text-stone-400">Strength</span>
-              <div className="flex-1 bg-stone-700 rounded-full h-1.5 mx-1">
-                <div
-                  className="h-1.5 rounded-full bg-current opacity-80"
-                  style={{ width: `${strengthPct}%` }}
-                />
-              </div>
-              <span>{strengthPct}%</span>
-            </div>
-            {faction.activeDemand && (
-              <div className="mt-1 px-2 py-1 bg-black/30 rounded text-stone-300 italic">
-                ⚑ {faction.activeDemand.description}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+import { BuildingIcon } from '../../ui/components/building-icons';
+import { BuildingPickerModal } from '../../ui/components/BuildingPickerModal';
+import { SlotDetailPopover } from '../../ui/components/SlotDetailPopover';
+import type { BuildingId, BuildingStyle, BuiltBuilding, ConstructionProject, Household } from '../../simulation/turn/game-state';
 
 // ─── Helper constants ─────────────────────────────────────────────────────────
 
@@ -336,387 +271,205 @@ function BuildMenuItem({
   );
 }
 
-// ─── Religion Panel ───────────────────────────────────────────────────────────
-
-const POLICY_LABELS: Record<ReligiousPolicy, string> = {
-  tolerant:                'Tolerant',
-  orthodox_enforced:       'Orthodox Enforced',
-  wheel_permitted:         'Wheel Permitted',
-  hidden_wheel_recognized: 'Hidden Wheel Recognized',
-};
-
-const COURTSHIP_LABELS: Record<CourtshipNorms, string> = {
-  traditional: 'Traditional (Imanian)',
-  mixed:       'Mixed (Settled)',
-  open:        'Open (Sauromatian)',
-};
-
-const COURTSHIP_DESCRIPTIONS: Record<CourtshipNorms, string> = {
-  traditional: 'Marriages arranged by family elders. Courtship by women is frowned upon.',
-  mixed:       'Family approval expected, but individuals may show interest openly.',
-  open:        'Women may pursue directly. Matches follow Sauromatian custom.',
-};
-
-function CourtshipPanel({ disabled }: { disabled: boolean }) {
-  const gameState         = useGameStore(s => s.gameState);
-  const setCourtshipNorms = useGameStore(s => s.setCourtshipNorms);
-
-  if (!gameState) return null;
-
-  const norms = gameState.settlement.courtshipNorms ?? 'mixed';
-
-  return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Courtship Custom</p>
-      <select
-        disabled={disabled}
-        value={norms}
-        onChange={e => setCourtshipNorms(e.target.value as CourtshipNorms)}
-        className="w-full text-xs bg-stone-800 border border-stone-600 text-slate-300 rounded px-2 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {(['traditional', 'mixed', 'open'] as CourtshipNorms[]).map(n => (
-          <option key={n} value={n}>{COURTSHIP_LABELS[n]}</option>
-        ))}
-      </select>
-      <p className="text-xs text-slate-500">{COURTSHIP_DESCRIPTIONS[norms]}</p>
-    </div>
-  );
-}
-
-function CourtshipNudgeBanner() {
-  const pending             = useGameStore(s => s.pendingCourtshipNudge);
-  const setCourtshipNorms   = useGameStore(s => s.setCourtshipNorms);
-  const dismissNudge        = useGameStore(s => s.dismissCourtshipNudge);
-
-  if (!pending) return null;
-
-  return (
-    <div className="mt-2 p-2 bg-indigo-950/70 border border-indigo-700 rounded text-xs text-indigo-200 space-y-2">
-      <p>
-        <span className="font-semibold">Sauromatian custom:</span> Recognising the Hidden Wheel
-        sits uneasily with strict Imanian courtship norms. Consider shifting to Mixed custom.
-      </p>
-      <div className="flex gap-2">
-        <button
-          onClick={() => { setCourtshipNorms('mixed'); dismissNudge(); }}
-          className="flex-1 px-2 py-1 bg-indigo-700 hover:bg-indigo-600 rounded text-white"
-        >
-          Shift to Mixed
-        </button>
-        <button
-          onClick={dismissNudge}
-          className="flex-1 px-2 py-1 bg-stone-700 hover:bg-stone-600 rounded text-slate-300"
-        >
-          Keep Traditional
-        </button>
-      </div>
-    </div>
-  );
-}
-
-const FAITH_LABELS: Record<string, string> = {
-  imanian_orthodox:       'Solar Church',
-  sacred_wheel:           'Sacred Wheel',
-  syncretic_hidden_wheel: 'Hidden Wheel',
-};
-
-const FAITH_COLORS: Record<string, string> = {
-  imanian_orthodox:       'bg-yellow-500',
-  sacred_wheel:           'bg-teal-500',
-  syncretic_hidden_wheel: 'bg-indigo-500',
-};
-
-function ReligionPanel({ disabled }: { disabled: boolean }) {
-  const gameState          = useGameStore(s => s.gameState);
-  const setReligiousPolicy = useGameStore(s => s.setReligiousPolicy);
-
-  if (!gameState) return null;
-
-  const { culture, settlement } = gameState;
-  const tension = computeReligiousTension(culture.religions);
-  const tensionPct = Math.round(tension * 100);
-  const tensionColor = tension >= 0.75 ? 'bg-red-500'
-                     : tension >= 0.50 ? 'bg-orange-500'
-                     : tension >= 0.25 ? 'bg-yellow-500'
-                     : 'bg-emerald-600';
-
-  const policyOptions: ReligiousPolicy[] = [
-    'tolerant',
-    'orthodox_enforced',
-    'wheel_permitted',
-    ...(culture.hiddenWheelEmerged ? ['hidden_wheel_recognized' as ReligiousPolicy] : []),
-  ];
-
-  return (
-    <div className="space-y-3">
-
-      {/* Faith distribution */}
-      <div>
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Faiths</p>
-        {Array.from(culture.religions.entries())
-          .sort(([, a], [, b]) => b - a)
-          .map(([id, fraction]) => {
-            const pct = Math.round(fraction * 100);
-            if (pct === 0) return null;
-            return (
-              <div key={id} className="mb-1.5">
-                <div className="flex justify-between text-xs mb-0.5">
-                  <span className="text-slate-300">{FAITH_LABELS[id] ?? id}</span>
-                  <span className="text-slate-500">{pct}%</span>
-                </div>
-                <div className="h-1.5 bg-stone-700 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${FAITH_COLORS[id] ?? 'bg-stone-500'}`}
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-              </div>
-            );
-          })}
-      </div>
-
-      {/* Tension */}
-      <div>
-        <div className="flex justify-between text-xs mb-0.5">
-          <span className="text-slate-400">Religious Tension</span>
-          <span className={tension >= 0.50 ? 'text-orange-400 font-semibold' : 'text-slate-500'}>
-            {tensionPct}%
-          </span>
-        </div>
-        <div className="h-1.5 bg-stone-700 rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all ${tensionColor}`}
-            style={{ width: `${tensionPct}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Hidden Wheel divergence progress */}
-      {!culture.hiddenWheelEmerged && culture.hiddenWheelDivergenceTurns > 0 && (
-        <div>
-          <div className="flex justify-between text-xs mb-0.5">
-            <span className="text-indigo-400">Hidden Wheel stirring…</span>
-            <span className="text-slate-500">{culture.hiddenWheelDivergenceTurns} / 20</span>
-          </div>
-          <div className="h-1 bg-stone-700 rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full bg-indigo-600"
-              style={{ width: `${(culture.hiddenWheelDivergenceTurns / 20) * 100}%` }}
-            />
-          </div>
-          {culture.hiddenWheelSuppressedTurns > 0 && (
-            <p className="text-xs text-slate-500 mt-0.5">
-              Suppressed ({culture.hiddenWheelSuppressedTurns} turns remaining)
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Emerged badge */}
-      {culture.hiddenWheelEmerged && (
-        <div className="text-xs px-2 py-1 bg-indigo-950/60 border border-indigo-800 rounded text-indigo-300">
-          ✦ The Hidden Wheel has emerged
-        </div>
-      )}
-
-      {/* Policy selector */}
-      <div>
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Policy</p>
-        <select
-          disabled={disabled}
-          value={settlement.religiousPolicy}
-          onChange={e => setReligiousPolicy(e.target.value as ReligiousPolicy)}
-          className="w-full text-xs bg-stone-800 border border-stone-600 text-slate-300 rounded px-2 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {policyOptions.map(p => (
-            <option key={p} value={p}>{POLICY_LABELS[p]}</option>
-          ))}
-        </select>
-        {settlement.religiousPolicy === 'orthodox_enforced' && (
-          <p className="text-xs text-slate-500 mt-1">Company drain: none. Wheel ceremonies blocked.</p>
-        )}
-        {settlement.religiousPolicy === 'hidden_wheel_recognized' && (
-          <p className="text-xs text-indigo-400 mt-1">Company drain: doubled. Syncretic spread enabled.</p>
-        )}
-      </div>
-
-    </div>
-  );
-}
-
-// ─── Crafting Panel ───────────────────────────────────────────────────────────
-
-function CraftingPanel({ disabled }: { disabled: boolean }) {
-  const gameState   = useGameStore(s => s.gameState);
-  const performCraft = useGameStore(s => s.performCraft);
-  const [feedback, setFeedback] = useState<string | null>(null);
-
-  if (!gameState) return null;
-
-  const { settlement } = gameState;
-  const resources  = settlement.resources;
-  const available  = getAvailableCrafts(settlement.buildings, resources);
-  const availableIds = new Set(available.map(r => r.id));
-
-  function handleCraft(id: CraftRecipeId) {
-    const check = validateCraft(id, settlement.buildings, resources);
-    if (!check.ok) { setFeedback(`Cannot craft: ${check.reason}`); return; }
-    performCraft(id);
-    const recipe = Object.values(CRAFT_RECIPES).find(r => r.id === id);
-    setFeedback(`Crafted: ${recipe?.label ?? id}`);
-  }
-
-  function fmtResources(res: Partial<Record<ResourceType, number>>) {
-    return Object.entries(res)
-      .filter(([, v]) => (v as number) > 0)
-      .map(([k, v]) => `${RESOURCE_EMOJI[k as ResourceType] ?? ''}${v} ${k}`)
-      .join(', ');
-  }
-
-  return (
-    <div className="space-y-2">
-      {feedback && (
-        <p className="text-xs text-emerald-400 px-1">{feedback}</p>
-      )}
-      {Object.values(CRAFT_RECIPES).length === 0 && (
-        <p className="text-xs text-slate-600 italic">No recipes available.</p>
-      )}
-      {Object.values(CRAFT_RECIPES).map(recipe => {
-        const unlocked    = availableIds.has(recipe.id);
-        const validation  = disabled ? { ok: false as const, reason: 'Management phase only' }
-                          : validateCraft(recipe.id, settlement.buildings, resources);
-        const canCraft    = validation.ok;
-
-        return (
-          <div
-            key={recipe.id}
-            className={`rounded border p-2.5 ${unlocked ? 'border-stone-600 bg-stone-800' : 'border-stone-700 bg-stone-800/40 opacity-60'}`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <span className="text-xs font-medium text-slate-200">{recipe.label}</span>
-                <p className="text-xs text-slate-500 mt-0.5">{recipe.description}</p>
-                <p className="text-xs text-stone-400 mt-1">
-                  <span className="text-stone-500">Needs: </span>{fmtResources(recipe.requires.resources)}
-                  {recipe.requires.buildings && recipe.requires.buildings.length > 0 && (
-                    <span className="text-stone-500"> + {recipe.requires.buildings.join(', ')}</span>
-                  )}
-                </p>
-                <p className="text-xs text-emerald-400 mt-0.5">
-                  <span className="text-stone-500">Makes: </span>{fmtResources(recipe.produces)}
-                </p>
-              </div>
-              <button
-                onClick={() => handleCraft(recipe.id)}
-                disabled={!canCraft}
-                className="shrink-0 px-2 py-1 text-xs rounded bg-amber-700 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-amber-100 font-medium"
-              >
-                Craft
-              </button>
-            </div>
-            {!canCraft && !disabled && !validation.ok && (
-              <p className="text-xs text-red-400 mt-1">{validation.reason}</p>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 // ─── Main view ────────────────────────────────────────────────────────────────
 
 export default function SettlementView() {
-  const gameState        = useGameStore(s => s.gameState);
-  const currentPhase     = useGameStore(s => s.currentPhase);
+  const gameState         = useGameStore(s => s.gameState);
+  const currentPhase      = useGameStore(s => s.currentPhase);
   const startConstruction = useGameStore(s => s.startConstruction);
-  const assignBuilder    = useGameStore(s => s.assignBuilder);
-  const removeBuilder    = useGameStore(s => s.removeBuilder);
-  const cancelConstr     = useGameStore(s => s.cancelConstruction);
+  const assignBuilder     = useGameStore(s => s.assignBuilder);
+  const removeBuilder     = useGameStore(s => s.removeBuilder);
+  const cancelConstr      = useGameStore(s => s.cancelConstruction);
 
-  // Track which style is selected for style-variant buildings
   const [pendingStyle, setPendingStyle] = useState<Record<string, BuildingStyle>>({});
-  const [personDetailId, setPersonDetailId] = useState<string | null>(null);
+  const [showBuildMenu, setShowBuildMenu] = useState(false);
+
+  // Modal state for household building grid
+  const [pickerState, setPickerState] = useState<{
+    householdId: string;
+    slotIndex: number;
+  } | null>(null);
+  const [slotDetailState, setSlotDetailState] = useState<{
+    building: BuiltBuilding;
+    householdId: string;
+    slotIndex: number;
+  } | null>(null);
 
   if (!gameState) return null;
 
   const { settlement, people } = gameState;
   const canManage = currentPhase === 'management' || currentPhase === 'idle';
 
-  // Shelter / overcrowding
-  const shelterCap  = getShelterCapacity(settlement.buildings);
+  const shelterCap   = getShelterCapacity(settlement.buildings);
   const overcrowding = getOvercrowdingRatio(settlement.populationCount, settlement.buildings);
 
-  // People available to assign as builders (not already a builder, alive)
-  const allPeople = Array.from(people.values());
+  const allPeople       = Array.from(people.values());
   const freeNonBuilders = allPeople.filter(p => p.role !== 'builder');
   const allPeopleNames  = new Map(allPeople.map(p => [p.id, `${p.firstName} ${p.familyName}`]));
 
-  // Build menu: all building IDs that aren't in the queue already (or already built — canBuild handles that)
-  const allIds = Object.keys(BUILDING_CATALOG) as BuildingId[];
-  // Exclude the camp from the menu (it's the starting building, can't be built again)
+  const allIds      = Object.keys(BUILDING_CATALOG) as BuildingId[];
   const buildableIds = allIds.filter(id => id !== 'camp');
 
   function handleBuild(defId: BuildingId) {
     const def = BUILDING_CATALOG[defId];
-    const style = def.hasStyleVariants
-      ? (pendingStyle[defId] ?? 'imanian')
-      : null;
+    const style = def.hasStyleVariants ? (pendingStyle[defId] ?? 'imanian') : null;
     startConstruction(defId, style);
+    setShowBuildMenu(false);
   }
 
+  // Communal buildings are those not flagged as household-only
+  const communalBuildings = settlement.buildings.filter(b => {
+    const def = BUILDING_CATALOG[b.defId];
+    return !def || def.category !== 'dwelling';
+  });
+
   return (
-    <div className="flex gap-4 p-4 h-full overflow-hidden">
+    <div className="flex gap-0 h-full overflow-hidden">
 
-      {/* ── Left: Standing buildings ───────────────────────────────────── */}
-      <div className="w-64 flex-shrink-0 flex flex-col overflow-hidden">
-        <h2 className="text-base font-semibold text-amber-400 mb-3">
-          {settlement.name}
-        </h2>
+      {/* ── Left panel: settlement info + communal buildings + construction ── */}
+      <div className="w-72 flex-shrink-0 flex flex-col overflow-hidden border-r border-stone-700 bg-stone-950">
 
-        <ShelterBar pop={settlement.populationCount} capacity={shelterCap} />
-
-        {overcrowding > 1.0 && (
-          <div className="mb-3 px-3 py-2 bg-red-950/50 border border-red-800 rounded text-xs text-red-300">
-            ⚠ Overcrowded — build more shelter to avoid penalties.
+        {/* Settlement header */}
+        <div className="px-4 pt-4 pb-3 border-b border-stone-800">
+          <h2 className="text-base font-bold text-amber-400 mb-2">{settlement.name}</h2>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+            <span className="text-slate-500">Population</span>
+            <span className={overcrowding > 1.0 ? 'text-red-400 font-semibold' : 'text-slate-300'}>
+              {settlement.populationCount} / {shelterCap} shelter
+            </span>
+            <span className="text-slate-500">Company</span>
+            <span className="text-slate-300">{gameState.company.standing} standing</span>
+            <span className="text-slate-500">Season</span>
+            <span className="text-slate-300">{settlement.currentSeason} · Year {settlement.currentYear}</span>
           </div>
-        )}
+          {overcrowding > 1.0 && (
+            <div className="mt-2 px-2 py-1.5 bg-red-950/50 border border-red-800 rounded text-xs text-red-300">
+              ⚠ Overcrowded — build more shelter.
+            </div>
+          )}
+        </div>
 
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-          Standing Buildings
-        </h3>
-        <div className="flex-1 overflow-y-auto">
-          {settlement.buildings.length === 0 ? (
-            <p className="text-xs text-slate-600 italic">None.</p>
+        {/* Communal buildings list */}
+        <div className="flex-1 overflow-y-auto px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Communal Buildings
+            </h3>
+          </div>
+
+          {communalBuildings.length === 0 ? (
+            <p className="text-xs text-slate-600 italic mb-3">Camp only.</p>
           ) : (
-            settlement.buildings.map(b => (
+            communalBuildings.map(b => (
               <BuildingCard key={b.instanceId} building={b} />
             ))
           )}
+
+          {/* Build button */}
+          <button
+            disabled={!canManage}
+            onClick={() => setShowBuildMenu(v => !v)}
+            className="w-full mt-2 text-xs py-1.5 rounded border border-dashed border-stone-600 text-stone-400 hover:border-amber-700 hover:text-amber-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            + Build communal building
+          </button>
+
+          {/* Inline build menu */}
+          {showBuildMenu && canManage && (
+            <div className="mt-3 border border-stone-700 rounded bg-stone-900">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-stone-700">
+                <span className="text-xs font-semibold text-slate-300">Build Menu</span>
+                <button onClick={() => setShowBuildMenu(false)} className="text-slate-500 hover:text-slate-300 text-xs">✕</button>
+              </div>
+              <div className="p-2 max-h-96 overflow-y-auto">
+                {(['civic', 'food', 'industry', 'social', 'defence'] as const).map(category => {
+                  const ids = buildableIds.filter(id => BUILDING_CATALOG[id]?.category === category);
+                  if (ids.length === 0) return null;
+                  return (
+                    <div key={category} className="mb-3">
+                      <span className={`text-xs px-1.5 py-0.5 rounded font-semibold mb-1.5 inline-block ${CATEGORY_COLOR[category]}`}>
+                        {CATEGORY_LABEL[category]}
+                      </span>
+                      {ids.map(defId => {
+                        const def   = BUILDING_CATALOG[defId];
+                        const style = def?.hasStyleVariants ? (pendingStyle[defId] ?? 'imanian') : null;
+                        const check = canBuild(settlement, defId, style);
+                        return (
+                          <div key={defId}>
+                            {def?.hasStyleVariants && (
+                              <div className="flex gap-1 mb-1">
+                                {(['imanian', 'sauromatian'] as BuildingStyle[]).map(s => (
+                                  <button
+                                    key={s}
+                                    onClick={() => setPendingStyle(prev => ({ ...prev, [defId]: s }))}
+                                    className={`text-xs px-2 py-0.5 rounded transition-colors ${
+                                      (pendingStyle[defId] ?? 'imanian') === s
+                                        ? 'bg-amber-800 text-amber-200'
+                                        : 'bg-stone-700 text-slate-400 hover:bg-stone-600'
+                                    }`}
+                                  >
+                                    {STYLE_LABEL[s]}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            <BuildMenuItem
+                              defId={defId}
+                              style={style}
+                              allowed={check.ok}
+                              reason={check.ok ? undefined : check.reason}
+                              onBuild={() => handleBuild(defId)}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Dwelling section */}
+          {(() => {
+            const dwellingIds = buildableIds.filter(id => BUILDING_CATALOG[id]?.category === 'dwelling');
+            const builtCount  = settlement.buildings.filter(b => BUILDING_CATALOG[b.defId]?.category === 'dwelling').length;
+            if (dwellingIds.length === 0) return null;
+            return (
+              <div className="mt-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`text-xs px-1.5 py-0.5 rounded font-semibold ${CATEGORY_COLOR.dwelling}`}>
+                    {CATEGORY_LABEL.dwelling}
+                  </span>
+                  {builtCount > 0 && <span className="text-xs text-stone-500">{builtCount} standing</span>}
+                </div>
+                {dwellingIds.map(defId => {
+                  const check = canBuild(settlement, defId, null);
+                  return (
+                    <BuildMenuItem
+                      key={defId}
+                      defId={defId}
+                      style={null}
+                      allowed={canManage && check.ok}
+                      reason={!canManage ? undefined : check.ok ? undefined : check.reason}
+                      onBuild={() => { startConstruction(defId, null); }}
+                    />
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
-      </div>
 
-      {/* ── Centre: Construction queue ─────────────────────────────────── */}
-      <div className="w-72 flex-shrink-0 flex flex-col overflow-hidden">
-        <h3 className="text-base font-semibold text-slate-300 mb-3">
-          Construction
-        </h3>
-
-        {settlement.constructionQueue.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-sm text-slate-600 italic text-center">
-              No projects in progress.
-              <br />
-              Start building from the menu.
-            </p>
-          </div>
-        ) : (
-          <div className="flex-1 overflow-y-auto">
+        {/* Construction queue */}
+        {settlement.constructionQueue.length > 0 && (
+          <div className="border-t border-stone-800 px-4 py-3 max-h-72 overflow-y-auto">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+              Construction ({settlement.constructionQueue.length})
+            </h3>
             {settlement.constructionQueue.map(proj => {
-              const assigned    = new Set(proj.assignedWorkerIds);
-              const available   = freeNonBuilders
-                .filter(p => !assigned.has(p.id))
-                .map(p => p.id);
+              const assigned  = new Set(proj.assignedWorkerIds);
+              const available = freeNonBuilders.filter(p => !assigned.has(p.id)).map(p => p.id);
               return (
                 <ConstructionCard
                   key={proj.id}
@@ -733,133 +486,146 @@ export default function SettlementView() {
         )}
       </div>
 
-      {/* ── Right: Build menu ──────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <h3 className="text-base font-semibold text-slate-300 mb-3">
-          Build Menu
+      {/* ── Right panel: household 3×3 building grids ───────────────────── */}
+      <div className="flex-1 overflow-y-auto p-4">
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+          Households
         </h3>
 
-        {!canManage && (
-          <div className="mb-3 px-3 py-2 bg-stone-800 border border-stone-600 rounded text-xs text-slate-400">
-            Construction can only be queued during the Management phase.
+        {gameState.households.size === 0 ? (
+          <div className="flex items-center justify-center h-48">
+            <p className="text-sm text-slate-600 italic text-center">
+              No households yet.
+              <br />
+              Arrange marriages to form households.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-4">
+            {Array.from(gameState.households.values()).map(hh => (
+              <HouseholdCard
+                key={hh.id}
+                hh={hh}
+                allPeople={allPeople}
+                buildings={settlement.buildings}
+                canManage={canManage}
+                onSlotClick={(slotIndex, building) => {
+                  if (building) {
+                    setSlotDetailState({ building, householdId: hh.id, slotIndex });
+                  } else {
+                    setPickerState({ householdId: hh.id, slotIndex });
+                  }
+                }}
+              />
+            ))}
           </div>
         )}
-
-        <div className="flex-1 overflow-y-auto">
-          {(['civic', 'food', 'industry', 'social', 'defence', 'dwelling'] as const).map(category => {
-            const ids = buildableIds.filter(id => BUILDING_CATALOG[id]?.category === category);
-            if (ids.length === 0) return null;
-            const dwellingBuiltCount = category === 'dwelling'
-              ? settlement.buildings.filter(b => BUILDING_CATALOG[b.defId]?.category === 'dwelling').length
-              : 0;
-            return (
-              <div key={category} className="mb-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={`text-xs px-1.5 py-0.5 rounded font-semibold ${CATEGORY_COLOR[category]}`}>
-                    {CATEGORY_LABEL[category]}
-                  </span>
-                  {category === 'dwelling' && dwellingBuiltCount > 0 && (
-                    <span className="text-xs text-stone-500">{dwellingBuiltCount} standing</span>
-                  )}
-                </div>
-                {ids.map(defId => {
-                  const def   = BUILDING_CATALOG[defId];
-                  const style = def?.hasStyleVariants
-                    ? (pendingStyle[defId] ?? 'imanian')
-                    : null;
-                  const check = canBuild(settlement, defId, style);
-                  return (
-                    <div key={defId}>
-                      {def?.hasStyleVariants && (
-                        <div className="flex gap-1 mb-1 mt-1">
-                          {(['imanian', 'sauromatian'] as BuildingStyle[]).map(s => (
-                            <button
-                              key={s}
-                              onClick={() => setPendingStyle(prev => ({ ...prev, [defId]: s }))}
-                              className={`text-xs px-2 py-0.5 rounded transition-colors ${
-                                (pendingStyle[defId] ?? 'imanian') === s
-                                  ? 'bg-amber-800 text-amber-200'
-                                  : 'bg-stone-700 text-slate-400 hover:bg-stone-600'
-                              }`}
-                            >
-                              {STYLE_LABEL[s]}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      <BuildMenuItem
-                        defId={defId}
-                        style={style}
-                        allowed={canManage && check.ok}
-                        reason={!canManage ? undefined : check.ok ? undefined : check.reason}
-                        onBuild={() => handleBuild(defId)}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
       </div>
 
-      {/* ── Far-right: Crafting ────────────────────────────────────────── */}
-      <div className="w-56 flex-shrink-0 flex flex-col overflow-hidden border-l border-stone-700 pl-4">
-        <h3 className="text-base font-semibold text-slate-300 mb-3">
-          Crafting
-        </h3>
-        <div className="flex-1 overflow-y-auto">
-          <CraftingPanel disabled={!canManage} />
-        </div>
-      </div>
-
-      {/* ── Religion panel ─────────────────────────────────────────────── */}
-      <div className="w-56 flex-shrink-0 flex flex-col overflow-hidden border-l border-stone-700 pl-4">
-        <h3 className="text-base font-semibold text-slate-300 mb-3">
-          Religion
-        </h3>
-        <div className="flex-1 overflow-y-auto">
-          <IdentityScale
-            culturalBlend={gameState.culture.culturalBlend}
-            identityPressure={gameState.identityPressure}
-          />
-          <div className="border-b border-stone-700 my-4" />
-          <ReligionPanel disabled={!canManage} />
-          <div className="border-b border-stone-700 my-4" />
-          <CourtshipPanel disabled={!canManage} />
-          <CourtshipNudgeBanner />
-        </div>
-      </div>
-
-      {/* ── Factions panel ─────────────────────────────────────────────── */}
-      <div className="w-56 flex-shrink-0 flex flex-col overflow-hidden border-l border-stone-700 pl-4">
-        <h3 className="text-base font-semibold text-slate-300 mb-3">
-          Factions
-        </h3>
-        <div className="flex-1 overflow-y-auto">
-          <FactionsPanel factions={gameState.factions ?? []} people={people} />
-          <ActivityFeed
-            entries={gameState.activityLog}
-            people={people}
-            graveyard={gameState.graveyard}
-            onNavigate={id => setPersonDetailId(id)}
-          />
-        </div>
-      </div>
-
-      {/* ── PersonDetail overlay (triggered from ActivityFeed) ─────────── */}
-      {personDetailId && (
-        <div className="fixed inset-0 z-50 flex items-start justify-end pointer-events-none">
-          <div className="pointer-events-auto w-96 h-full overflow-y-auto bg-stone-900 border-l border-stone-700 shadow-2xl">
-            <PersonDetail
-              personId={personDetailId}
-              onClose={() => setPersonDetailId(null)}
-              onNavigate={id => setPersonDetailId(id)}
-            />
-          </div>
-        </div>
+      {/* ── Modals ──────────────────────────────────────────────────────── */}
+      {pickerState && (
+        <BuildingPickerModal
+          householdId={pickerState.householdId}
+          mode="household"
+          onClose={() => setPickerState(null)}
+        />
+      )}
+      {slotDetailState && (
+        <SlotDetailPopover
+          building={slotDetailState.building}
+          householdId={slotDetailState.householdId}
+          slotIndex={slotDetailState.slotIndex}
+          canManage={canManage}
+          onClose={() => setSlotDetailState(null)}
+        />
       )}
 
+    </div>
+  );
+}
+
+// ─── HouseholdCard with 3×3 building slot grid ────────────────────────────────
+
+const SLOT_LABELS = ['Dwelling', 'Production', 'Production', 'Production', 'Production', 'Production', 'Production', 'Production', 'Production'];
+
+function HouseholdCard({
+  hh,
+  allPeople,
+  buildings,
+  canManage,
+  onSlotClick,
+}: {
+  hh: Household;
+  allPeople: ReturnType<typeof Array.prototype.filter>;
+  buildings: BuiltBuilding[];
+  canManage: boolean;
+  onSlotClick: (slotIndex: number, building: BuiltBuilding | null) => void;
+}) {
+  const slots: (string | null)[] = hh.buildingSlots ?? Array(9).fill(null);
+  const members = hh.memberIds
+    .map(id => (allPeople as { id: string; firstName: string }[]).find(p => p.id === id))
+    .filter((p): p is { id: string; firstName: string } => !!p);
+
+  return (
+    <div className="w-56 bg-stone-900 border border-stone-700 rounded-xl overflow-hidden shrink-0">
+      {/* Card header */}
+      <div className="px-3 py-2 bg-stone-800 border-b border-stone-700 flex items-center gap-2">
+        <span className="text-xs font-semibold text-amber-300">{hh.name}</span>
+        <span className="ml-auto text-[10px] text-stone-500">{members.length} members</span>
+      </div>
+
+      {/* 3×3 building slot grid */}
+      <div className="p-1.5 grid grid-cols-3 gap-1">
+        {slots.map((instanceId, idx) => {
+          const building = instanceId
+            ? buildings.find(b => b.instanceId === instanceId) ?? null
+            : null;
+          const def = building ? BUILDING_CATALOG[building.defId] : null;
+          const isOccupied = !!building;
+
+          return (
+            <button
+              key={idx}
+              title={isOccupied
+                ? getBuildingDisplayName(building.defId, building.style)
+                : `${SLOT_LABELS[idx] ?? 'Slot'} (empty — click to build)`}
+              onClick={() => canManage && onSlotClick(idx, building)}
+              className={`
+                relative aspect-square rounded-lg border flex flex-col items-center justify-center gap-0.5 p-0.5 transition-colors
+                ${isOccupied
+                  ? 'bg-stone-800 border-stone-600 hover:border-amber-600'
+                  : 'bg-stone-950 border-stone-700 border-dashed hover:border-stone-500'}
+                ${!canManage ? 'cursor-default' : 'cursor-pointer'}
+              `}
+            >
+              {isOccupied && def ? (
+                <>
+                  <BuildingIcon id={building.defId} size={20} className="text-amber-400" />
+                  <span className="text-[8px] text-slate-400 text-center leading-tight line-clamp-2">
+                    {getBuildingDisplayName(building.defId, building.style)}
+                  </span>
+                </>
+              ) : (
+                <span className="text-stone-700 text-xs select-none">+</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Member pills */}
+      <div className="px-3 pb-2">
+        <div className="flex flex-wrap gap-1">
+          {members.slice(0, 6).map(p => (
+            <span key={p.id} className="text-[10px] bg-stone-800 text-slate-400 px-1.5 py-0.5 rounded">
+              {p.firstName}
+            </span>
+          ))}
+          {members.length > 6 && (
+            <span className="text-[10px] text-stone-600">+{members.length - 6}</span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

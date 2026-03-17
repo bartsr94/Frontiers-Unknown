@@ -18,6 +18,7 @@ import CouncilFooter from './CouncilFooter';
 import PeopleView from '../views/PeopleView';
 import EventView from '../views/EventView';
 import SettlementView from '../views/SettlementView';
+import ProductionView from '../views/ProductionView';
 import TradeView from '../views/TradeView';
 import DiplomacyView from '../views/DiplomacyView';
 import CommunityView from '../views/CommunityView';
@@ -83,6 +84,7 @@ export default function GameScreen() {
       case 'settlers':   return <PeopleView />;
       case 'events':     return <EventView />;
       case 'settlement': return <SettlementView />;
+      case 'production': return <ProductionView />;
       case 'trade':      return <TradeView />;
       case 'community':  return <CommunityView />;
       case 'diplomacy':  return <DiplomacyView />;

@@ -44,6 +44,7 @@ export function createHousehold(options: CreateHouseholdOptions): Household {
     dwellingBuildingId: null,
     productionBuildingIds: [],
     isAutoNamed: options.isAutoNamed ?? true,
+    buildingSlots: Array(9).fill(null) as (string | null)[],
   };
 }
 

@@ -154,6 +154,11 @@ export function deserializeGameState(json: string): GameState {
           dwellingBuildingId:  (h as Partial<typeof h>).dwellingBuildingId  ?? null,
           productionBuildingIds: (h as Partial<typeof h>).productionBuildingIds ?? [],
           isAutoNamed: (h as Partial<typeof h>).isAutoNamed ?? true,
+          buildingSlots: (h as any).buildingSlots ?? [
+            (h as any).dwellingBuildingId ?? null,
+            ...((h as any).productionBuildingIds ?? []).slice(0, 8),
+            ...new Array(Math.max(0, 8 - ((h as any).productionBuildingIds?.length ?? 0))).fill(null),
+          ],
         },
       ]),
     ),

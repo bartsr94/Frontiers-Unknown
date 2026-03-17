@@ -13,6 +13,7 @@ import type { Faction, FactionType } from '../../simulation/turn/game-state';
 import { factionLabel } from '../../simulation/world/factions';
 import type { NamedRelationshipType } from '../../simulation/population/person';
 import PersonDetail from './PersonDetail';
+import ReligionCommunityPanel from '../components/ReligionCommunityPanel';
 
 // ─── Faction colour map ───────────────────────────────────────────────────────
 
@@ -105,7 +106,8 @@ function FactionsPanel({ factions, people }: {
 // ─── Main View ────────────────────────────────────────────────────────────────
 
 export default function CommunityView() {
-  const gameState   = useGameStore(s => s.gameState);
+  const gameState    = useGameStore(s => s.gameState);
+  const currentPhase = useGameStore(s => s.currentPhase);
   const [personDetailId, setPersonDetailId] = useState<string | null>(null);
 
   if (!gameState) {
@@ -229,6 +231,12 @@ export default function CommunityView() {
           graveyard={gameState.graveyard}
           onNavigate={id => setPersonDetailId(id)}
         />
+      </div>
+
+      {/* ── FAR-RIGHT: Religion, Identity, Courtship ──────────────────── */}
+      <div className="w-56 shrink-0 bg-stone-900 border-l border-stone-700 overflow-y-auto p-3">
+        <SectionHeading label="Culture & Faith" />
+        <ReligionCommunityPanel disabled={currentPhase !== 'management' && currentPhase !== 'idle'} />
       </div>
 
       {/* ── PersonDetail overlay ──────────────────────────────────────── */}

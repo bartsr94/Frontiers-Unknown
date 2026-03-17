@@ -193,6 +193,12 @@ export interface Household {
    * and updated whenever leadership changes.  False = player has renamed it.
    */
   isAutoNamed: boolean;
+  /**
+   * 9-slot building grid owned by this household.
+   * Slot 0 = private dwelling; slots 1–8 = production / specialisation buildings.
+   * Each entry is either a BuiltBuilding instanceId or null (empty slot).
+   */
+  buildingSlots: (string | null)[];
 }
 
 // ─── Settlement Culture ────────────────────────────────────────────────────────

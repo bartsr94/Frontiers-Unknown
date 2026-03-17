@@ -270,6 +270,82 @@ describe('applyDwellingClaims — demolished dwelling defensive guard', () => {
   });
 });
 
+// ─── buildingSlots sync after applyDwellingClaims ──────────────────────────────
+
+describe('applyDwellingClaims — buildingSlots sync', () => {
+  it('sets buildingSlots[0] to the dwelling instanceId after a Pass 2 claim', () => {
+    const hut = makeBuilding('wattle_hut', 'hut_1', null);
+    const person = makePerson('p1');
+    const hh = makeHousehold('hh1', ['p1']);
+
+    const { households } = applyDwellingClaims(
+      [],
+      [hut],
+      new Map([['hh1', hh]]),
+      new Map([['p1', person]]),
+    );
+
+    expect(households.get('hh1')!.buildingSlots?.[0]).toBe('hut_1');
+  });
+
+  it('leaves buildingSlots[1–8] as null for a dwelling-only claim', () => {
+    const hut = makeBuilding('wattle_hut', 'hut_1', null);
+    const person = makePerson('p1');
+    const hh = makeHousehold('hh1', ['p1']);
+
+    const { households } = applyDwellingClaims(
+      [],
+      [hut],
+      new Map([['hh1', hh]]),
+      new Map([['p1', person]]),
+    );
+
+    const slots = households.get('hh1')!.buildingSlots ?? [];
+    expect(slots.slice(1).every(s => s === null)).toBe(true);
+  });
+
+  it('syncs productionBuildingIds into buildingSlots[1+]', () => {
+    // Household already has a dwelling + one production building pre-set;
+    // Pass 3 must write those into the slots array.
+    const hut    = makeBuilding('wattle_hut', 'hut_1',    'hh1');
+    const smithy = makeBuilding('smithy',     'smithy_1', 'hh1');
+    const person = makePerson('p1');
+    const hh: Household = {
+      ...makeHousehold('hh1', ['p1'], 'hut_1'),
+      productionBuildingIds: ['smithy_1'],
+    };
+
+    const { households } = applyDwellingClaims(
+      [],
+      [hut, smithy],
+      new Map([['hh1', hh]]),
+      new Map([['p1', person]]),
+    );
+
+    const slots = households.get('hh1')!.buildingSlots ?? [];
+    expect(slots[0]).toBe('hut_1');
+    expect(slots[1]).toBe('smithy_1');
+    expect(slots.slice(2).every(s => s === null)).toBe(true);
+  });
+
+  it('buildingSlots aligns with dwellingBuildingId after a scheme-owned Pass 1 claim', () => {
+    const hut    = makeBuilding('wattle_hut', 'hut_scheme', 'hh1');
+    const person = makePerson('p1');
+    const hh     = makeHousehold('hh1', ['p1']);
+
+    const { households } = applyDwellingClaims(
+      [hut],   // Pass 1: just completed with owner pre-set
+      [hut],
+      new Map([['hh1', hh]]),
+      new Map([['p1', person]]),
+    );
+
+    const result = households.get('hh1')!;
+    expect(result.dwellingBuildingId).toBe('hut_scheme');
+    expect(result.buildingSlots?.[0]).toBe('hut_scheme');
+  });
+});
+
 // ─── findAvailableWorkerSlotIndex ─────────────────────────────────────────────
 
 describe('findAvailableWorkerSlotIndex', () => {

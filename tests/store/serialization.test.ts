@@ -156,6 +156,89 @@ describe('deserializeGameState — other fallbacks', () => {
   });
 });
 
+// ─── buildingSlots migration ────────────────────────────────────────────────────
+
+describe('deserializeGameState — buildingSlots migration', () => {
+  function makeHouseholdJson(overrides: Record<string, unknown>) {
+    return [
+      ['hh1', {
+        id: 'hh1',
+        name: 'Test Household',
+        isAutoNamed: true,
+        tradition: 'imanian',
+        headId: null,
+        seniorWifeId: null,
+        memberIds: [],
+        ashkaMelathiBonds: [],
+        foundedTurn: 0,
+        dwellingBuildingId: null,
+        productionBuildingIds: [],
+        ...overrides,
+      }],
+    ];
+  }
+
+  it('computes buildingSlots from dwellingBuildingId when field is absent (old save)', () => {
+    const state = deserializeGameState(makeMinimalSaveJson({
+      households: makeHouseholdJson({ dwellingBuildingId: 'wattle_hut_1' }),
+    }));
+    const hh = state.households.get('hh1')!;
+    expect(hh.buildingSlots[0]).toBe('wattle_hut_1');
+    expect(hh.buildingSlots.slice(1)).toEqual(Array(8).fill(null));
+  });
+
+  it('merges dwellingBuildingId + productionBuildingIds into slots (old save)', () => {
+    const state = deserializeGameState(makeMinimalSaveJson({
+      households: makeHouseholdJson({
+        dwellingBuildingId: 'hut_1',
+        productionBuildingIds: ['smithy_1', 'fields_1'],
+      }),
+    }));
+    const hh = state.households.get('hh1')!;
+    expect(hh.buildingSlots[0]).toBe('hut_1');
+    expect(hh.buildingSlots[1]).toBe('smithy_1');
+    expect(hh.buildingSlots[2]).toBe('fields_1');
+    expect(hh.buildingSlots.slice(3)).toEqual(Array(6).fill(null));
+  });
+
+  it('preserves explicit buildingSlots when already present (new save)', () => {
+    const slots: (string | null)[] = [
+      'compound_1', 'smithy_1', 'fields_1', null, null, null, null, null, null,
+    ];
+    const state = deserializeGameState(makeMinimalSaveJson({
+      households: makeHouseholdJson({
+        dwellingBuildingId: 'compound_1',
+        productionBuildingIds: ['smithy_1', 'fields_1'],
+        buildingSlots: slots,
+      }),
+    }));
+    expect(state.households.get('hh1')!.buildingSlots).toEqual(slots);
+  });
+
+  it('returns 9 all-null slots for a household with no dwelling or production', () => {
+    const state = deserializeGameState(makeMinimalSaveJson({
+      households: makeHouseholdJson({}),
+    }));
+    const hh = state.households.get('hh1')!;
+    expect(hh.buildingSlots).toHaveLength(9);
+    expect(hh.buildingSlots.every(s => s === null)).toBe(true);
+  });
+
+  it('handles more than 8 productionBuildingIds by truncating to 8 slots', () => {
+    // Pathological case: more production IDs than available slots.
+    const prodIds = Array.from({ length: 10 }, (_, i) => `prod_${i}`);
+    const state = deserializeGameState(makeMinimalSaveJson({
+      households: makeHouseholdJson({ productionBuildingIds: prodIds }),
+    }));
+    const hh = state.households.get('hh1')!;
+    // Slot 0 = null (no dwelling), slots 1–8 = first 8 prod IDs
+    expect(hh.buildingSlots).toHaveLength(9);
+    expect(hh.buildingSlots[0]).toBeNull();
+    expect(hh.buildingSlots[1]).toBe('prod_0');
+    expect(hh.buildingSlots[8]).toBe('prod_7');
+  });
+});
+
 // ─── Person round-trip ────────────────────────────────────────────────────────
 
 describe('serializePerson / deserializePerson round-trip', () => {

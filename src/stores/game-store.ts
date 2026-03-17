@@ -38,6 +38,7 @@ import {
   findAvailableWorkerSlotIndex,
 } from '../simulation/buildings/construction';
 import { hasBuilding } from '../simulation/buildings/building-effects';
+import { BUILDING_CATALOG } from '../simulation/buildings/building-definitions';
 import type {
   GameState,
   TurnPhase,
@@ -130,6 +131,17 @@ export interface GameStore {
   removeBuilder: (projectId: string, personId: string) => void;
   /** Cancel a project in the construction queue; refunds 50% of resource cost. */
   cancelConstruction: (projectId: string) => void;
+  /**
+   * Queue a construction project for a specific household.
+   * For household buildings, `ownerHouseholdId` is pre-set so `applyDwellingClaims`
+   * claims it immediately on completion without the Pass-2 lottery.
+   * Pass `householdId: null` to build communally (same as `startConstruction`).
+   */
+  buildForHousehold: (householdId: string | null, defId: BuildingId, style: BuildingStyle | null) => void;
+  /** Remove a standing household building; clears the slot and person claims. */
+  demolishHouseholdBuilding: (householdId: string, slotIndex: number) => void;
+  /** Start construction of the next tier in the building's upgrade chain. */
+  upgradeHouseholdBuilding: (householdId: string, slotIndex: number) => void;
   // ── Religion ───────────────────────────────────────────────────────────────
   /** Update the settlement's religious policy. */
   setReligiousPolicy: (policy: ReligiousPolicy) => void;
@@ -1073,6 +1085,90 @@ export const useGameStore = create<GameStore>((set, get) => {
           },
         },
       });
+    },
+
+    buildForHousehold(householdId, defId, style) {
+      const { gameState } = get();
+      if (!gameState) return;
+      const check = canBuild(gameState.settlement, defId, style);
+      if (!check.ok) return;
+      const { project, updatedResources } = buildingStartConstruction(
+        gameState.settlement,
+        defId,
+        style,
+        gameState.turnNumber,
+      );
+      const projectWithOwner = householdId ? { ...project, ownerHouseholdId: householdId } : project;
+      set({
+        gameState: {
+          ...gameState,
+          settlement: {
+            ...gameState.settlement,
+            resources: updatedResources,
+            constructionQueue: [...gameState.settlement.constructionQueue, projectWithOwner],
+          },
+        },
+      });
+    },
+
+    demolishHouseholdBuilding(householdId, slotIndex) {
+      const { gameState } = get();
+      if (!gameState) return;
+      const hh = gameState.households.get(householdId);
+      if (!hh) return;
+      const instanceId = (hh.buildingSlots ?? [])[slotIndex];
+      if (!instanceId) return;
+      // Remove from settlement buildings.
+      const updatedBuildings = gameState.settlement.buildings.filter(b => b.instanceId !== instanceId);
+      // Clear workers who were assigned to the demolished building.
+      const updatedPeople = new Map(gameState.people);
+      for (const [, p] of updatedPeople) {
+        if (p.claimedBuildingId === instanceId) {
+          updatedPeople.set(p.id, { ...p, claimedBuildingId: null });
+        }
+      }
+      // Update the household.
+      const newSlots = [...(hh.buildingSlots ?? Array(9).fill(null))];
+      newSlots[slotIndex] = null;
+      const updatedHouseholds = new Map(gameState.households);
+      const isDwelling = slotIndex === 0;
+      updatedHouseholds.set(householdId, {
+        ...hh,
+        buildingSlots: newSlots,
+        dwellingBuildingId: isDwelling ? null : hh.dwellingBuildingId,
+        productionBuildingIds: isDwelling
+          ? hh.productionBuildingIds
+          : hh.productionBuildingIds.filter(id => id !== instanceId),
+      });
+      set({
+        gameState: {
+          ...gameState,
+          people: updatedPeople,
+          households: updatedHouseholds,
+          settlement: { ...gameState.settlement, buildings: updatedBuildings },
+        },
+      });
+    },
+
+    upgradeHouseholdBuilding(householdId, slotIndex) {
+      const { gameState } = get();
+      if (!gameState) return;
+      const hh = gameState.households.get(householdId);
+      if (!hh) return;
+      const instanceId = (hh.buildingSlots ?? [])[slotIndex];
+      if (!instanceId) return;
+      const building = gameState.settlement.buildings.find(b => b.instanceId === instanceId);
+      if (!building) return;
+      const currentDef = BUILDING_CATALOG[building.defId];
+      if (!currentDef.upgradeChainId || currentDef.tierInChain === undefined) return;
+      // Find next tier in same upgrade chain.
+      const nextDef = Object.values(BUILDING_CATALOG).find(
+        d =>
+          d.upgradeChainId === currentDef.upgradeChainId &&
+          d.tierInChain === currentDef.tierInChain! + 1,
+      );
+      if (!nextDef) return;
+      get().buildForHousehold(householdId, nextDef.id, building.style);
     },
 
     cancelConstruction(projectId) {

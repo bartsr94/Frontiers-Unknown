@@ -16,6 +16,7 @@ export type View =
   | 'settlers'
   | 'events'
   | 'settlement'
+  | 'production'
   | 'trade'
   | 'community'
   | 'diplomacy'
@@ -33,6 +34,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'settlers',    emoji: '👥', label: 'Settlers'   },
   { id: 'events',      emoji: '📜', label: 'Events'     },
   { id: 'settlement',  emoji: '🏘', label: 'Settlement' },
+  { id: 'production',  emoji: '⚒', label: 'Production' },
   { id: 'trade',       emoji: '🔀', label: 'Trade'      },
   { id: 'community',   emoji: '🏛', label: 'Community'  },
   { id: 'diplomacy',   emoji: '🤝', label: 'Diplomacy'            },

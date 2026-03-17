@@ -153,6 +153,22 @@ export interface BuildingDef {
    * Multiple buildings stack; total is capped at +0.25 in fertility.ts.
    */
   fertilityBonus?: number;
+  /**
+   * Whether this building is communal (settlement-owned) or can be placed
+   * in a household's private building grid.
+   * Defaults to 'communal' if omitted (safe fallback for future buildings).
+   */
+  ownership?: 'communal' | 'household';
+  /**
+   * Upgrade chain identifier. Groups buildings into a progression.
+   * E.g. 'dwelling' groups wattle_hut → cottage → homestead → compound.
+   */
+  upgradeChainId?: string;
+  /**
+   * 1-indexed position within the upgrade chain.
+   * 1 = base tier, 2 = first upgrade, etc.
+   */
+  tierInChain?: number;
 }
 
 // ─── Building Catalogue ────────────────────────────────────────────────────────
@@ -174,6 +190,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     cost: {},
     buildSeasons: 0,
     shelterCapacity: 15,
+    ownership: 'communal',
+    upgradeChainId: 'civic',
+    tierInChain: 1,
   },
 
   // ── Civic tier 2 (replaces Camp) ───────────────────────────────────────────
@@ -194,6 +213,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
       { role: 'council', skill: 'leadership', bonus: 1 },
       { role: 'council', skill: 'custom', bonus: 1 },
     ],
+    ownership: 'communal',
+    upgradeChainId: 'civic',
+    tierInChain: 2,
   },
 
   roundhouse: {
@@ -211,6 +233,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [
       { role: 'council', skill: 'leadership', bonus: 1 },
     ],
+    ownership: 'communal',
+    upgradeChainId: 'civic',
+    tierInChain: 2,
   },
 
   // ── Civic tier 3 (replaces tier 2) ─────────────────────────────────────────
@@ -231,6 +256,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
       { role: 'council', skill: 'leadership', bonus: 1 },
       { role: 'council', skill: 'custom', bonus: 1 },
     ],
+    ownership: 'communal',
+    upgradeChainId: 'civic',
+    tierInChain: 3,
   },
 
   clan_lodge: {
@@ -248,6 +276,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [
       { role: 'council', skill: 'leadership', bonus: 1 },
     ],
+    ownership: 'communal',
+    upgradeChainId: 'civic',
+    tierInChain: 3,
   },
 
   // ── Food & Storage ──────────────────────────────────────────────────────────
@@ -263,6 +294,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     shelterCapacity: 0,
     flatProductionBonus: { food: 2 },
     winterFoodProtection: true,
+    ownership: 'communal',
   },
 
   fields: {
@@ -283,6 +315,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     workerSlots: 4,
     workerRole: 'farmer',
     allowMultiple: true,
+    ownership: 'household',
+    upgradeChainId: 'agriculture',
+    tierInChain: 1,
   },
 
   // ── Industry ────────────────────────────────────────────────────────────────
@@ -302,6 +337,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ],
     workerSlots: 2,
     workerRole: 'craftsman',
+    ownership: 'communal',
   },
 
   trading_post: {
@@ -320,6 +356,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ],
     workerSlots: 3,
     workerRole: 'trader',
+    ownership: 'communal',
   },
 
   // ── Health ──────────────────────────────────────────────────────────────────
@@ -339,6 +376,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ],
     workerSlots: 2,
     workerRole: 'healer',
+    ownership: 'communal',
   },
 
   // ── Social ──────────────────────────────────────────────────────────────────
@@ -362,6 +400,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     shelterCapacity: 0,
     languageDriftMultiplier: 1.5,
     culturePull: { strength: 0.003, direction: 'from_style' },
+    ownership: 'communal',
   },
 
   // ── Defence ─────────────────────────────────────────────────────────────────
@@ -379,6 +418,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [
       { role: 'guard', skill: 'combat', bonus: 1 },
     ],
+    ownership: 'communal',
   },
 
   // ── Livestock ───────────────────────────────────────────────────────────────
@@ -398,6 +438,10 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ],
     workerSlots: 2,
     workerRole: 'herder',
+    allowMultiple: true,
+    ownership: 'household',
+    upgradeChainId: 'livestock',
+    tierInChain: 1,
   },
 
   // ── Specialised industry (all require a Workshop) ──────────────────────────
@@ -417,6 +461,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     workerSlots: 2,
     workerRole: 'miller',
     allowMultiple: true,
+    ownership: 'household',
+    upgradeChainId: 'agriculture',
+    tierInChain: 2,
   },
 
   smithy: {
@@ -434,6 +481,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     workerSlots: 2,
     workerRole: 'blacksmith',
     allowMultiple: true,
+    ownership: 'household',
+    upgradeChainId: 'metalwork',
+    tierInChain: 1,
   },
 
   tannery: {
@@ -451,6 +501,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     workerSlots: 2,
     workerRole: 'tailor',
     allowMultiple: true,
+    ownership: 'household',
+    upgradeChainId: 'leatherwork',
+    tierInChain: 1,
   },
 
   brewery: {
@@ -468,6 +521,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     workerSlots: 2,
     workerRole: 'brewer',
     allowMultiple: true,
+    ownership: 'household',
+    upgradeChainId: 'brewing',
+    tierInChain: 1,
   },
 
   // ── Private Dwellings (household-owned; multiple instances allowed) ─────────
@@ -482,6 +538,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     buildSeasons: 1,
     shelterCapacity: 4,
     allowMultiple: true,
+    ownership: 'household',
+    upgradeChainId: 'dwelling',
+    tierInChain: 1,
   },
 
   cottage: {
@@ -494,6 +553,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     buildSeasons: 2,
     shelterCapacity: 6,
     allowMultiple: true,
+    ownership: 'household',
+    upgradeChainId: 'dwelling',
+    tierInChain: 2,
   },
 
   homestead: {
@@ -506,6 +568,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     buildSeasons: 3,
     shelterCapacity: 8,
     allowMultiple: true,
+    ownership: 'household',
+    upgradeChainId: 'dwelling',
+    tierInChain: 3,
   },
 
   compound: {
@@ -518,6 +583,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     buildSeasons: 4,
     shelterCapacity: 12,
     allowMultiple: true,
+    ownership: 'household',
+    upgradeChainId: 'dwelling',
+    tierInChain: 4,
   },
 
   // ── Social amenities ───────────────────────────────────────────────────────────────
@@ -540,6 +608,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
       { role: 'bathhouse_attendant', skill: 'bargaining', bonus: 1 },
       { role: 'bathhouse_attendant', skill: 'leadership', bonus: 1 },
     ],
+    ownership: 'communal',
+    upgradeChainId: 'bathhouse',
+    tierInChain: 1,
   },
 
   bathhouse_improved: {
@@ -561,6 +632,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
       { role: 'bathhouse_attendant', skill: 'bargaining', bonus: 1 },
       { role: 'bathhouse_attendant', skill: 'leadership', bonus: 1 },
     ],
+    ownership: 'communal',
+    upgradeChainId: 'bathhouse',
+    tierInChain: 2,
   },
 
   bathhouse_grand: {
@@ -582,6 +656,9 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
       { role: 'bathhouse_attendant', skill: 'bargaining', bonus: 1 },
       { role: 'bathhouse_attendant', skill: 'leadership', bonus: 1 },
     ],
+    ownership: 'communal',
+    upgradeChainId: 'bathhouse',
+    tierInChain: 3,
   },
 };
 

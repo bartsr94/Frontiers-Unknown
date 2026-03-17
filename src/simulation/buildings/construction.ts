@@ -380,6 +380,17 @@ export function applyDwellingClaims(
     }
   }
 
+  // Sync buildingSlots from dwellingBuildingId + productionBuildingIds so
+  // the Phase D UI always has a consistent 9-slot array to read.
+  for (const [hhId, hhObj] of hh) {
+    const slots: (string | null)[] = [
+      hhObj.dwellingBuildingId,
+      ...(hhObj.productionBuildingIds ?? []).slice(0, 8),
+      ...new Array(Math.max(0, 8 - (hhObj.productionBuildingIds ?? []).length)).fill(null),
+    ];
+    hh.set(hhId, { ...hhObj, buildingSlots: slots });
+  }
+
   return { buildings, households: hh, people: ppl };
 }
 
