@@ -60,6 +60,35 @@ export const ECONOMIC_EVENTS: GameEvent[] = [
   },
 
   {
+    id: 'eco_company_funding_ends',
+    title: 'The Company Closes Its Ledger',
+    category: 'economic',
+    prerequisites: [],
+    weight: 1,          // never drawn normally; injected programmatically at year 10 spring (isDeferredOutcome gates it)
+    cooldown: 999,
+    isUnique: true,
+    isDeferredOutcome: true,
+    actorRequirements: [],
+    description:
+      'A sealed letter arrives with the spring supply ship. The Company\'s field ' +
+      'accountant writes in careful, bureaucratic hand:\n\n' +
+      '"The Ansberite Trading Company has reviewed the colony accounts for the year. ' +
+      'Beginning next year, all direct gold subsidies and worker stipends will cease. ' +
+      'The settlement is considered established and is expected to sustain itself ' +
+      'through trade and production. The Company\'s non-monetary support — supply ' +
+      'deliveries, settlers, and goods shipments — continues as normal.\n\n' +
+      'The Company thanks you for your service and wishes you continued success."',
+    choices: [
+      {
+        id: 'acknowledge',
+        label: 'Acknowledge the letter.',
+        description: 'The transition was always coming. Time to make the settlement pay for itself.',
+        consequences: [],
+      },
+    ],
+  },
+
+  {
     id: 'eco_useful_timbers',
     title: 'Good Timber Nearby',
     category: 'economic',

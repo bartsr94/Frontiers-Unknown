@@ -246,6 +246,7 @@ export function createInitialState(config: GameConfig, settlementName: string, s
     populationCount: people.size,
     religiousPolicy: 'tolerant',
     courtshipNorms: 'traditional',
+    economyReserves: {},
   };
 
   const culture: SettlementCulture = {
@@ -272,6 +273,7 @@ export function createInitialState(config: GameConfig, settlementName: string, s
     yearsActive: 0,
     quotaContributedGold: 0,
     quotaContributedGoods: 0,
+    exportedGoodsThisYear: 0,
   };
 
   // Instantiate tribes from selected presets.
@@ -319,6 +321,7 @@ export function createInitialState(config: GameConfig, settlementName: string, s
     lowMoraleTurns: 0,
     massDesertionWarningFired: false,
     lastSettlementMorale: 0,
+    lastPayrollShortfall: false,
   };
 
   // ── Seed opinions and ambitions at game start ──────────────────────────────

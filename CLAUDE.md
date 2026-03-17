@@ -23,6 +23,7 @@ It captures the current implementation state, hard rules, and Phase 2 priorities
 | Phase 4.2 — Housing & Specialisation | ✅ Complete | 4 private dwelling tiers (`wattle_hut`/`cottage`/`homestead`/`compound`) ✅ · Worker slot caps on all production buildings ✅ · 5 specialisation roles (`blacksmith`/`tailor`/`brewer`/`miller`/`herder`) ✅ · `applyDwellingClaims` 3-pass auto-claim algorithm ✅ · `findAvailableWorkerSlotIndex` slot enforcement ✅ · `person.claimedBuildingId` propagation ✅ · Founding settlers start as foragers (`gather_food`) ✅ · SettlementView dwelling category UI ✅ · PeopleView Trades group + slot hints ✅ · PersonDetail Housing section ✅ · 15 new tests ✅ |
 | Misc — Systems Interconnection | ✅ Complete | Named-rel → scheme generation (nemesis → undermine; confidant suppresses; mentor → tutor without trait) ✅ · Opinion-scaled scheme progress via `schemeOpinionFactor` ✅ · Happiness score → cultural drift rate (`happinessDriftCoefficient` in `culture.ts`) ✅ · `happinessScores` added to `HappinessTrackingResult` ✅ · Design doc in `plans/SYSTEMS_INTERCONNECTION.md` ✅ |
 | Misc — Apprenticeship System | ✅ Complete | `TRAINABLE_TRADES` (12 roles) ✅ · Masters auto-form pairs with children/students every 8 turns ✅ · Progress rate 0.04–0.07/turn (skill tier + `mentor_hearted`) ✅ · Graduation bonus 5–27% per-role capped at 30% ✅ · `tradeTraining` multiplier wired into `calculateProduction()` ✅ · 2 player-facing events (`appr_trade_training_begins`, `appr_trade_mastered`) ✅ · Trade Training section in PersonDetail ✅ · Activity feed icons ✅ · 30 new tests ✅ |
+| Misc — Private Economy | ✅ Complete | `processPrivateBuilding` Path A (homeless → wattle_hut, no ambition required) ✅ · Path B (has dwelling → ambition gates upgrades one tier at a time) ✅ · `seek_better_housing` generates for all tiers below `compound`; fulfilled only at `compound` ✅ · `applyDwellingClaims` Pass 3 always syncs `claimedBuildingId` on upgrade ✅ · Ambition checks use `household.dwellingBuildingId` as authoritative source ✅ |
 | Phase 4 — Polish | 🔲 Not started | — |
 ---
 
@@ -132,7 +133,8 @@ If the dev server won't start, run `npx tsc --noEmit` first to check for compile
 | `src/simulation/events/definitions/schemes.ts` | 5 scheme resolution events: `sch_courtship_discovered`, `sch_faith_advocacy_noticed`, `sch_rumours_spreading`, `sch_undermining_climax`, `sch_tutor_breakthrough`; all have `isDeferredOutcome: true` |
 | `src/simulation/buildings/building-definitions.ts` | `BuildingId` (21-member union), `BuildingDef`, `BUILDING_CATALOG`, `getBuildingDisplayName(defId, style)` — static catalog of all building types; `workerSlots?: number` and `workerRole?: WorkRole` on `BuildingDef` for slot-cap enforcement |
 | `src/simulation/buildings/building-effects.ts` | Pure effect getters: `getShelterCapacity`, `getOvercrowdingRatio`, `getBuildingFlatProductionBonus`, `getLanguageDriftMultiplier`, `getBuildingCulturePull`, `getSkillGrowthBonuses`, `hasBuilding`, `lacksBuilding`, etc. |
-| `src/simulation/buildings/construction.ts` | `canBuild` → `CanBuildResult` (`{ ok: true }` / `{ ok: false; reason }`); `startConstruction`, `assignBuilder`, `removeBuilder`, `processConstruction`, `cancelConstruction`; `applyDwellingClaims(completedBuildings, allBuildings, households, people)` — 3-pass fairness algorithm (Pass 1 scheme-owned → direct link, Pass 2 unowned → first homeless household, Pass 3 propagate `person.claimedBuildingId` / clear demolished refs); `findAvailableWorkerSlotIndex(buildings, role)` → index of first building with an open `workerRole` slot, `−1` if none; `DWELLING_IDS` set (`wattle_hut`, `cottage`, `homestead`, `compound`) |
+| `src/simulation/buildings/construction.ts` | `canBuild` → `CanBuildResult` (`{ ok: true }` / `{ ok: false; reason }`); `startConstruction`, `assignBuilder`, `removeBuilder`, `processConstruction`, `cancelConstruction`; `applyDwellingClaims(completedBuildings, allBuildings, households, people)` — 3-pass fairness algorithm (Pass 1 scheme-owned → direct link, Pass 2 unowned → first homeless household, Pass 3 **always** syncs `person.claimedBuildingId` to `household.dwellingBuildingId` so upgrades are reflected immediately / clear demolished refs); `findAvailableWorkerSlotIndex(buildings, role)` → index of first building with an open `workerRole` slot, `−1` if none; `DWELLING_IDS` set (`wattle_hut`, `cottage`, `homestead`, `compound`) |
+| `src/simulation/economy/private-economy.ts` | `processPrivateBuilding(state)` — per-dawn autonomous household building; **Path A** (no dwelling): commissions `wattle_hut` automatically when affordable, no ambition required; **Path B** (has dwelling): `seek_better_housing` ambition drives upgrades one tier at a time (`DWELLING_TIER_ORDER`); `seek_production_building` ambition drives specialist buildings; `hasActiveProject` guard prevents duplicate projects; `pickHouseholdBuilder` auto-assigns the head/best available member; `getSurplus`, `distributeHouseholdWages`, `ROLE_TO_BUILDING` |
 | `src/simulation/economy/resources.ts` | Production/consumption math with seasonal modifiers |
 | `src/simulation/genetics/traits.ts` | Trait type definitions + `IMANIAN_TRAITS` constant |
 | `src/data/ethnic-distributions.ts` | All 8 ethnic group `TraitDistribution` constants + `ETHNIC_DISTRIBUTIONS` lookup map |
@@ -746,8 +748,17 @@ interface TraitDefinition {
 - **`applyDwellingClaims(completedBuildings, allBuildings, households, people)`** — 3-pass fairness algorithm called each dawn by the store after construction completes:
   - **Pass 1 (scheme-owned)**: if a completed building already has `ownerHouseholdId` set (purchased via scheme), link it directly to that household
   - **Pass 2 (player-built / unowned)**: assign the first homeless household; priority given to largest households
-  - **Pass 3 (propagation)**: set `person.claimedBuildingId` for every household member; clear stale refs to demolished buildings
+  - **Pass 3 (propagation)**: **always** writes `person.claimedBuildingId = household.dwellingBuildingId` for every member (not just when null) so upgrades propagate immediately; clears stale refs when the building is demolished
 - Exported from `construction.ts` alongside `DWELLING_IDS` set and `findAvailableWorkerSlotIndex`
+
+### Autonomous Housing Upgrades (`processPrivateBuilding`)
+
+- **Path A — no dwelling**: household commissions a `wattle_hut` automatically as soon as it is affordable — **no ambition required**; basic shelter is treated as a necessity
+- **Path B — has dwelling**: `seek_better_housing` ambition required; always targets exactly one tier up (`DWELLING_TIER_ORDER.indexOf(current) + 1`); tiers cannot be skipped
+- **`seek_better_housing` generation** (`determineAmbitionType` #11): fires whenever the household's `dwellingBuildingId` resolves to anything below `compound` (or has no dwelling); uses `household.dwellingBuildingId` as the authoritative source
+- **`seek_better_housing` evaluation**: marked `fulfilled` only when the household reaches `compound` tier; `ongoing` at all lower tiers
+- **`hasActiveProject` guard**: skips a household if it already has a private project in `constructionQueue` — prevents duplicate commissions during multi-turn builds
+- **Authoritative dwelling field**: `household.dwellingBuildingId` (not `person.claimedBuildingId`) is always used for tier checks in both `evaluateAmbition` and `determineAmbitionType` because `claimedBuildingId` may lag one turn
 
 ### Worker Slot Caps
 
@@ -771,7 +782,9 @@ interface TraitDefinition {
 ### `person.claimedBuildingId`
 
 - **`claimedBuildingId?: string`** on `Person` — the `instanceId` of the dwelling this person's household claims
-- Set by `applyDwellingClaims` Pass 3; cleared when the building is demolished
+- Set (and updated on upgrade) by `applyDwellingClaims` Pass 3; cleared when the building is demolished
+- Pass 3 always overwrites the field when it differs from `household.dwellingBuildingId` — upgrades are synced the same dawn they complete
+- **Do not use as a tier-check source** — consult `household.dwellingBuildingId` instead; `claimedBuildingId` can still be stale within the same turn until Pass 3 runs
 - Serialised as a plain string — no Map handling needed
 - Old saves default to `undefined` gracefully
 
@@ -787,7 +800,8 @@ interface TraitDefinition {
 |------|---------|
 | `src/simulation/buildings/construction.ts` | `applyDwellingClaims`, `findAvailableWorkerSlotIndex`, `DWELLING_IDS` |
 | `src/simulation/buildings/building-definitions.ts` | `workerSlots` / `workerRole` on the 5 new specialisation buildings + 4 dwelling tiers |
-| `tests/buildings/dwelling-claims.test.ts` | 15 tests — Pass 1/2/3, `findAvailableWorkerSlotIndex` slot cap, old-save `undefined` guard |
+| `src/simulation/economy/private-economy.ts` | `processPrivateBuilding` — autonomous household building (Path A / Path B); `distributeHouseholdWages`; `getSurplus`; `ROLE_TO_BUILDING`; `DWELLING_TIER_ORDER` |
+| `tests/buildings/dwelling-claims.test.ts` | 15 tests — Pass 1/2/3, `findAvailableWorkerSlotIndex` slot cap, old-save `undefined` guard, upgrade sync |
 
 ---
 
@@ -936,6 +950,6 @@ Formula: `maternalBase = lerp(0.50, 0.14, sauromatianFraction)` + up to +0.20 fr
 - `tests/personality/scheme-engine.test.ts` — 63/63 passing (scheme generation, trait weighting, progress ticking, climax event firing, SCHEME_GENERATE_INTERVAL)
 - `tests/world/factions.test.ts` — 35/35 passing (eligibility by type, strength formula, DEMAND_STRENGTH_THRESHOLD, formation/dissolution)
 - `tests/population/happiness.test.ts` — 99/99 passing (all factor categories, material/social/purpose/trait, devout amplification, desertion gate, family departure, settlement morale)
-- `tests/buildings/dwelling-claims.test.ts` — 15/15 passing (`applyDwellingClaims` Pass 1 scheme-owned, Pass 2 player-built/homeless priority, Pass 3 `person.claimedBuildingId` propagation, demolition cleanup, old dwelling freed on scheme upgrade)
+- `tests/buildings/dwelling-claims.test.ts` — 15/15 passing (`applyDwellingClaims` Pass 1 scheme-owned, Pass 2 player-built/homeless priority, Pass 3 propagation + upgrade sync, demolition cleanup, old dwelling freed on scheme upgrade)
 - `tests/population/apprenticeship.test.ts` — 45/45 passing (`getTradeSkill` all roles, `getMasterProgressRate` tier multipliers + `mentor_hearted`, `computeCompletionBonus` all tiers, `TRAINABLE_TRADES` membership, Phase A/B/C of `processApprenticeships`)
 - **Total: 1395/1395 passing across 40 test files**

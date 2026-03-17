@@ -57,6 +57,8 @@ function makeHousehold(
     foundedTurn: 0,
     dwellingBuildingId,
     productionBuildingIds: [],
+    buildingSlots: Array(9).fill(null),
+    householdGold: 0,
   };
 }
 
@@ -189,24 +191,25 @@ describe('applyDwellingClaims — person.claimedBuildingId (Pass 3)', () => {
     expect(people.get('p1')!.claimedBuildingId).toBe('hut_1');
   });
 
-  it('does not overwrite an existing claimedBuildingId', () => {
-    // Person already claimed a building; Pass 3 must not clobber it.
-    const hut = makeBuilding('wattle_hut', 'hut_new', 'hh1');
+  it('overwrites a stale claimedBuildingId when the household dwelling has been upgraded', () => {
+    // Person's claimedBuildingId still points to their old wattle_hut after upgrading to a
+    // cottage.  Pass 3 must update it to match the household's current dwellingBuildingId.
+    const cottage = makeBuilding('cottage', 'cottage_new', 'hh1');
     const person: Person = { ...makePerson('p1'), claimedBuildingId: 'hut_old' };
     const hh: Household = {
       ...makeHousehold('hh1', ['p1']),
-      dwellingBuildingId: 'hut_new',
+      dwellingBuildingId: 'cottage_new',
     };
 
     const { people } = applyDwellingClaims(
       [],
-      [hut],
+      [cottage],
       new Map([['hh1', hh]]),
       new Map([['p1', person]]),
     );
 
-    // Existing claim preserved
-    expect(people.get('p1')!.claimedBuildingId).toBe('hut_old');
+    // Stale claim replaced with the household's current dwelling
+    expect(people.get('p1')!.claimedBuildingId).toBe('cottage_new');
   });
 
   it('stamps all members of a multi-person household', () => {

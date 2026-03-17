@@ -222,6 +222,28 @@ export function getCompanySupplyDelivery(supportLevel: CompanySupportLevel): Sup
   return { ...SUPPLY_DELIVERIES[supportLevel] };
 }
 
+/**
+ * Returns the supply delivery for a given year, stripping the gold component
+ * after year 10 (the Company stops all gold transfers in year 11+).
+ *
+ * Non-monetary aid (food, goods, medicine) continues unchanged regardless of year.
+ *
+ * @param supportLevel - Current Company support tier.
+ * @param currentYear  - Current in-game year (1-indexed).
+ */
+export function computeAnnualDelivery(
+  supportLevel: CompanySupportLevel,
+  currentYear: number,
+): SupplyDelivery {
+  const base = getCompanySupplyDelivery(supportLevel);
+  if (currentYear > 10) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { gold: _gold, ...rest } = base;
+    return rest;
+  }
+  return base;
+}
+
 // ─── Standing Decay ───────────────────────────────────────────────────────────
 
 /**

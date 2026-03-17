@@ -169,6 +169,13 @@ export interface BuildingDef {
    * 1 = base tier, 2 = first upgrade, etc.
    */
   tierInChain?: number;
+
+  /**
+   * Gold a household pays to privately commission this building.
+   * Materials (def.cost) are drawn from communal surplus above the reserve floors.
+   * Undefined = not privately buildable (communal-only buildings).
+   */
+  privateGoldCost?: number;
 }
 
 // ─── Building Catalogue ────────────────────────────────────────────────────────
@@ -318,6 +325,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ownership: 'household',
     upgradeChainId: 'agriculture',
     tierInChain: 1,
+    privateGoldCost: 2,
   },
 
   // ── Industry ────────────────────────────────────────────────────────────────
@@ -442,6 +450,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ownership: 'household',
     upgradeChainId: 'livestock',
     tierInChain: 1,
+    privateGoldCost: 4,
   },
 
   // ── Specialised industry (all require a Workshop) ──────────────────────────
@@ -464,6 +473,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ownership: 'household',
     upgradeChainId: 'agriculture',
     tierInChain: 2,
+    privateGoldCost: 5,
   },
 
   smithy: {
@@ -484,6 +494,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ownership: 'household',
     upgradeChainId: 'metalwork',
     tierInChain: 1,
+    privateGoldCost: 5,
   },
 
   tannery: {
@@ -504,6 +515,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ownership: 'household',
     upgradeChainId: 'leatherwork',
     tierInChain: 1,
+    privateGoldCost: 4,
   },
 
   brewery: {
@@ -524,6 +536,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ownership: 'household',
     upgradeChainId: 'brewing',
     tierInChain: 1,
+    privateGoldCost: 4,
   },
 
   // ── Private Dwellings (household-owned; multiple instances allowed) ─────────
@@ -541,6 +554,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ownership: 'household',
     upgradeChainId: 'dwelling',
     tierInChain: 1,
+    privateGoldCost: 1,
   },
 
   cottage: {
@@ -556,6 +570,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ownership: 'household',
     upgradeChainId: 'dwelling',
     tierInChain: 2,
+    privateGoldCost: 3,
   },
 
   homestead: {
@@ -571,6 +586,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ownership: 'household',
     upgradeChainId: 'dwelling',
     tierInChain: 3,
+    privateGoldCost: 6,
   },
 
   compound: {
@@ -586,6 +602,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ownership: 'household',
     upgradeChainId: 'dwelling',
     tierInChain: 4,
+    privateGoldCost: 12,
   },
 
   // ── Social amenities ───────────────────────────────────────────────────────────────

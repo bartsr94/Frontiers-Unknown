@@ -599,3 +599,51 @@ describe('deserializeGameState — tribe trade-system fallbacks', () => {
     expect(state.tribes.get('tribe_1')!.tradeHistoryCount).toBe(0);
   });
 });
+
+// --- deserializeGameState --- private economy fallbacks ---------------------
+
+describe('deserializeGameState -- private economy fallbacks', () => {
+  it('defaults settlement.economyReserves to {} when absent (old save)', () => {
+    const state = deserializeGameState(makeMinimalSaveJson());
+    expect(state.settlement.economyReserves).toEqual({});
+  });
+
+  it('preserves settlement.economyReserves when present in save', () => {
+    const state = deserializeGameState(makeMinimalSaveJson({
+      settlement: {
+        name: 'Test Settlement',
+        location: 'marsh',
+        buildings: [],
+        constructionQueue: [],
+        resources: { food: 0, cattle: 0, goods: 0, steel: 0, lumber: 0, stone: 0, medicine: 0, gold: 0, horses: 0 },
+        populationCount: 0,
+        economyReserves: { lumber: 10, stone: 5 },
+      },
+    }));
+    expect(state.settlement.economyReserves).toEqual({ lumber: 10, stone: 5 });
+  });
+
+  it('defaults household.householdGold to 0 when absent (old save)', () => {
+    const state = deserializeGameState(makeMinimalSaveJson({
+      households: [['hh1', {
+        id: 'hh1', name: 'Test HH', isAutoNamed: true, tradition: 'imanian',
+        headId: null, seniorWifeId: null, memberIds: [], ashkaMelathiBonds: [],
+        foundedTurn: 0, dwellingBuildingId: null, productionBuildingIds: [],
+        // householdGold deliberately absent
+      }]],
+    }));
+    expect(state.households.get('hh1')!.householdGold).toBe(0);
+  });
+
+  it('preserves household.householdGold when present in save', () => {
+    const state = deserializeGameState(makeMinimalSaveJson({
+      households: [['hh1', {
+        id: 'hh1', name: 'Test HH', isAutoNamed: true, tradition: 'imanian',
+        headId: null, seniorWifeId: null, memberIds: [], ashkaMelathiBonds: [],
+        foundedTurn: 0, dwellingBuildingId: null, productionBuildingIds: [],
+        householdGold: 42,
+      }]],
+    }));
+    expect(state.households.get('hh1')!.householdGold).toBe(42);
+  });
+});

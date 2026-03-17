@@ -120,6 +120,10 @@ export interface GameStore {
   executeTrade: (tribeId: string, offer: TradeOffer, requested: TradeOffer) => void;
   /** Contribute gold and/or goods toward the Company's annual quota. */
   contributeToQuota: (gold: number, goods: number) => void;
+  /** Convert goods to gold for Company export (management phase only). 4 goods → 1 gold; amount rounded to nearest multiple of 4. */
+  exportGoodsToCompany: (amount: number) => void;
+  /** Update per-resource reserve floors. Surplus = stock − floor; household purchases blocked if any required material is below its floor. */
+  setEconomyReserves: (reserves: Partial<ResourceStock>) => void;
   /** Execute a crafting recipe (management phase only). */
   performCraft: (recipeId: CraftRecipeId) => void;
   // ── Buildings ─────────────────────────────────────────────────────────────
@@ -193,6 +197,9 @@ function buildActivityLog(
   const ambitionEntries = dawnResult.newAmbitionEntries.map(e => ({
     turn, type: e.type, personId: e.personId, description: e.description,
   }));
+  const autonomousMarriageEntries = (dawnResult.newAutonomousMarriageEntries ?? []).map(e => ({
+    turn, type: e.type as 'relationship_formed', personId: e.personId, description: e.description,
+  }));
   const roleEntries = dawnResult.idleRoleAssignments.map(({ personId, role }) => {
     const p = dawnResult.updatedPeople.get(personId);
     const name = p ? p.firstName : '(unknown)';
@@ -221,10 +228,15 @@ function buildActivityLog(
   const apprenticeshipEntries = (dawnResult.newApprenticeshipEntries ?? []).map(e => ({
     turn, type: e.type, personId: e.personId, targetId: e.targetId, description: e.description,
   }));
+  const privateBuildEntries = (dawnResult.privateBuildLogEntries ?? []).map(e => ({
+    turn, type: e.type, personId: e.personId, description: e.description,
+  }));
   return [
     ...existing,
     ...relEntries, ...schemeEntries, ...factionEntries, ...ambitionEntries,
+    ...autonomousMarriageEntries,
     ...roleEntries, ...traitEntries, ...successionEntries, ...apprenticeshipEntries,
+    ...privateBuildEntries,
   ].slice(-30);
 }
 
@@ -249,6 +261,11 @@ function applyDawnResultToState(state: GameState, dawnResult: DawnResult): GameS
   for (const [id, h] of dawnResult.updatedHouseholds) households.set(id, h);
   for (const [id, h] of dawnResult.newHouseholds) households.set(id, h);
   for (const id of dawnResult.dissolvedHouseholdIds) households.delete(id);
+
+  // Apply wage distribution: credits to household gold (already done inside processDawn
+  // for convenience); deduct any self-funded gold from settlement resources for year 11+.
+  const wageGoldDeduction = dawnResult.wageResult?.settlementGoldSpent ?? 0;
+  const lastPayrollShortfall = dawnResult.wageResult?.payrollShortfall ?? false;
 
   // Assign completed dwellings to households that don't have one.
   const {
@@ -275,7 +292,19 @@ function applyDawnResultToState(state: GameState, dawnResult: DawnResult): GameS
       ...state.settlement,
       populationCount: dawnResult.populationCount,
       buildings: claimedBuildings,
-      constructionQueue: dawnResult.updatedConstructionQueue,
+      constructionQueue: [
+        ...dawnResult.updatedConstructionQueue,
+        ...(dawnResult.privateProjects ?? []),
+      ],
+      resources: (() => {
+        // Start from the private-build-adjusted resources (material deductions already applied).
+        const base = dawnResult.updatedResourcesAfterPrivateBuild ?? state.settlement.resources;
+        // Apply wage gold deduction (year 11+ self-funded payroll).
+        if (wageGoldDeduction > 0) {
+          return { ...base, gold: Math.max(0, base.gold - wageGoldDeduction) };
+        }
+        return base;
+      })(),
     },
     culture: {
       ...state.culture,
@@ -333,6 +362,7 @@ function applyDawnResultToState(state: GameState, dawnResult: DawnResult): GameS
     factions: dawnResult.updatedFactions,
     lastSettlementMorale: dawnResult.settlementMorale,
     lowMoraleTurns: dawnResult.newLowMoraleTurns,
+    lastPayrollShortfall,
     massDesertionWarningFired: shouldFireDesertion
       ? true
       : dawnResult.newLowMoraleTurns === 0
@@ -547,6 +577,14 @@ export const useGameStore = create<GameStore>((set, get) => {
         if (ev) happinessBoundEvents.push({ ...ev, boundActors: {} } as BoundEvent);
       }
 
+      // Company funding ends — fires once in Spring of year 10 to warn the player.
+      if (dawnResult.shouldFireFundingEndsEvent) {
+        const fundingEndsEv = getEventById('eco_company_funding_ends');
+        if (fundingEndsEv) {
+          happinessBoundEvents.push({ ...fundingEndsEv, boundActors: {} } as BoundEvent);
+        }
+      }
+
       // Inject Sauromatian succession council events (one per household needing a player decision).
       const successionBoundEvents: BoundEvent[] = dawnResult.pendingSauromatianCouncilEventHouseholdIds
         .map(() => {
@@ -703,7 +741,19 @@ export const useGameStore = create<GameStore>((set, get) => {
         updatedCompany = applyQuotaResult(gameState.company, duskResult.quotaStatus);
       }
       if (duskResult.resetQuotaContributions) {
-        updatedCompany = { ...updatedCompany, quotaContributedGold: 0, quotaContributedGoods: 0 };
+        // Apply the annual goods-export standing bonus before resetting the counter.
+        const exportBonus = Math.floor(updatedCompany.exportedGoodsThisYear / 10);
+        updatedCompany = {
+          ...updatedCompany,
+          quotaContributedGold: 0,
+          quotaContributedGoods: 0,
+          exportedGoodsThisYear: 0,
+          standing: exportBonus > 0
+            ? Math.max(0, Math.min(100, updatedCompany.standing + exportBonus))
+            : updatedCompany.standing,
+        };
+        // Increment yearsActive each Spring transition.
+        updatedCompany = { ...updatedCompany, yearsActive: updatedCompany.yearsActive + 1 };
       }
 
       // Apply religious standing drain (winter only).
@@ -1001,6 +1051,48 @@ export const useGameStore = create<GameStore>((set, get) => {
       });
     },
 
+    setEconomyReserves(reserves) {
+      const { gameState } = get();
+      if (!gameState) return;
+      set({
+        gameState: {
+          ...gameState,
+          settlement: {
+            ...gameState.settlement,
+            economyReserves: reserves,
+          },
+        },
+      });
+    },
+
+    exportGoodsToCompany(amount) {
+      const { gameState, currentPhase } = get();
+      if (!gameState || currentPhase !== 'management') return;
+      const goods = gameState.settlement.resources.goods;
+      if (goods < 4) return;
+      // Round down to the nearest multiple of 4 (4 goods → 1 gold).
+      const goodsUsed = Math.min(Math.floor(amount / 4) * 4, Math.floor(goods / 4) * 4);
+      if (goodsUsed <= 0) return;
+      const goldEarned = goodsUsed / 4;
+      set({
+        gameState: {
+          ...gameState,
+          company: {
+            ...gameState.company,
+            exportedGoodsThisYear: gameState.company.exportedGoodsThisYear + goodsUsed,
+          },
+          settlement: {
+            ...gameState.settlement,
+            resources: {
+              ...gameState.settlement.resources,
+              goods: gameState.settlement.resources.goods - goodsUsed,
+              gold:  gameState.settlement.resources.gold  + goldEarned,
+            },
+          },
+        },
+      });
+    },
+
     performCraft(recipeId) {
       const { gameState, currentPhase } = get();
       if (!gameState || currentPhase !== 'management') return;
@@ -1176,12 +1268,15 @@ export const useGameStore = create<GameStore>((set, get) => {
       if (!gameState) return;
       const project = gameState.settlement.constructionQueue.find(p => p.id === projectId);
       if (!project) return;
-      const { refund, freedWorkerIds } = cancelConstruction(project);
-      // Free workers.
+      const { refund, freedWorkerIds, freedWorkerPrevRoles } = cancelConstruction(project);
+      // Free workers — restore their pre-builder role if they were auto-assigned.
       const updatedPeople = new Map(gameState.people);
       for (const wId of freedWorkerIds) {
         const w = updatedPeople.get(wId);
-        if (w) updatedPeople.set(wId, { ...w, role: 'unassigned' });
+        if (w) {
+          const restoredRole = (freedWorkerPrevRoles[wId] as WorkRole | undefined) ?? 'unassigned';
+          updatedPeople.set(wId, { ...w, role: restoredRole });
+        }
       }
       // Refund resources.
       const updatedResources = addResourceStocks(gameState.settlement.resources, { ...emptyResourceStock(), ...refund });

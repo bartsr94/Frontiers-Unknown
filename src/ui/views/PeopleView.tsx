@@ -315,7 +315,7 @@ export default function PeopleView() {
                               setPickerPos(null);
                             } else {
                               const rect = e.currentTarget.getBoundingClientRect();
-                              const openUp = rect.bottom + 240 > window.innerHeight;
+                              const openUp = rect.bottom + 480 > window.innerHeight;
                               setPickerPos(openUp
                                 ? { top: rect.top, left: rect.left, openUp: true }
                                 : { top: rect.bottom + 2, left: rect.left, openUp: false }
@@ -404,8 +404,10 @@ export default function PeopleView() {
         const person = sorted.find(p => p.id === rolePickerId);
         if (!person) return null;
         const style: React.CSSProperties = pickerPos.openUp
-          ? { position: 'fixed', bottom: window.innerHeight - pickerPos.top, left: pickerPos.left }
-          : { position: 'fixed', top: pickerPos.top, left: pickerPos.left };
+          ? { position: 'fixed', bottom: window.innerHeight - pickerPos.top, left: pickerPos.left,
+              maxHeight: pickerPos.top - 8, overflowY: 'auto' }
+          : { position: 'fixed', top: pickerPos.top, left: pickerPos.left,
+              maxHeight: window.innerHeight - pickerPos.top - 8, overflowY: 'auto' };
         return (
           <div
             className="z-50 bg-stone-900 border border-stone-600 rounded shadow-xl py-0.5 min-w-[10rem]"

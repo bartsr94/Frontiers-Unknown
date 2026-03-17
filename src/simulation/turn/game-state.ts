@@ -9,7 +9,7 @@
  *   genetics/traits → population/person → turn/game-state  ← you are here
  */
 
-import type { Person, Heritage, EthnicGroup, ReligionId, LanguageId, HouseholdRole, HouseholdTradition } from '../population/person';
+import type { Person, Heritage, EthnicGroup, ReligionId, LanguageId, HouseholdRole, HouseholdTradition, WorkRole } from '../population/person';
 import type { GameEvent, SkillCheckResult, DeferredEventEntry, BoundEvent } from '../events/engine';
 
 // Re-export shared identity types so consumers only need one import path.
@@ -85,6 +85,11 @@ export interface CompanyRelation {
   quotaContributedGold: number;
   /** Trade goods contributed toward the current year's quota so far. Resets each Winter-end. */
   quotaContributedGoods: number;
+  /**
+   * Goods exported to the Company this calendar year (resets each Spring).
+   * Every 10 goods exported adds +1 to Company standing.
+   */
+  exportedGoodsThisYear: number;
 }
 
 // ─── External Tribes ──────────────────────────────────────────────────────────
@@ -199,6 +204,14 @@ export interface Household {
    * Each entry is either a BuiltBuilding instanceId or null (empty slot).
    */
   buildingSlots: (string | null)[];
+
+  /**
+   * Private household treasury, accumulated from annual wage disbursements.
+   * Spent autonomously on private construction when an ambition is active.
+   * Transfers to the surviving household on marriage merge.
+   * Old saves: defaults to 0.
+   */
+  householdGold: number;
 }
 
 // ─── Settlement Culture ────────────────────────────────────────────────────────
@@ -395,6 +408,12 @@ export interface ConstructionProject {
    * null for all communal / player-initiated construction.
    */
   ownerHouseholdId: string | null;
+  /**
+   * Maps personId → their WorkRole before being auto-assigned as builder by
+   * the private-build engine. Used to restore the role on project completion
+   * or cancellation. Absent on manually-started projects.
+   */
+  autoBuilderPrevRoles?: Partial<Record<string, WorkRole>>;
 }
 
 /**
@@ -443,6 +462,12 @@ export interface Settlement {
    * Defaults to 'mixed' — the natural state of a blended settlement.
    */
   courtshipNorms: CourtshipNorms;
+  /**
+   * Per-resource reserve floors set by the player. Household purchases are blocked
+   * if required materials are not available as surplus above these floors.
+   * Defaults to {} (no reserves — all stock available).
+   */
+  economyReserves: Partial<ResourceStock>;
 }
 
 // ─── Turn & Season ────────────────────────────────────────────────────────────
@@ -585,7 +610,8 @@ export type ActivityLogType =
   | 'household_dissolved' // Empty household removed
   | 'apprenticeship_started'    // A master took on an apprentice
   | 'apprenticeship_completed'  // An apprentice graduated with a trade bonus
-  | 'apprenticeship_ended';     // Apprenticeship ended early (master left / role change)
+  | 'apprenticeship_ended'      // Apprenticeship ended early (master left / role change)
+  | 'private_build_started';    // A household used savings to start a private construction project
 
 /**
  * A single entry in the rolling Activity Log.
@@ -831,4 +857,12 @@ export interface GameState {
    * into building.assignedWorkerIds).
    */
   buildingWorkersInitialized: boolean;
+
+  /**
+   * True if the most recent Spring wage disbursement could not be fully funded
+   * from settlement.resources.gold (year 11+ self-funded mode only).
+   * Cleared each Spring after wages are paid.
+   * Drives the Economy tab shortfall warning banner.
+   */
+  lastPayrollShortfall: boolean;
 }

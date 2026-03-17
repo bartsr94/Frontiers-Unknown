@@ -18,6 +18,7 @@ import type { SeededRNG } from '../../utils/rng';
 import { getDerivedSkill } from '../population/person';
 import { getEffectiveOpinion } from './opinions';
 import { SAUROMATIAN_CULTURE_IDS } from '../population/culture';
+import { ROLE_TO_BUILDING } from '../economy/private-economy';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -178,6 +179,30 @@ export function evaluateAmbition(
       ) return 'fulfilled';
       if (state.factions.some(f => f.type === 'company_loyalists')) return 'fulfilled';
       return 'ongoing';
+
+    case 'seek_better_housing': {
+      if (!person.householdId) return 'failed';
+      // Use the household's authoritative dwelling record (not the person-level
+      // claimedBuildingId, which may lag a turn behind after an upgrade).
+      const household = state.households.get(person.householdId);
+      const dwellingId = household?.dwellingBuildingId ?? null;
+      const dwelling = dwellingId
+        ? state.settlement.buildings.find(b => b.instanceId === dwellingId)
+        : undefined;
+      // Fulfilled only once they reach the top tier (compound).
+      if (dwelling?.defId === 'compound') return 'fulfilled';
+      return 'ongoing';
+    }
+
+    case 'seek_production_building': {
+      if (!person.householdId) return 'failed';
+      const desired = ROLE_TO_BUILDING[person.role];
+      if (!desired) return 'failed'; // person changed to a non-specialist role
+      const hasIt = state.settlement.buildings.some(
+        b => b.defId === desired && b.ownerHouseholdId === person.householdId,
+      );
+      return hasIt ? 'fulfilled' : 'ongoing';
+    }
   }
 }
 
@@ -376,6 +401,31 @@ export function determineAmbitionType(
     return { type: 'seek_autonomy', targetPersonId: null };
   }
 
+  // 11. seek_better_housing — household has no dwelling OR has a dwelling below compound tier
+  if (person.householdId) {
+    const hhForHousing = state.households.get(person.householdId);
+    const dwellingIdForHousing = hhForHousing?.dwellingBuildingId ?? null;
+    const dwellingForHousing = dwellingIdForHousing
+      ? state.settlement.buildings.find(b => b.instanceId === dwellingIdForHousing)
+      : undefined;
+    if (!dwellingForHousing || dwellingForHousing.defId !== 'compound') {
+      return { type: 'seek_better_housing', targetPersonId: null };
+    }
+  }
+
+  // 12. seek_production_building — specialist worker whose household lacks the matching building
+  {
+    const desiredBuilding = ROLE_TO_BUILDING[person.role];
+    if (desiredBuilding && person.householdId) {
+      const hasBuilding = state.settlement.buildings.some(
+        b => b.defId === desiredBuilding && b.ownerHouseholdId === person.householdId,
+      );
+      if (!hasBuilding) {
+        return { type: 'seek_production_building', targetPersonId: null };
+      }
+    }
+  }
+
   return null;
 }
 
@@ -437,7 +487,9 @@ export function getAmbitionLabel(ambition: PersonAmbition): string {
     case 'seek_faith_influence': return 'Called to spiritual service';
     case 'seek_skill_mastery':   return 'Striving for mastery';
     case 'seek_legacy':          return 'Worried about the next generation';
-    case 'seek_autonomy':        return 'Chafing under authority';
+    case 'seek_autonomy':              return 'Chafing under authority';
+    case 'seek_better_housing':        return 'Wants a proper home';
+    case 'seek_production_building':   return 'Wants a workshop for the household';
   }
 }
 

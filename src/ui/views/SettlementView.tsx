@@ -571,6 +571,11 @@ function HouseholdCard({
       {/* Card header */}
       <div className="px-3 py-2 bg-stone-800 border-b border-stone-700 flex items-center gap-2">
         <span className="text-xs font-semibold text-amber-300">{hh.name}</span>
+        {(hh.householdGold ?? 0) > 0 && (
+          <span className="text-[10px] bg-amber-900/60 text-amber-300 border border-amber-700/50 rounded px-1 py-0.5 leading-none">
+            ⚜ {hh.householdGold}g
+          </span>
+        )}
         <span className="ml-auto text-[10px] text-stone-500">{members.length} members</span>
       </div>
 
@@ -600,10 +605,15 @@ function HouseholdCard({
             >
               {isOccupied && def ? (
                 <>
-                  <BuildingIcon id={building.defId} size={28} className="text-amber-400" />
+                  <BuildingIcon id={building.defId} size={34} className="text-amber-400" />
                   <span className="text-[8px] text-slate-400 text-center leading-tight line-clamp-2">
                     {getBuildingDisplayName(building.defId, building.style)}
                   </span>
+                  {def.upgradeChainId && def.tierInChain !== undefined && (
+                    <span className="absolute top-0.5 right-0.5 text-[7px] bg-stone-950/80 text-slate-400 rounded px-0.5 leading-tight pointer-events-none">
+                      T{def.tierInChain}
+                    </span>
+                  )}
                 </>
               ) : (
                 <span className="text-stone-700 text-xs select-none">+</span>

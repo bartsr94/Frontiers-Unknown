@@ -305,6 +305,8 @@ export type HouseholdTradition =
  * - seek_legacy           — ageing parent wants all adult children settled
  * - seek_autonomy         — Sauromatian-heritage person chafes under Company authority
  * - seek_companion        — Sauromatian woman pursues a specific man in the pre-marriage testing phase
+ * - seek_better_housing    — household has no dwelling or is overcrowded; wants to build one
+ * - seek_production_building — specialist worker has no matching household building
  */
 export type AmbitionId =
   | 'seek_spouse'
@@ -317,7 +319,9 @@ export type AmbitionId =
   | 'seek_skill_mastery'
   | 'seek_legacy'
   | 'seek_autonomy'
-  | 'seek_companion';
+  | 'seek_companion'
+  | 'seek_better_housing'
+  | 'seek_production_building';
 
 /**
  * A personal goal held by a character.

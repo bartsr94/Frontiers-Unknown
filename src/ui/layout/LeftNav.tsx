@@ -34,7 +34,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'settlers',    emoji: '👥', label: 'Settlers'   },
   { id: 'events',      emoji: '📜', label: 'Events'     },
   { id: 'settlement',  emoji: '🏘', label: 'Settlement' },
-  { id: 'production',  emoji: '⚒', label: 'Production' },
+  { id: 'production',  emoji: '⚒', label: 'Economy' },
   { id: 'trade',       emoji: '🔀', label: 'Trade'      },
   { id: 'community',   emoji: '🏛', label: 'Community'  },
   { id: 'diplomacy',   emoji: '🤝', label: 'Diplomacy'            },

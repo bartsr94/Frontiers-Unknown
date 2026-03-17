@@ -164,9 +164,16 @@ export interface ProcessConstructionResult {
   updatedQueue: ConstructionProject[];
   /**
    * IDs of workers freed from completed projects.
-   * The turn processor resets their role to 'unassigned'.
+   * The turn processor resets their role — using completedWorkerPrevRoles when
+   * available, otherwise 'unassigned'.
    */
   completedWorkerIds: string[];
+  /**
+   * For workers that were auto-assigned by the private-build engine, maps
+   * personId → the role they held before being set to 'builder'. The turn
+   * processor restores this role instead of defaulting to 'unassigned'.
+   */
+  completedWorkerPrevRoles: Partial<Record<string, string>>;
   /**
    * Building IDs that were removed from Settlement.buildings as a result of
    * completed upgrade chain projects (e.g. Camp removed when Longhouse finishes).
@@ -197,6 +204,7 @@ export function processConstruction(
 ): ProcessConstructionResult {
   const completedBuildings: BuiltBuilding[] = [];
   const completedWorkerIds: string[] = [];
+  const completedWorkerPrevRoles: Partial<Record<string, string>> = {};
   const removedBuildingIds: BuildingId[] = [];
   const updatedQueue: ConstructionProject[] = [];
 
@@ -243,9 +251,12 @@ export function processConstruction(
         removedBuildingIds.push(def.replacesId);
       }
 
-      // Free all workers.
+      // Free all workers; carry forward any auto-builder prev-role entries.
       for (const workerId of project.assignedWorkerIds) {
         completedWorkerIds.push(workerId);
+        if (project.autoBuilderPrevRoles?.[workerId] !== undefined) {
+          completedWorkerPrevRoles[workerId] = project.autoBuilderPrevRoles[workerId];
+        }
       }
       // Project does NOT go back to queue.
     } else {
@@ -253,7 +264,7 @@ export function processConstruction(
     }
   }
 
-  return { completedBuildings, updatedQueue, completedWorkerIds, removedBuildingIds };
+  return { completedBuildings, updatedQueue, completedWorkerIds, completedWorkerPrevRoles, removedBuildingIds };
 }
 
 // ─── Cancel Construction ──────────────────────────────────────────────────────
@@ -263,6 +274,11 @@ export interface CancelConstructionResult {
   refund: Partial<ResourceStock>;
   /** IDs of workers who were assigned to the project. */
   freedWorkerIds: string[];
+  /**
+   * For auto-assigned builders, maps personId → the role they held before
+   * being set to 'builder'. The store restores this role on cancel.
+   */
+  freedWorkerPrevRoles: Partial<Record<string, string>>;
 }
 
 /**
@@ -277,6 +293,7 @@ export function cancelConstruction(project: ConstructionProject): CancelConstruc
   return {
     refund,
     freedWorkerIds: [...project.assignedWorkerIds],
+    freedWorkerPrevRoles: { ...project.autoBuilderPrevRoles },
   };
 }
 
@@ -356,17 +373,11 @@ export function applyDwellingClaims(
   }
 
   // Pass 3: propagate household's dwellingBuildingId → person.claimedBuildingId;
+  // always overwrite (not just when null) so upgrades are reflected immediately;
   // clear both if the building was demolished.
   const ppl = new Map(people);
   for (const [hhId, hhObj] of hh) {
     if (!hhObj.dwellingBuildingId) continue;
-    // Try to stamp unclaimed members
-    for (const memberId of hhObj.memberIds ?? []) {
-      const p = ppl.get(memberId);
-      if (p && !p.claimedBuildingId) {
-        ppl.set(memberId, { ...p, claimedBuildingId: hhObj.dwellingBuildingId });
-      }
-    }
     // Defensive: if the dwelling was demolished, clear both household and person refs
     const stillStanding = buildings.some(x => x.instanceId === hhObj.dwellingBuildingId);
     if (!stillStanding) {
@@ -376,6 +387,14 @@ export function applyDwellingClaims(
         if (p?.claimedBuildingId === hhObj.dwellingBuildingId) {
           ppl.set(memberId, { ...p, claimedBuildingId: null });
         }
+      }
+      continue;
+    }
+    // Always sync all members to the household's current dwelling (handles upgrades).
+    for (const memberId of hhObj.memberIds ?? []) {
+      const p = ppl.get(memberId);
+      if (p && p.claimedBuildingId !== hhObj.dwellingBuildingId) {
+        ppl.set(memberId, { ...p, claimedBuildingId: hhObj.dwellingBuildingId });
       }
     }
   }

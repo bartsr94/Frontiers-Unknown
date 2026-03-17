@@ -114,8 +114,9 @@ export function deserializeGameState(json: string): GameState {
   const rawCompany = s.company as Partial<CompanyRelation> & typeof s.company;
   const restoredCompany: CompanyRelation = {
     ...s.company,
-    quotaContributedGold:  rawCompany.quotaContributedGold  ?? 0,
-    quotaContributedGoods: rawCompany.quotaContributedGoods ?? 0,
+    quotaContributedGold:    rawCompany.quotaContributedGold    ?? 0,
+    quotaContributedGoods:   rawCompany.quotaContributedGoods   ?? 0,
+    exportedGoodsThisYear:   rawCompany.exportedGoodsThisYear   ?? 0,
   };
   // Restore ExternalTribe fields added for the trade system.
   const restoredTribes = new Map(
@@ -154,6 +155,7 @@ export function deserializeGameState(json: string): GameState {
           dwellingBuildingId:  (h as Partial<typeof h>).dwellingBuildingId  ?? null,
           productionBuildingIds: (h as Partial<typeof h>).productionBuildingIds ?? [],
           isAutoNamed: (h as Partial<typeof h>).isAutoNamed ?? true,
+          householdGold: (h as Partial<typeof h>).householdGold ?? 0,
           buildingSlots: (h as any).buildingSlots ?? [
             (h as any).dwellingBuildingId ?? null,
             ...((h as any).productionBuildingIds ?? []).slice(0, 8),
@@ -178,6 +180,7 @@ export function deserializeGameState(json: string): GameState {
       ...(s.settlement as typeof s.settlement),
       religiousPolicy: ((s.settlement as Partial<typeof s.settlement>).religiousPolicy) ?? 'tolerant',
       courtshipNorms:  ((s.settlement as Partial<typeof s.settlement>).courtshipNorms)  ?? 'mixed',
+      economyReserves: ((s.settlement as Partial<typeof s.settlement>).economyReserves) ?? {},
       buildings: (s.settlement as typeof s.settlement).buildings.map(b => ({
         ...b,
         ownerHouseholdId:  (b as Partial<typeof b>).ownerHouseholdId  ?? null,
@@ -199,5 +202,7 @@ export function deserializeGameState(json: string): GameState {
     // Housing & specialisation fields.
     communalResourceMinimum:   (s as unknown as Partial<GameState>).communalResourceMinimum   ?? { lumber: 15, stone: 5 },
     buildingWorkersInitialized:(s as unknown as Partial<GameState>).buildingWorkersInitialized ?? false,
+    // Private economy fields.
+    lastPayrollShortfall:      (s as unknown as Partial<GameState>).lastPayrollShortfall      ?? false,
   };
 }

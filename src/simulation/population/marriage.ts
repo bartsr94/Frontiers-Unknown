@@ -302,11 +302,11 @@ export function performMarriage(
   const man = personA.sex === 'male' ? personA : personB;
   const woman = personA.sex === 'female' ? personA : personB;
 
-  // Determine which tradition governs household direction
-  const womanIsSauromatian =
-    SAUROMATIAN_CULTURE_IDS.has(woman.heritage.primaryCulture) ||
-    woman.heritage.primaryCulture === 'settlement_native';
-  const tradition: HouseholdTradition = womanIsSauromatian ? 'sauromatian' : 'imanian';
+  // Determine which tradition governs household direction.
+  // The husband's dominant culture decides: if his strongest cultural affinity
+  // is Sauromatian, the household follows Sauromatian custom; otherwise Imanian.
+  const manIsSauromatian = SAUROMATIAN_CULTURE_IDS.has(man.heritage.primaryCulture);
+  const tradition: HouseholdTradition = manIsSauromatian ? 'sauromatian' : 'imanian';
 
   // ── Merge households ────────────────────────────────────────────────────────
   // Under the new lifecycle system BOTH parties already have a household.
@@ -512,10 +512,9 @@ export function formConcubineRelationship(
     household = addToHousehold(existingHousehold, woman.id);
     householdCreated = false;
   } else {
-    const womanIsSauromatian =
-      SAUROMATIAN_CULTURE_IDS.has(woman.heritage.primaryCulture) ||
-      woman.heritage.primaryCulture === 'settlement_native';
-    const tradition: HouseholdTradition = womanIsSauromatian ? 'sauromatian' : 'imanian';
+    // The husband's dominant culture decides the tradition (same rule as performMarriage).
+    const manIsSauromatian = SAUROMATIAN_CULTURE_IDS.has(man.heritage.primaryCulture);
+    const tradition: HouseholdTradition = manIsSauromatian ? 'sauromatian' : 'imanian';
     const householdName =
       tradition === 'sauromatian'
         ? `${woman.familyName ?? woman.givenName} Ashkaran`

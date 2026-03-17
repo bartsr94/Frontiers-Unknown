@@ -187,16 +187,17 @@ describe('performMarriage — household creation', () => {
     expect(updatedWoman.householdRole).toBe('senior_wife');
   });
 
-  it('uses sauromatian tradition when bride is settlement_native culture', () => {
-    const man   = makePerson('m1', 'male');
-    const woman = makePerson('w1', 'female', 'settlement_native');
+  it('uses sauromatian tradition when groom has a sauromatian primary culture', () => {
+    // Tradition is now determined by the groom, not the bride.
+    const man   = makePerson('m1', 'male',   'kiswani_riverfolk');
+    const woman = makePerson('w1', 'female', 'imanian');
     const result = performMarriage(man, woman, makeState([man, woman]));
     expect(result.household.tradition).toBe('sauromatian');
   });
 
-  it('uses imanian tradition when bride is imanian culture', () => {
-    const man   = makePerson('m1', 'male');
-    const woman = makePerson('w1', 'female', 'imanian');
+  it('uses imanian tradition when groom has an imanian/non-sauromatian primary culture', () => {
+    const man   = makePerson('m1', 'male',   'imanian');
+    const woman = makePerson('w1', 'female', 'kiswani_riverfolk');
     const result = performMarriage(man, woman, makeState([man, woman]));
     expect(result.household.tradition).toBe('imanian');
   });
@@ -330,8 +331,9 @@ describe('performMarriage — merge path (both parties have households)', () => 
   });
 
   it('Sauromatian: man\'s household dissolves into woman\'s', () => {
-    const man   = makePerson('m1', 'male',   'settlement_native', { householdId: 'hh-m', householdRole: 'head' });
-    const woman = makePerson('w1', 'female', 'settlement_native', { householdId: 'hh-w', householdRole: 'senior_wife' });
+    // Groom has Sauromatian culture → sauromatian tradition → woman's household receives.
+    const man   = makePerson('m1', 'male',   'kiswani_riverfolk', { householdId: 'hh-m', householdRole: 'head' });
+    const woman = makePerson('w1', 'female', 'imanian',           { householdId: 'hh-w', householdRole: 'senior_wife' });
     const hhM = makeHouseholdStub('hh-m', 'm1', null, ['m1'], 'sauromatian');
     const hhW = makeHouseholdStub('hh-w', null, 'w1', ['w1'], 'sauromatian');
     const state: GameState = {
