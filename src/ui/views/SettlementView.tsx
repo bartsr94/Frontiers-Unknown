@@ -567,7 +567,7 @@ function HouseholdCard({
     .filter((p): p is { id: string; firstName: string } => !!p);
 
   return (
-    <div className="w-56 bg-stone-900 border border-stone-700 rounded-xl overflow-hidden shrink-0">
+    <div className="w-52 bg-stone-900 border border-stone-700 rounded-xl overflow-hidden shrink-0">
       {/* Card header */}
       <div className="px-3 py-2 bg-stone-800 border-b border-stone-700 flex items-center gap-2">
         <span className="text-xs font-semibold text-amber-300">{hh.name}</span>
@@ -575,7 +575,7 @@ function HouseholdCard({
       </div>
 
       {/* 3×3 building slot grid */}
-      <div className="p-1.5 grid grid-cols-3 gap-1">
+      <div className="p-1 grid grid-cols-3 gap-0.5">
         {slots.map((instanceId, idx) => {
           const building = instanceId
             ? buildings.find(b => b.instanceId === instanceId) ?? null
@@ -600,7 +600,7 @@ function HouseholdCard({
             >
               {isOccupied && def ? (
                 <>
-                  <BuildingIcon id={building.defId} size={20} className="text-amber-400" />
+                  <BuildingIcon id={building.defId} size={28} className="text-amber-400" />
                   <span className="text-[8px] text-slate-400 text-center leading-tight line-clamp-2">
                     {getBuildingDisplayName(building.defId, building.style)}
                   </span>
