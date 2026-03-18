@@ -340,7 +340,7 @@ export default function SettlementView() {
             <span className="text-slate-500">Company</span>
             <span className="text-slate-300">{gameState.company.standing} standing</span>
             <span className="text-slate-500">Season</span>
-            <span className="text-slate-300">{settlement.currentSeason} · Year {settlement.currentYear}</span>
+            <span className="text-slate-300">{gameState.currentSeason} · Year {gameState.currentYear}</span>
           </div>
           {overcrowding > 1.0 && (
             <div className="mt-2 px-2 py-1.5 bg-red-950/50 border border-red-800 rounded text-xs text-red-300">

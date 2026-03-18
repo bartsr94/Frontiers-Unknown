@@ -21,6 +21,7 @@ import { defaultDebugSettings } from './game-state';
 import { createRNG } from '../../utils/rng';
 import type { SeededRNG } from '../../utils/rng';
 import { createTribe, TRIBE_PRESETS } from '../world/tribes';
+import { generateHexMap } from '../world/hex-map';
 import { IMANIAN_TRAITS } from '../genetics/traits';
 import { TRAIT_CONFLICTS } from '../../data/trait-affinities';
 import type { TraitId } from '../personality/traits';
@@ -283,7 +284,14 @@ export function createInitialState(config: GameConfig, settlementName: string, s
     if (preset) {
       const tribe = createTribe(preset);
       // Starting tribes are known contacts — trade is available immediately.
-      tribes.set(tribe.id, { ...tribe, contactEstablished: true });
+      // Hex territory positions are assigned after map generation below.
+      tribes.set(tribe.id, {
+        ...tribe,
+        contactEstablished: true,
+        diplomacyOpened: false,
+        territoryQ: null,
+        territoryR: null,
+      });
     }
   }
 
@@ -322,6 +330,9 @@ export function createInitialState(config: GameConfig, settlementName: string, s
     massDesertionWarningFired: false,
     lastSettlementMorale: 0,
     lastPayrollShortfall: false,
+    hexMap: generateHexMap(config, rng),
+    expeditions: [],
+    boatsInPort: 1,
   };
 
   // ── Seed opinions and ambitions at game start ──────────────────────────────

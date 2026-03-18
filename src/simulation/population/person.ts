@@ -259,6 +259,7 @@ export type WorkRole =
   | 'miller'              // Works at Mill; multiplies food output
   | 'herder'              // Works at Stable; manages cattle and horses
   | 'bathhouse_attendant' // Works at Bathhouse; enables bathhouse happiness and fertility bonuses
+  | 'boatbuilder'         // Works at Dock; constructs river boats for expeditions
   | 'child'      // Under 8 — too young to work; set automatically and cleared at age 8
   | 'unassigned';
 

@@ -654,6 +654,22 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     tierInChain: 2,
   },
 
+  dock: {
+    id: 'dock',
+    name: 'Riverside Dock',
+    description: 'A sturdy timber jetty with boat-launching slipways and storage for expedition supplies. Required to build additional boats and to launch river expeditions without consuming a boat slot.',
+    category: 'industry',
+    hasStyleVariants: false,
+    cost: { lumber: 20, stone: 10 },
+    buildSeasons: 2,
+    shelterCapacity: 0,
+    workerSlots: 2,
+    workerRole: 'boatbuilder',
+    ownership: 'communal',
+    upgradeChainId: null,
+    tierInChain: null,
+  },
+
   bathhouse_grand: {
     id: 'bathhouse_grand',
     name: 'Grand Bathhouse',

@@ -24,6 +24,7 @@ export const ROLE_LABELS: Record<WorkRole, string> = {
   miller:         'Miller',
   herder:              'Herder',
   bathhouse_attendant: 'Bath Attendant',
+  boatbuilder:         'Boatbuilder',
   child:               'Child',
   unassigned:          'Unassigned',
 };
@@ -49,6 +50,7 @@ export const ROLE_COLORS: Record<WorkRole, string> = {
   miller:         'bg-yellow-800 text-yellow-200',
   herder:              'bg-green-800 text-green-300',
   bathhouse_attendant: 'bg-sky-800 text-sky-200',
+  boatbuilder:         'bg-blue-800 text-blue-200',
   child:               'bg-stone-800 text-stone-500 italic',
   unassigned:          'bg-stone-800 text-stone-400',
 };

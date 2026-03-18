@@ -57,6 +57,8 @@ import type { SkillCheckResult } from '../simulation/events/engine';
 import type { BoundEvent } from '../simulation/events/engine';
 import { resolveActors } from '../simulation/events/actor-resolver';
 import type { DebugSettings } from '../simulation/turn/game-state';
+import { createExpedition, processExpeditions } from '../simulation/world/expeditions';
+import type { DispatchExpeditionParams } from '../simulation/world/expeditions';
 
 // Re-export economy types consumed by UI components.
 export type { TradeOffer };
@@ -158,6 +160,19 @@ export interface GameStore {
   assignCouncilMember: (personId: string) => void;
   /** Remove a person from the Expedition Council. No-op if not a member. */
   removeCouncilMember: (personId: string) => void;
+  // ── Expeditions ────────────────────────────────────────────────────────────
+  /**
+   * Dispatches a new expedition from the settlement.
+   * Deducts provisions from settlement resources, sets all party members to
+   * `role='away'`, and adds the expedition to `state.expeditions`.
+   * If `params.hasBoat` is true, decrements `state.boatsInPort` by 1.
+   */
+  dispatchExpedition: (params: DispatchExpeditionParams) => void;
+  /**
+   * Orders a travelling expedition to begin returning immediately (status → 'returning').
+   * No-op if the expedition is already completed/lost.
+   */
+  recallExpedition: (expeditionId: string) => void;
   // ── Derived / computed ────────────────────────────────────────────────────
   getPersonById: (id: string) => Person | undefined;
   getLivingPeople: () => Person[];
@@ -443,6 +458,27 @@ export const useGameStore = create<GameStore>((set, get) => {
 
       const rng = createRNG(gameState.seed + gameState.turnNumber);
       const dawnResult = processDawn(gameState, rng);
+
+      // ── Process expeditions this dawn ──────────────────────────────────────
+      // Run before applyDawnResultToState so hexMap updates are captured.
+      const expeditionResult = processExpeditions(
+        gameState.expeditions ?? [],
+        gameState.hexMap,
+        gameState.turnNumber,
+      );
+
+      // Restore roles for settlers who returned from completed expeditions.
+      // (Pre-expedition roles are not yet persisted — default to 'gather_food'.)
+      const expeditionReturnedRoles = new Map<string, WorkRole>();
+      for (const memberId of expeditionResult.returnedMemberIds) {
+        expeditionReturnedRoles.set(memberId, 'gather_food');
+      }
+
+      // Restore boat count for completed expeditions that used a boat.
+      const boatsReturned = expeditionResult.completedExpeditionIds.reduce((count, id) => {
+        const exp = expeditionResult.expeditions.find(e => e.id === id);
+        return count + (exp?.hasBoat ? 1 : 0);
+      }, 0);
       // Compute whether the mass-desertion warning should fire this turn before building postDawnState.
       const shouldFireDesertion =
         dawnResult.desertionCandidateIds.length >= 3 &&
@@ -475,10 +511,19 @@ export const useGameStore = create<GameStore>((set, get) => {
         }
       }
 
+      // Apply expedition member role restorations (returned from expeditions).
+      for (const [id, role] of expeditionReturnedRoles) {
+        const p = restoredPeople.get(id);
+        if (p && p.role === 'away') restoredPeople.set(id, { ...p, role });
+      }
+
       const stateAfterDrain: GameState = {
         ...postDawnState,
         people: restoredPeople,
         deferredEvents: remainingDeferred,
+        hexMap: expeditionResult.hexMap,
+        expeditions: expeditionResult.expeditions,
+        boatsInPort: (gameState.boatsInPort ?? 1) + boatsReturned,
       };
 
       // Draw 1–3 events from the eligible pool.
@@ -1099,12 +1144,15 @@ export const useGameStore = create<GameStore>((set, get) => {
       const validation = validateCraft(recipeId, gameState.settlement.buildings, gameState.settlement.resources);
       if (!validation.ok) return;
       const newResources = applyCraft(recipeId, gameState.settlement.resources);
-      set({
-        gameState: {
-          ...gameState,
-          settlement: { ...gameState.settlement, resources: newResources },
-        },
-      });
+      // craft_boat produces a boat (not a resource), so increment boatsInPort.
+      const boatDelta = recipeId === 'craft_boat' ? 1 : 0;
+      const updated: GameState = {
+        ...gameState,
+        settlement: { ...gameState.settlement, resources: newResources },
+        boatsInPort: (gameState.boatsInPort ?? 1) + boatDelta,
+      };
+      set({ gameState: updated });
+      localStorage.setItem(SAVE_KEY, serializeGameState(updated));
     },
 
     // ── Buildings ────────────────────────────────────────────────────────────
@@ -1344,6 +1392,57 @@ export const useGameStore = create<GameStore>((set, get) => {
       return Array.from(familyIds)
         .map(id => gameState.people.get(id))
         .filter((p): p is Person => p !== undefined);
+    },
+
+    dispatchExpedition(params) {
+      const { gameState } = get();
+      if (!gameState) return;
+      const rng = createRNG(gameState.seed + gameState.turnNumber + Date.now());
+      const expedition = createExpedition(
+        params,
+        gameState.people,
+        gameState.expeditions,
+        gameState.turnNumber,
+        rng,
+      );
+      // Deduct provisions from settlement resources.
+      const newResources = { ...gameState.settlement.resources };
+      newResources.food = Math.max(0, newResources.food - params.provisions.food);
+      newResources.goods = Math.max(0, (newResources.goods ?? 0) - (params.provisions.goods ?? 0));
+      newResources.gold = Math.max(0, newResources.gold - (params.provisions.gold ?? 0));
+      newResources.medicine = Math.max(0, (newResources.medicine ?? 0) - (params.provisions.medicine ?? 0));
+      // Set all party members to 'away'.
+      const newPeople = new Map(gameState.people);
+      for (const id of [params.leaderId, ...params.memberIds]) {
+        const p = newPeople.get(id);
+        if (p) newPeople.set(id, { ...p, role: 'away' });
+      }
+      const updated: GameState = {
+        ...gameState,
+        people: newPeople,
+        settlement: { ...gameState.settlement, resources: newResources },
+        expeditions: [...(gameState.expeditions ?? []), expedition],
+        boatsInPort: params.hasBoat
+          ? Math.max(0, (gameState.boatsInPort ?? 1) - 1)
+          : (gameState.boatsInPort ?? 1),
+      };
+      set({ gameState: updated });
+      localStorage.setItem(SAVE_KEY, serializeGameState(updated));
+    },
+
+    recallExpedition(expeditionId) {
+      const { gameState } = get();
+      if (!gameState) return;
+      const updated: GameState = {
+        ...gameState,
+        expeditions: (gameState.expeditions ?? []).map(e =>
+          e.id === expeditionId && e.status === 'travelling'
+            ? { ...e, status: 'returning' as const }
+            : e
+        ),
+      };
+      set({ gameState: updated });
+      localStorage.setItem(SAVE_KEY, serializeGameState(updated));
     },
 
     updateDebugSettings(partial) {

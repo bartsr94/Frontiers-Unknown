@@ -10,9 +10,11 @@
  */
 
 import type { Person, CultureId, LanguageId, ReligionId } from '../simulation/population/person';
-import type { GameState, SettlementCulture, CompanyRelation, Household } from '../simulation/turn/game-state';
+import type { GameState, SettlementCulture, CompanyRelation, Household, HexCell } from '../simulation/turn/game-state';
 import { defaultDebugSettings } from '../simulation/turn/game-state';
 import { createTribe } from '../simulation/world/tribes';
+import { generateHexMap } from '../simulation/world/hex-map';
+import { createRNG } from '../utils/rng';
 
 // ─── Serial types ─────────────────────────────────────────────────────────────
 
@@ -30,7 +32,7 @@ export interface SerialPerson extends Omit<Person, 'heritage' | 'relationships'>
 export interface SerialGameState
   extends Omit<
     GameState,
-    'people' | 'tribes' | 'culture' | 'eventCooldowns' | 'households'
+    'people' | 'tribes' | 'culture' | 'eventCooldowns' | 'households' | 'hexMap'
   > {
   people: [string, SerialPerson][];
   tribes: [string, GameState['tribes'] extends Map<string, infer V> ? V : never][];
@@ -40,6 +42,8 @@ export interface SerialGameState
     religions: [string, number][];
   };
   eventCooldowns: [string, number][];
+  /** hexMap.cells serialised as [key, HexCell][] because Map isn't JSON-serialisable. */
+  hexMap: Omit<GameState['hexMap'], 'cells'> & { cells: [string, HexCell][] };
 }
 
 // ─── Person helpers ───────────────────────────────────────────────────────────
@@ -105,6 +109,10 @@ export function serializeGameState(state: GameState): string {
       religions: Array.from(state.culture.religions.entries()),
     },
     eventCooldowns: Array.from(state.eventCooldowns.entries()),
+    hexMap: {
+      ...state.hexMap,
+      cells: Array.from(state.hexMap.cells.entries()),
+    },
   };
   return JSON.stringify(serial);
 }
@@ -128,6 +136,10 @@ export function deserializeGameState(json: string): GameState {
         tradeHistoryCount:  t.tradeHistoryCount  ?? 0,
         tradeDesires:       t.tradeDesires       ?? [],
         tradeOfferings:     t.tradeOfferings     ?? [],
+        // Expedition system fields — not present in pre-expedition saves.
+        diplomacyOpened: (t as any).diplomacyOpened ?? false,
+        territoryQ:      (t as any).territoryQ      ?? null,
+        territoryR:      (t as any).territoryR      ?? null,
       };
       return [id, tribeWithFallbacks] as [string, typeof tribeWithFallbacks];
     }),
@@ -204,5 +216,19 @@ export function deserializeGameState(json: string): GameState {
     buildingWorkersInitialized:(s as unknown as Partial<GameState>).buildingWorkersInitialized ?? false,
     // Private economy fields.
     lastPayrollShortfall:      (s as unknown as Partial<GameState>).lastPayrollShortfall      ?? false,
+    // Expedition system fields — not present in pre-expedition saves.
+    hexMap: ((): GameState['hexMap'] => {
+      const rawHexMap = (s as unknown as Partial<SerialGameState>).hexMap;
+      if (!rawHexMap) {
+        // Old save — regenerate from seed so nothing breaks.
+        return generateHexMap(s.config, createRNG(s.seed));
+      }
+      return {
+        ...rawHexMap,
+        cells: new Map(rawHexMap.cells),
+      };
+    })(),
+    expeditions:  (s as unknown as Partial<GameState>).expeditions  ?? [],
+    boatsInPort:  (s as unknown as Partial<GameState>).boatsInPort  ?? 1,
   };
 }

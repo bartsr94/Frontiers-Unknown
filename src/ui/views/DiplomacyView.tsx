@@ -13,6 +13,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useGameStore } from '../../stores/game-store';
 import type { ExternalTribe, TribeTrait, TribeDesire, TribeOffering } from '../../simulation/turn/game-state';
 import DispositionBar from '../components/DispositionBar';
+import HexGrid from '../components/HexGrid';
+import ExpeditionDispatchOverlay from '../overlays/ExpeditionDispatchOverlay';
 
 // ─── Display Metadata ─────────────────────────────────────────────────────────
 
@@ -224,7 +226,13 @@ function TribeInfoCard({ tribe, onClose }: CardProps) {
 
 export default function DiplomacyView() {
   const gameState   = useGameStore(s => s.gameState);
+  const currentPhase = useGameStore(s => s.currentPhase);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showDispatch, setShowDispatch]         = useState(false);
+  const [dispatchTargetQ, setDispatchTargetQ] = useState<number | undefined>(undefined);
+  const [dispatchTargetR, setDispatchTargetR] = useState<number | undefined>(undefined);
+  const containerWidthRef  = useRef(0);
+  const containerHeightRef = useRef(0);
 
   // ── Map viewport state ────────────────────────────────────────────────
   // Single transform: translate(tx, ty) scale(s), origin top-left of container.
@@ -305,6 +313,16 @@ export default function DiplomacyView() {
     .filter(t => t.contactEstablished)
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  const expeditions = gameState.expeditions ?? [];
+  const boatsInPort = gameState.boatsInPort ?? 1;
+  const canDispatch = currentPhase === 'management';
+
+  function handleHexClick(q: number, r: number) {
+    setDispatchTargetQ(q);
+    setDispatchTargetR(r);
+    setShowDispatch(true);
+  }
+
   const selectedTribe = contacts.find(t => t.id === selectedId) ?? null;
 
   function handleRowClick(id: string) {
@@ -341,11 +359,39 @@ export default function DiplomacyView() {
           )}
         </div>
 
+        {/* Send Expedition button */}
+        <div className="px-3 py-2 border-t border-stone-700 shrink-0">
+          <button
+            onClick={() => { setDispatchTargetQ(undefined); setDispatchTargetR(undefined); setShowDispatch(true); }}
+            disabled={!canDispatch}
+            className={`w-full px-2 py-1.5 rounded text-xs font-semibold transition-colors ${
+              canDispatch
+                ? 'bg-amber-700 hover:bg-amber-600 text-amber-100'
+                : 'bg-stone-800 text-stone-600 cursor-not-allowed'
+            }`}
+            title={canDispatch ? 'Dispatch an expedition into the Ashmark' : 'Only available during management phase'}
+          >
+            ⚑ Send Expedition
+          </button>
+          {expeditions.length > 0 && (
+            <p className="text-stone-500 text-[10px] mt-1 text-center">
+              {expeditions.filter(e => e.status === 'travelling' || e.status === 'returning').length} expedition{expeditions.length !== 1 ? 's' : ''} out
+            </p>
+          )}
+          <p className="text-stone-600 text-[10px] mt-0.5 text-center">Boats in port: {boatsInPort}</p>
+        </div>
+
       </div>
 
       {/* ── Right: Ashmark map viewport ──────────────────────────────────── */}
       <div
-        ref={containerRef}
+        ref={el => {
+          (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+          if (el) {
+            containerWidthRef.current  = el.clientWidth;
+            containerHeightRef.current = el.clientHeight;
+          }
+        }}
         className="flex-1 relative overflow-hidden bg-stone-950"
         style={{ cursor: dragging ? 'grabbing' : 'grab' }}
         onMouseDown={onMouseDown}
@@ -375,6 +421,20 @@ export default function DiplomacyView() {
           draggable={false}
         />
 
+        {/* Hex-map overlay — sits above the background image, same transform */}
+        {gameState.hexMap && (
+          <HexGrid
+            hexMap={gameState.hexMap}
+            expeditions={expeditions}
+            containerWidth={containerWidthRef.current || 800}
+            containerHeight={containerHeightRef.current || 600}
+            tx={tx}
+            ty={ty}
+            scale={scale}
+            onHexClick={canDispatch ? handleHexClick : undefined}
+          />
+        )}
+
         {/* Info card — pinned to container corner, above the map */}
         {selectedTribe && (
           <TribeInfoCard
@@ -383,6 +443,15 @@ export default function DiplomacyView() {
           />
         )}
       </div>
+
+      {/* Expedition dispatch overlay */}
+      {showDispatch && (
+        <ExpeditionDispatchOverlay
+          initialDestQ={dispatchTargetQ}
+          initialDestR={dispatchTargetR}
+          onClose={() => setShowDispatch(false)}
+        />
+      )}
 
     </div>
   );

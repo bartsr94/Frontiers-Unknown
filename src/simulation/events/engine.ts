@@ -125,7 +125,8 @@ export type EventCategory =
   | 'personal'
   | 'environmental'
   | 'company'
-  | 'immigration';
+  | 'immigration'
+  | 'expedition';
 
 // ─── Prerequisite Types ──────────────────────────────────────────────────────
 

@@ -21,7 +21,8 @@ export type CraftRecipeId =
   | 'craft_cattle_slaughter'
   | 'craft_horse_breeding'
   | 'craft_medicine_prep'
-  | 'craft_goods_to_gold';
+  | 'craft_goods_to_gold'
+  | 'craft_boat';
 
 export interface CraftRecipe {
   id: CraftRecipeId;
@@ -97,6 +98,17 @@ export const CRAFT_RECIPES: Record<CraftRecipeId, CraftRecipe> = {
       resources: { goods: 5 },
     },
     produces: { gold: 2 },
+  },
+
+  craft_boat: {
+    id: 'craft_boat',
+    label: 'Build River Boat',
+    description: 'Construct a shallow-draft river boat at the dock. Boats dramatically increase expedition speed along river hexes and allow safe coastal travel.',
+    requires: {
+      buildings: ['dock'] as BuildingId[],
+      resources: { lumber: 15, goods: 3 },
+    },
+    produces: {},
   },
 };
 
