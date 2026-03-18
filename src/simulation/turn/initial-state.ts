@@ -10,7 +10,8 @@ import { createPerson, ETHNIC_GROUP_PRIMARY_LANGUAGE, ETHNIC_GROUP_CULTURE } fro
 import type { Person, WorkRole, CultureId } from '../population/person';
 import { generateName } from '../population/naming';
 import { emptyResourceStock } from '../economy/resources';
-import { initializeBaselineOpinions } from '../population/opinions';
+import { initializeBaselineOpinions, getOpinion, setOpinion } from '../population/opinions';
+import { SAUROMATIAN_CULTURE_IDS } from '../population/culture';
 import { generateAmbition } from '../population/ambitions';
 import { seedFoundingRelationships } from '../population/named-relationships';
 import { initializeHouseholds } from '../population/household';
@@ -341,6 +342,38 @@ export function createInitialState(config: GameConfig, settlementName: string, s
   // before the player takes their first turn.
   const opinionsSeeded = initializeBaselineOpinions(initialGameState.people);
   const seededPeople = new Map(opinionsSeeded);
+
+  // Cross-cultural companion boost: Sauromatian women and Imanian men have
+  // shared the Company's outward journey together. Starting baseline opinion
+  // between non-trader pairs is −15 (no shared language), traders −5 (Tradetalk).
+  // We force a guaranteed positive entry so that initializeBaselineOpinions
+  // (which runs again each processDawn) cannot re-seed −15 on the first dawn:
+  // setOpinion with value 0 would DELETE the entry, so we clamp to a minimum.
+  //   Women → men: min +15 (above the seek_companion/seek_spouse threshold of 5)
+  //   Men → women: min +30 (above the seek_spouse/seek_informal_union threshold of 25)
+  if (config.includeSauromatianWomen) {
+    const sauroWomen = Array.from(seededPeople.values()).filter(
+      p => p.sex === 'female' && SAUROMATIAN_CULTURE_IDS.has(p.heritage.primaryCulture),
+    );
+    const imanianMen = Array.from(seededPeople.values()).filter(
+      p => p.sex === 'male' && !SAUROMATIAN_CULTURE_IDS.has(p.heritage.primaryCulture),
+    );
+    for (const woman of sauroWomen) {
+      for (const man of imanianMen) {
+        // Woman's opinion of the man: clamp to at least +15 so the entry is
+        // always a positive value — a 0 result would be deleted by setOpinion,
+        // causing initializeBaselineOpinions to re-seed −15 on the first dawn.
+        const womanRaw = getOpinion(seededPeople.get(woman.id)!, man.id);
+        const updatedWoman = setOpinion(seededPeople.get(woman.id)!, man.id, Math.max(womanRaw + 20, 15));
+        seededPeople.set(woman.id, updatedWoman);
+        // Man's opinion of the woman: clamp to at least +30 — above the +25
+        // seek_spouse / seek_informal_union threshold for Imanian men.
+        const manRaw = getOpinion(seededPeople.get(man.id)!, woman.id);
+        const updatedMan = setOpinion(seededPeople.get(man.id)!, woman.id, Math.max(manRaw + 35, 30));
+        seededPeople.set(man.id, updatedMan);
+      }
+    }
+  }
   for (const [id, person] of seededPeople) {
     const ambition = generateAmbition(person, { ...initialGameState, people: seededPeople }, rng);
     if (ambition) {

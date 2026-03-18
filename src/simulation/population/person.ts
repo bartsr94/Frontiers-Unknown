@@ -260,6 +260,7 @@ export type WorkRole =
   | 'herder'              // Works at Stable; manages cattle and horses
   | 'bathhouse_attendant' // Works at Bathhouse; enables bathhouse happiness and fertility bonuses
   | 'boatbuilder'         // Works at Dock; constructs river boats for expeditions
+  | 'hunter'              // Hunts game in the wilderness; uses combat skill; produces food (and goods via buildings)
   | 'child'      // Under 8 — too young to work; set automatically and cleared at age 8
   | 'unassigned';
 

@@ -233,6 +233,8 @@ export default function DiplomacyView() {
   const [dispatchTargetR, setDispatchTargetR] = useState<number | undefined>(undefined);
   const containerWidthRef  = useRef(0);
   const containerHeightRef = useRef(0);
+  const [imgNaturalW, setImgNaturalW] = useState(0);
+  const [imgNaturalH, setImgNaturalH] = useState(0);
 
   // ── Map viewport state ────────────────────────────────────────────────
   // Single transform: translate(tx, ty) scale(s), origin top-left of container.
@@ -255,7 +257,8 @@ export default function DiplomacyView() {
   const drag = useRef({ startX: 0, startY: 0, startTx: 0, startTy: 0 });
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const MIN_SCALE = 0.8;
+  // minScaleRef is set dynamically on image load to the fit-to-contain scale.
+  const minScaleRef = useRef(0.3);
   const MAX_SCALE = 8;
 
   // ── Drag handlers ─────────────────────────────────────────────────────
@@ -289,7 +292,7 @@ export default function DiplomacyView() {
 
       const prevScale = scaleRef.current;
       const factor    = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-      const newScale  = Math.min(MAX_SCALE, Math.max(MIN_SCALE, prevScale * factor));
+      const newScale  = Math.min(MAX_SCALE, Math.max(minScaleRef.current, prevScale * factor));
 
       // Keep the pixel under the cursor fixed:
       // newTx = mouseX - (mouseX - prevTx) * (newScale / prevScale)
@@ -305,6 +308,32 @@ export default function DiplomacyView() {
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, []); // refs keep the closure fresh — no deps needed
+
+  // ── Fit-to-contain image load handler ────────────────────────────────
+  // Called once when the background map image finishes loading. Computes
+  // the largest scale at which the full image fits inside the container,
+  // then centres it — no cropping, full image visible at initial view.
+  function handleMapImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+    const img  = e.currentTarget;
+    const imgW = img.naturalWidth;
+    const imgH = img.naturalHeight;
+    const cw   = containerWidthRef.current  || 800;
+    const ch   = containerHeightRef.current || 600;
+    if (imgW <= 0 || imgH <= 0) return;
+
+    setImgNaturalW(imgW);
+    setImgNaturalH(imgH);
+
+    const fitScale = Math.min(cw / imgW, ch / imgH);
+    minScaleRef.current = fitScale;
+
+    const initTx = (cw - imgW * fitScale) / 2;
+    const initTy = (ch - imgH * fitScale) / 2;
+
+    setScale(fitScale);   scaleRef.current = fitScale;
+    setTx(initTx);        txRef.current    = initTx;
+    setTy(initTy);        tyRef.current    = initTy;
+  }
   // ─────────────────────────────────────────────────────────────────────
 
   if (!gameState) return null;
@@ -400,20 +429,21 @@ export default function DiplomacyView() {
         onMouseLeave={onMouseLeave}
       >
         {/*
-          The image sits at top:0 left:0, sized to cover the container at scale=1.
-          transform-origin is top-left (0 0) so tx/ty are plain pixel offsets
-          from the container corner — no centering math needed.
+          The image renders at its natural pixel dimensions (no objectFit cropping).
+          handleMapImageLoad computes a fit-to-contain scale and centres it so the
+          full map is visible on first load. transform-origin is top-left (0 0).
         */}
         <img
           src="/ui/ashmark.jpg"
           alt="The Ashmark"
+          onLoad={handleMapImageLoad}
           style={{
             position: 'absolute',
             top: 0,
             left: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
+            width: 'auto',
+            height: 'auto',
+            maxWidth: 'none',
             transformOrigin: '0 0',
             transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
             userSelect: 'none',
@@ -428,6 +458,8 @@ export default function DiplomacyView() {
             expeditions={expeditions}
             containerWidth={containerWidthRef.current || 800}
             containerHeight={containerHeightRef.current || 600}
+            imageWidth={imgNaturalW || containerWidthRef.current || 800}
+            imageHeight={imgNaturalH || containerHeightRef.current || 600}
             tx={tx}
             ty={ty}
             scale={scale}

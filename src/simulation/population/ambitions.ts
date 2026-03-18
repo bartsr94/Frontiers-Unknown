@@ -19,6 +19,7 @@ import { getDerivedSkill } from '../population/person';
 import { getEffectiveOpinion } from './opinions';
 import { SAUROMATIAN_CULTURE_IDS } from '../population/culture';
 import { ROLE_TO_BUILDING } from '../economy/private-economy';
+import { BUILDING_CATALOG } from '../buildings/building-definitions';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -185,12 +186,21 @@ export function evaluateAmbition(
       // Use the household's authoritative dwelling record (not the person-level
       // claimedBuildingId, which may lag a turn behind after an upgrade).
       const household = state.households.get(person.householdId);
-      const dwellingId = household?.dwellingBuildingId ?? null;
+      if (!household) return 'failed';
+      const dwellingId = household.dwellingBuildingId ?? null;
       const dwelling = dwellingId
         ? state.settlement.buildings.find(b => b.instanceId === dwellingId)
         : undefined;
-      // Fulfilled only once they reach the top tier (compound).
+      // Top tier — nothing more to build.
       if (dwelling?.defId === 'compound') return 'fulfilled';
+      // Fulfilled when the household now has comfortable space (below 50% of dwelling capacity).
+      // This covers the case where a completed upgrade has relieved overcrowding.
+      if (dwelling) {
+        const def = BUILDING_CATALOG[dwelling.defId];
+        if (def?.shelterCapacity && household.memberIds.length < def.shelterCapacity * 0.5) {
+          return 'fulfilled';
+        }
+      }
       return 'ongoing';
     }
 
@@ -401,22 +411,36 @@ export function determineAmbitionType(
     return { type: 'seek_autonomy', targetPersonId: null };
   }
 
-  // 11. seek_better_housing — household has no dwelling OR has a dwelling below compound tier
+  // 11. seek_better_housing — household is at ≥50% of current dwelling capacity.
+  // Path A in processPrivateBuilding handles the no-dwelling case automatically;
+  // this ambition only fires once overcrowding pressure prompts an upgrade.
   if (person.householdId) {
     const hhForHousing = state.households.get(person.householdId);
-    const dwellingIdForHousing = hhForHousing?.dwellingBuildingId ?? null;
-    const dwellingForHousing = dwellingIdForHousing
-      ? state.settlement.buildings.find(b => b.instanceId === dwellingIdForHousing)
-      : undefined;
-    if (!dwellingForHousing || dwellingForHousing.defId !== 'compound') {
-      return { type: 'seek_better_housing', targetPersonId: null };
+    if (hhForHousing) {
+      const dwellingIdForHousing = hhForHousing.dwellingBuildingId ?? null;
+      const dwellingForHousing = dwellingIdForHousing
+        ? state.settlement.buildings.find(b => b.instanceId === dwellingIdForHousing)
+        : undefined;
+      if (dwellingForHousing && dwellingForHousing.defId !== 'compound') {
+        const defForHousing = BUILDING_CATALOG[dwellingForHousing.defId];
+        if (
+          defForHousing?.shelterCapacity &&
+          hhForHousing.memberIds.length >= defForHousing.shelterCapacity * 0.5
+        ) {
+          return { type: 'seek_better_housing', targetPersonId: null };
+        }
+      }
     }
   }
 
-  // 12. seek_production_building — specialist worker whose household lacks the matching building
+  // 12. seek_production_building — specialist worker whose household is already sheltered
+  // and lacks the matching production building. Shelter needs take priority.
   {
     const desiredBuilding = ROLE_TO_BUILDING[person.role];
     if (desiredBuilding && person.householdId) {
+      const hhForProd = state.households.get(person.householdId);
+      // Only seek production buildings once the household has its own dwelling.
+      if (!hhForProd?.dwellingBuildingId) return null;
       const hasBuilding = state.settlement.buildings.some(
         b => b.defId === desiredBuilding && b.ownerHouseholdId === person.householdId,
       );

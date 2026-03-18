@@ -1,46 +1,39 @@
-/**
+﻿/**
  * HexGrid — SVG hex-map overlay for the DiplomacyView.
  *
- * Renders a pointed-top axial hex grid over the Ashmark background image.
- * The visual grid extends beyond the 15×15 game grid so that fog-of-war
- * hexes cover the entire map image.  Hexes outside the game grid are
- * permanent fog and non-interactive.
- *
- * Fog-of-war states (game hexes only):
- *   'fog'     → opaque stone-900 fill (clickable for expedition dispatch)
- *   'scouted' → semi-transparent fill showing terrain colour
- *   'visited' → transparent hex (image shows through), terrain colour border
- *   'cleared' → same as visited (all one-time content exhausted)
- *
- * The SVG uses CSS-pixel coordinates (no viewBox) and shares the same
- * CSS transform as the background image so hexes stay aligned at every
- * zoom level.  Settlement hex (7, 7) is always centred in the container.
+ * Performance approach:
+ * - All static hex geometry is batched into ~12 <path> elements (one per
+ *   visual bucket: fog + up to 9 terrain types x 2 visibility states).
+ *   This replaces thousands of individual <polygon> elements.
+ * - Hover/selected highlights are a single <polygon> overlay each.
+ * - All mouse interaction uses one SVG-level handler + pixelToHex hit
+ *   testing - no per-element event handlers.
+ * - RAF throttling prevents redundant re-renders on every mouse pixel.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import type { HexMap, HexCell, TerrainType, Expedition } from '../../simulation/turn/game-state';
 import {
-  hexToPixel,
   hexKey,
   HEX_MAP_WIDTH,
   HEX_MAP_HEIGHT,
   SETTLEMENT_Q,
   SETTLEMENT_R,
+  OFFSET_COL_START,
+  offsetToAxial,
+  axialToOffset,
+  offsetToPixel,
+  pixelToHex,
 } from '../../simulation/world/hex-map';
 
-// ─── Constants ─────────────────────────────────────────────────────────────────
+// --- Constants ---
 
 /** Circumradius (centre-to-corner) of each hexagon, in CSS pixels. */
-const HEX_SIZE = 30;
+const HEX_SIZE = 33;
 
-/**
- * Extra hex rows / columns beyond the game grid in every direction.
- * Creates the illusion that the unexplored Ashmark continues to the
- * edges of the map image.
- */
-const VISUAL_PADDING = 10;
+/** Minimum padding (in hex columns/rows) beyond the game grid. */
+const MIN_VISUAL_PADDING = 4;
 
-/** Terrain fill colours for visible hexes. */
 const TERRAIN_COLOR: Record<TerrainType, string> = {
   plains:    '#6b8c5a',
   forest:    '#2d5a2d',
@@ -65,125 +58,29 @@ const TERRAIN_LABEL: Record<TerrainType, string> = {
   desert:    'Desert',
 };
 
-// ─── Hex corner points ─────────────────────────────────────────────────────────
+// --- Geometry helpers ---
 
-/** Returns the 6 corner points of a pointed-top hexagon centred at (cx, cy). */
 function hexCorners(cx: number, cy: number, size: number): string {
-  const points: string[] = [];
+  const pts: string[] = [];
   for (let i = 0; i < 6; i++) {
-    const angleDeg = 60 * i - 30; // pointed-top: offset by -30°
-    const rad = (Math.PI / 180) * angleDeg;
-    points.push(`${(cx + size * Math.cos(rad)).toFixed(2)},${(cy + size * Math.sin(rad)).toFixed(2)}`);
+    const rad = (Math.PI / 180) * (60 * i - 30);
+    pts.push(`${(cx + size * Math.cos(rad)).toFixed(1)},${(cy + size * Math.sin(rad)).toFixed(1)}`);
   }
-  return points.join(' ');
+  return pts.join(' ');
 }
 
-// ─── Fog padding hexes (non-interactive decoration) ────────────────────────────
-
-function FogPadHex({ cx, cy, size }: { cx: number; cy: number; size: number }) {
-  return (
-    <polygon
-      points={hexCorners(cx, cy, size)}
-      fill="#1c1917"
-      fillOpacity={0.92}
-      stroke="#292524"
-      strokeWidth={0.5}
-      style={{ pointerEvents: 'none' }}
-    />
-  );
-}
-
-// ─── Single game hex ───────────────────────────────────────────────────────────
-
-interface HexTileProps {
-  cell: HexCell;
-  cx: number;
-  cy: number;
-  size: number;
-  isHovered: boolean;
-  isSelected: boolean;
-  isExpeditionHere: boolean;
-  onHover: (cell: HexCell | null, e?: React.MouseEvent<SVGGElement>) => void;
-  onClick: () => void;
-}
-
-function HexTile({
-  cell, cx, cy, size, isHovered, isSelected, isExpeditionHere,
-  onHover, onClick,
-}: HexTileProps) {
-  const points = hexCorners(cx, cy, size);
-  const vis    = cell.visibility;
-
-  // Fill based on visibility state.
-  let fill: string;
-  let fillOpacity: number;
-  let strokeColor: string;
-  let strokeWidth: number;
-
-  if (vis === 'fog') {
-    fill        = '#1c1917'; // stone-900
-    fillOpacity = isHovered ? 0.75 : 0.92;
-    strokeColor = isHovered ? '#78716c' : '#292524'; // stone-500 : stone-800
-    strokeWidth = isHovered ? 1.5 : 0.8;
-  } else if (vis === 'scouted') {
-    fill        = TERRAIN_COLOR[cell.terrain];
-    fillOpacity = 0.55;
-    strokeColor = isSelected ? '#fbbf24' : '#78716c';
-    strokeWidth = isSelected ? 2 : 1;
-  } else {
-    // visited / cleared — transparent hex, image shows through
-    fill        = TERRAIN_COLOR[cell.terrain];
-    fillOpacity = isSelected ? 0.35 : isHovered ? 0.22 : 0.08;
-    strokeColor = isSelected ? '#fbbf24' : isHovered ? '#a8a29e' : '#57534e';
-    strokeWidth = isSelected ? 2 : 1;
+function hexPathSegment(cx: number, cy: number, size: number): string {
+  let d = '';
+  for (let i = 0; i < 6; i++) {
+    const rad = (Math.PI / 180) * (60 * i - 30);
+    const x = (cx + size * Math.cos(rad)).toFixed(1);
+    const y = (cy + size * Math.sin(rad)).toFixed(1);
+    d += i === 0 ? `M${x},${y}` : `L${x},${y}`;
   }
-
-  return (
-    <g
-      data-q={cell.q}
-      data-r={cell.r}
-      style={{ cursor: 'pointer' }}
-      onMouseEnter={(e) => onHover(cell, e)}
-      onMouseMove={(e) => onHover(cell, e)}
-      onMouseLeave={() => onHover(null)}
-      onClick={onClick}
-    >
-      <polygon
-        points={points}
-        fill={fill}
-        fillOpacity={fillOpacity}
-        stroke={strokeColor}
-        strokeWidth={strokeWidth}
-      />
-      {/* Expedition presence indicator */}
-      {isExpeditionHere && (
-        <circle
-          cx={cx}
-          cy={cy}
-          r={6}
-          fill="#fbbf24"
-          stroke="#78350f"
-          strokeWidth={1.5}
-        />
-      )}
-      {/* Settlement marker */}
-      {cell.q === SETTLEMENT_Q && cell.r === SETTLEMENT_R && (
-        <text
-          x={cx}
-          y={cy + 5}
-          textAnchor="middle"
-          fontSize={13}
-          fill="#fcd34d"
-          style={{ pointerEvents: 'none', userSelect: 'none' }}
-        >
-          ⌂
-        </text>
-      )}
-    </g>
-  );
+  return d + 'Z';
 }
 
-// ─── Tooltip ───────────────────────────────────────────────────────────────────
+// --- Tooltip ---
 
 interface TooltipProps {
   cell: HexCell;
@@ -201,14 +98,14 @@ function HexTooltip({ cell, svgX, svgY, expeditionHere }: TooltipProps) {
   lines.push(TERRAIN_LABEL[cell.terrain]);
 
   if (vis === 'visited' || vis === 'cleared') {
-    const discoveredContents = cell.contents.filter(c => c.discovered);
+    const discoveredContents = cell.contents.filter(c => c !== null && c.discovered);
     for (const c of discoveredContents) {
-      lines.push(c.label ?? c.type.replace(/_/g, ' '));
+      lines.push(c.type.replace(/_/g, ' '));
     }
   }
 
   if (expeditionHere) {
-    lines.push(`★ ${expeditionHere}`);
+    lines.push(`* ${expeditionHere}`);
   }
 
   const lineHeight = 14;
@@ -219,51 +116,36 @@ function HexTooltip({ cell, svgX, svgY, expeditionHere }: TooltipProps) {
 
   return (
     <g style={{ pointerEvents: 'none' }} transform={`translate(${svgX + 16}, ${svgY - 8})`}>
-      <rect
-        x={0} y={0}
-        width={boxW} height={boxH}
-        rx={4}
-        fill="#1c1917"
-        fillOpacity={0.95}
-        stroke="#57534e"
-        strokeWidth={1}
-      />
+      <rect x={0} y={0} width={boxW} height={boxH} rx={4}
+        fill="#1c1917" fillOpacity={0.95} stroke="#57534e" strokeWidth={1} />
       {lines.map((l, i) => (
-        <text
-          key={i}
-          x={padX}
-          y={padY + (i + 1) * lineHeight - 3}
-          fill={i === 0 ? '#a8a29e' : '#e7e5e4'}
-          fontSize={11}
-        >
-          {l}
-        </text>
+        <text key={i} x={padX} y={padY + (i + 1) * lineHeight - 3}
+          fill={i === 0 ? '#a8a29e' : '#e7e5e4'} fontSize={11}>{l}</text>
       ))}
     </g>
   );
 }
 
-// ─── Main HexGrid ──────────────────────────────────────────────────────────────
+// --- HexGridProps ---
 
 interface HexGridProps {
   hexMap: HexMap;
   expeditions: Expedition[];
-  /** Width + height of the container in CSS pixels. */
   containerWidth: number;
   containerHeight: number;
-  /** Pan/zoom transform synced with the parent viewport. */
+  imageWidth: number;
+  imageHeight: number;
   tx: number;
   ty: number;
   scale: number;
-  /** Called when the player clicks any game hex (including fog). */
   onHexClick?: (q: number, r: number) => void;
 }
 
 export default function HexGrid({
   hexMap,
   expeditions,
-  containerWidth,
-  containerHeight,
+  imageWidth,
+  imageHeight,
   tx,
   ty,
   scale,
@@ -273,131 +155,200 @@ export default function HexGrid({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Build a lookup of which hex each active expedition is currently in.
-  const expeditionPositions = useMemo<Map<string, string>>(
-    () => {
-      const map = new Map<string, string>();
-      for (const exp of expeditions) {
-        if (exp.status === 'travelling' || exp.status === 'returning') {
-          map.set(hexKey(exp.currentQ, exp.currentR), exp.name);
-        }
+  const svgRef = useRef<SVGSVGElement>(null);
+  const rafRef = useRef<number | null>(null);
+
+  const expeditionPositions = useMemo<Map<string, string>>(() => {
+    const map = new Map<string, string>();
+    for (const exp of expeditions) {
+      if (exp.status === 'travelling' || exp.status === 'returning') {
+        map.set(hexKey(exp.currentQ, exp.currentR), exp.name);
       }
-      return map;
-    },
-    [expeditions],
-  );
+    }
+    return map;
+  }, [expeditions]);
 
-  // Centre the settlement hex in the container.
-  // All hex positions are in CSS-pixel coordinates (no SVG viewBox).
-  const settlementPx = hexToPixel(SETTLEMENT_Q, SETTLEMENT_R, HEX_SIZE);
-  const offsetX = containerWidth / 2 - settlementPx.x;
-  const offsetY = containerHeight / 2 - settlementPx.y;
+  const settlementOffset = axialToOffset(SETTLEMENT_Q, SETTLEMENT_R);
+  const settlementPx     = offsetToPixel(settlementOffset.col, settlementOffset.row, HEX_SIZE);
+  const offsetX = imageWidth  / 2 - settlementPx.x;
+  const offsetY = imageHeight / 2 - settlementPx.y;
 
-  // Generate the full visual grid: game hexes + fog padding.
+  const gameColMin = OFFSET_COL_START;
+  const gameColMax = OFFSET_COL_START + HEX_MAP_WIDTH - 1;
+  const gameRowMin = 0;
+  const gameRowMax = HEX_MAP_HEIGHT - 1;
+
+  const hexW         = HEX_SIZE * Math.sqrt(3);
+  const hexH         = HEX_SIZE * 1.5;
+  const halfImgCols  = Math.ceil(imageWidth  / (2 * hexW));
+  const halfImgRows  = Math.ceil(imageHeight / (2 * hexH));
+  const halfGridCols = Math.floor(HEX_MAP_WIDTH  / 2);
+  const halfGridRows = Math.floor(HEX_MAP_HEIGHT / 2);
+  const padCols = Math.max(MIN_VISUAL_PADDING, halfImgCols - halfGridCols + 3);
+  const padRows = Math.max(MIN_VISUAL_PADDING, halfImgRows - halfGridRows + 3);
+
   const visualCells = useMemo(() => {
-    const minQ = -VISUAL_PADDING;
-    const maxQ = HEX_MAP_WIDTH - 1 + VISUAL_PADDING;
-    const minR = -VISUAL_PADDING;
-    const maxR = HEX_MAP_HEIGHT - 1 + VISUAL_PADDING;
-
-    const cells: Array<{
-      q: number;
-      r: number;
-      gameCell: HexCell | undefined;
-      x: number;
-      y: number;
-    }> = [];
-
-    for (let q = minQ; q <= maxQ; q++) {
-      for (let r = minR; r <= maxR; r++) {
-        const pos = hexToPixel(q, r, HEX_SIZE);
-        cells.push({
-          q,
-          r,
-          gameCell: hexMap.cells.get(hexKey(q, r)),
-          x: pos.x + offsetX,
-          y: pos.y + offsetY,
-        });
+    const minCol = gameColMin - padCols;
+    const maxCol = gameColMax + padCols;
+    const minRow = gameRowMin - padRows;
+    const maxRow = gameRowMax + padRows;
+    const cells: Array<{ q: number; r: number; gameCell: HexCell | undefined; x: number; y: number }> = [];
+    for (let row = minRow; row <= maxRow; row++) {
+      for (let col = minCol; col <= maxCol; col++) {
+        const { q, r } = offsetToAxial(col, row);
+        const pos = offsetToPixel(col, row, HEX_SIZE);
+        cells.push({ q, r, gameCell: hexMap.cells.get(hexKey(q, r)), x: pos.x + offsetX, y: pos.y + offsetY });
       }
     }
     return cells;
-  }, [hexMap, containerWidth, containerHeight, offsetX, offsetY]);
+  }, [hexMap, imageWidth, imageHeight, offsetX, offsetY, padCols, padRows]);
 
-  function handleHover(cell: HexCell | null, e?: React.MouseEvent<SVGGElement>) {
-    if (!cell) {
-      setHoveredKey(null);
-      return;
-    }
-    const k = hexKey(cell.q, cell.r);
-    setHoveredKey(k);
-    if (e) {
-      const svg = e.currentTarget.ownerSVGElement as SVGSVGElement | null;
-      if (svg) {
-        const pt = svg.createSVGPoint();
-        pt.x = e.clientX;
-        pt.y = e.clientY;
-        const svgPt = pt.matrixTransform(svg.getScreenCTM()!.inverse());
-        setTooltipPos({ x: svgPt.x, y: svgPt.y });
+  const cellByKey = useMemo(() => {
+    const map = new Map<string, { x: number; y: number; gameCell: HexCell | undefined }>();
+    for (const vc of visualCells) map.set(hexKey(vc.q, vc.r), { x: vc.x, y: vc.y, gameCell: vc.gameCell });
+    return map;
+  }, [visualCells]);
+
+  const { fogD, scoutedEntries, visitedEntries } = useMemo(() => {
+    const fogSegs:    string[]                         = [];
+    const scoutedMap = new Map<TerrainType, string[]>();
+    const visitedMap = new Map<TerrainType, string[]>();
+    for (const vc of visualCells) {
+      const seg = hexPathSegment(vc.x, vc.y, HEX_SIZE);
+      const vis = vc.gameCell?.visibility;
+      if (!vis || vis === 'fog') {
+        fogSegs.push(seg);
+      } else if (vis === 'scouted') {
+        const arr = scoutedMap.get(vc.gameCell!.terrain) ?? [];
+        arr.push(seg);
+        scoutedMap.set(vc.gameCell!.terrain, arr);
+      } else {
+        const arr = visitedMap.get(vc.gameCell!.terrain) ?? [];
+        arr.push(seg);
+        visitedMap.set(vc.gameCell!.terrain, arr);
       }
     }
+    return { fogD: fogSegs.join(''), scoutedEntries: [...scoutedMap.entries()], visitedEntries: [...visitedMap.entries()] };
+  }, [visualCells]);
+
+  function getSvgPoint(clientX: number, clientY: number): { x: number; y: number } | null {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    const svgPt = pt.matrixTransform(ctm.inverse());
+    return { x: svgPt.x, y: svgPt.y };
   }
 
-  function handleClick(q: number, r: number) {
+  function handleSvgMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    if (rafRef.current !== null) return;
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const svgPt = getSvgPoint(clientX, clientY);
+      if (!svgPt) return;
+      const { q, r } = pixelToHex(svgPt.x - offsetX, svgPt.y - offsetY, HEX_SIZE);
+      const k = hexKey(q, r);
+      setHoveredKey(prev => (prev === k ? prev : k));
+      setTooltipPos(svgPt);
+    });
+  }
+
+  function handleSvgMouseLeave() {
+    if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    setHoveredKey(null);
+  }
+
+  function handleSvgClick(e: React.MouseEvent<SVGSVGElement>) {
+    const svgPt = getSvgPoint(e.clientX, e.clientY);
+    if (!svgPt) return;
+    const { q, r } = pixelToHex(svgPt.x - offsetX, svgPt.y - offsetY, HEX_SIZE);
     const k = hexKey(q, r);
     setSelectedKey(prev => (prev === k ? null : k));
     onHexClick?.(q, r);
   }
 
-  const hoveredCell = hoveredKey ? hexMap.cells.get(hoveredKey) : null;
+  const hoveredVc   = hoveredKey  ? cellByKey.get(hoveredKey)  : null;
+  const selectedVc  = selectedKey ? cellByKey.get(selectedKey) : null;
+  const hoveredCell = hoveredKey  ? hexMap.cells.get(hoveredKey)  : null;
+  const hoveredVis  = hoveredVc?.gameCell?.visibility;
+  const hoveredFillColor   = hoveredVc?.gameCell ? TERRAIN_COLOR[hoveredVc.gameCell.terrain] : '#57534e';
+  const hoveredFillOpacity = (!hoveredVis || hoveredVis === 'fog') ? 0.18 : 0.25;
+
+  const expeditionMarkers = useMemo(() => {
+    const markers: Array<{ x: number; y: number; name: string }> = [];
+    for (const [k, name] of expeditionPositions) {
+      const vc = cellByKey.get(k);
+      if (vc) markers.push({ x: vc.x, y: vc.y, name });
+    }
+    return markers;
+  }, [expeditionPositions, cellByKey]);
+
+  const settlVc = cellByKey.get(hexKey(SETTLEMENT_Q, SETTLEMENT_R));
 
   return (
     <svg
+      ref={svgRef}
       xmlns="http://www.w3.org/2000/svg"
-      width={containerWidth}
-      height={containerHeight}
+      width={imageWidth}
+      height={imageHeight}
       style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
+        position: 'absolute', top: 0, left: 0,
         transformOrigin: '0 0',
         transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
         userSelect: 'none',
         pointerEvents: 'all',
+        cursor: 'pointer',
       }}
+      onMouseMove={handleSvgMouseMove}
+      onMouseLeave={handleSvgMouseLeave}
+      onClick={handleSvgClick}
     >
-      {visualCells.map(vc => {
-        const k = `${vc.q},${vc.r}`;
+      {fogD && <path d={fogD} fill="#1c1917" fillOpacity={0.92} stroke="#292524" strokeWidth={0.5} />}
 
-        // Hexes outside the game grid: permanent fog, non-interactive
-        if (!vc.gameCell) {
-          return <FogPadHex key={k} cx={vc.x} cy={vc.y} size={HEX_SIZE} />;
-        }
+      {scoutedEntries.map(([terrain, segs]) => (
+        <path key={`s-${terrain}`} d={segs.join('')}
+          fill={TERRAIN_COLOR[terrain]} fillOpacity={0.55} stroke="#78716c" strokeWidth={1} />
+      ))}
 
-        // Game hexes: interactive
-        return (
-          <HexTile
-            key={k}
-            cell={vc.gameCell}
-            cx={vc.x}
-            cy={vc.y}
-            size={HEX_SIZE}
-            isHovered={hoveredKey === k}
-            isSelected={selectedKey === k}
-            isExpeditionHere={expeditionPositions.has(k)}
-            onHover={handleHover}
-            onClick={() => handleClick(vc.q, vc.r)}
-          />
-        );
-      })}
+      {visitedEntries.map(([terrain, segs]) => (
+        <path key={`v-${terrain}`} d={segs.join('')}
+          fill={TERRAIN_COLOR[terrain]} fillOpacity={0.08} stroke="#57534e" strokeWidth={1} />
+      ))}
 
-      {/* Tooltip for hovered hex */}
+      {hoveredVc && (
+        <polygon points={hexCorners(hoveredVc.x, hoveredVc.y, HEX_SIZE)}
+          fill={hoveredFillColor} fillOpacity={hoveredFillOpacity}
+          stroke="#a8a29e" strokeWidth={1.5}
+          style={{ pointerEvents: 'none' }} />
+      )}
+
+      {selectedVc && (
+        <polygon points={hexCorners(selectedVc.x, selectedVc.y, HEX_SIZE)}
+          fill="none" stroke="#fbbf24" strokeWidth={2}
+          style={{ pointerEvents: 'none' }} />
+      )}
+
+      {settlVc && (
+        <text x={settlVc.x} y={settlVc.y + 5} textAnchor="middle" fontSize={13} fill="#fcd34d"
+          style={{ pointerEvents: 'none', userSelect: 'none' }}>
+          {'\u2302'}
+        </text>
+      )}
+
+      {expeditionMarkers.map(m => (
+        <circle key={m.name} cx={m.x} cy={m.y} r={6}
+          fill="#fbbf24" stroke="#78350f" strokeWidth={1.5}
+          style={{ pointerEvents: 'none' }} />
+      ))}
+
       {hoveredCell && (
-        <HexTooltip
-          cell={hoveredCell}
-          svgX={tooltipPos.x}
-          svgY={tooltipPos.y}
-          expeditionHere={expeditionPositions.get(hoveredKey!) ?? null}
-        />
+        <HexTooltip cell={hoveredCell} svgX={tooltipPos.x} svgY={tooltipPos.y}
+          expeditionHere={expeditionPositions.get(hoveredKey!) ?? null} />
       )}
     </svg>
   );

@@ -127,6 +127,8 @@ export function calculateProduction(
       case 'trader':        personGoods  = 1; break;
       // gather_food is seasonally scaled like farming
       case 'gather_food':   personFood   = gatherYield(person.skills.plants); break;
+      // hunter produces food via combat skill — seasonally scaled like gather_food; goods come from building bonuses
+      case 'hunter':        personFood   = gatherYield(person.skills.combat); break;
       // gather_stone / gather_lumber are NOT seasonally scaled — accumulated directly
       case 'gather_stone':  delta.stone  += Math.floor(gatherYield(person.skills.custom) * effectiveMult); break;
       case 'gather_lumber': delta.lumber += Math.floor(gatherYield(person.skills.custom) * effectiveMult); break;

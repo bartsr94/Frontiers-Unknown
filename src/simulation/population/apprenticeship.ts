@@ -36,6 +36,7 @@ export const TRAINABLE_TRADES = new Set<WorkRole>([
   'miller',
   'herder',
   'healer',
+  'hunter',
   'trader',
   'craftsman',
 ]);
@@ -72,6 +73,8 @@ export function getTradeSkill(role: WorkRole): SkillId {
       return 'plants';
     case 'herder':
       return 'animals';
+    case 'hunter':
+      return 'combat';
     case 'trader':
       return 'bargaining';
     case 'guard':

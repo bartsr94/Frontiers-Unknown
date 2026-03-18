@@ -523,7 +523,40 @@ export type BuildingId =
   | 'bathhouse_improved'
   | 'bathhouse_grand'
   // ── Maritime & Exploration ────────────────────────────────────────────────
-  | 'dock';
+  | 'dock'
+  // ── Farms & Fields expansion (household, additive) ──────────────────────
+  | 'barns_storehouses'  // T2 — extends 'fields'
+  | 'farmstead'          // T3
+  | 'grain_silo'         // T4
+  // ── Cattle Pastures chain (household, additive) ──────────────────────────
+  | 'cattle_pen'         // T1
+  | 'meadow'             // T2
+  | 'cattle_ranch'       // T3
+  | 'stock_farm'         // T4
+  // ── Orchard chain (household, additive) ──────────────────────────────────
+  | 'orchard'            // T1
+  | 'berry_grove'        // T2
+  | 'beekeeper'          // T3
+  | 'grand_orchard'      // T4
+  // ── Forestry chain (communal, upgrade) ───────────────────────────────────
+  | 'logging_camp'       // T1
+  | 'charcoal_burners'   // T2
+  | 'wood_pasture'       // T3
+  | 'sawmill'            // T4
+  // ── Hunting Grounds chain (communal, upgrade) ────────────────────────────
+  | 'hunters_lodge'      // T1
+  | 'hound_pens'         // T2
+  | 'hunting_towers'     // T3
+  | 'hunting_reserve'    // T4
+  // ── Quarry chain (communal, upgrade) ─────────────────────────────────────
+  | 'stone_quarry'       // T1
+  | 'ore_mine'           // T2
+  | 'large_quarry'       // T3
+  | 'shaft_mine'         // T4
+  // ── Hospice chain (communal, upgrade — extends healers_hut) ──────────────
+  | 'infirmary'          // T2
+  | 'hospital'           // T3
+  | 'grand_hospital';    // T4
 
 /** Cultural style applied to buildings that have style variants. */
 export type BuildingStyle = 'imanian' | 'sauromatian';

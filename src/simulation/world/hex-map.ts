@@ -1,9 +1,13 @@
 /**
  * Hex-map generation, coordinate helpers, and visibility utilities.
  *
- * Uses a pointed-top axial coordinate system (q = column, r = row).
- * The settlement always occupies hex (7, 7) on a 15×15 grid which is
- * centred within the map bounds.
+ * Uses a pointed-top axial coordinate system (q = column, r = row) for
+ * game logic.  Map generation and bounds-checking use **odd-r offset
+ * coordinates** internally so that the game grid fills a pixel-space
+ * rectangle with no parallelogram gaps in the corners.
+ *
+ * The settlement always occupies hex (SETTLEMENT_Q, SETTLEMENT_R) and
+ * is centred within the rectangular offset grid.
  *
  * Pure logic — no React, no DOM, seeded RNG only (Hard Rule #1).
  */
@@ -13,11 +17,64 @@ import type { SeededRNG } from '../../utils/rng';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-export const HEX_MAP_WIDTH = 15;
-export const HEX_MAP_HEIGHT = 15;
+export const HEX_MAP_WIDTH = 21;
+export const HEX_MAP_HEIGHT = 21;
 /** Axial coordinates of the player settlement hex. */
-export const SETTLEMENT_Q = 7;
-export const SETTLEMENT_R = 7;
+export const SETTLEMENT_Q = 10;
+export const SETTLEMENT_R = 10;
+
+// ─── Offset ↔ Axial conversion (odd-r, pointed-top) ──────────────────────────
+//
+// Offset (col, row) naturally tiles into a pixel-space rectangle.
+// Axial (q, r) is the canonical coordinate for game state.
+//
+// Reference: https://www.redblobgames.com/grids/hexagons/#conversions-offset
+
+/** Convert odd-r offset → axial. */
+export function offsetToAxial(col: number, row: number): { q: number; r: number } {
+  const q = col - Math.floor((row - (row & 1)) / 2);
+  return { q, r: row };
+}
+
+/** Convert axial → odd-r offset. */
+export function axialToOffset(q: number, r: number): { col: number; row: number } {
+  const col = q + Math.floor((r - (r & 1)) / 2);
+  return { col, row: r };
+}
+
+/**
+ * The starting offset column index that centres the settlement hex within
+ * the rectangular grid.  Iteration runs col ∈ [OFFSET_COL_START, OFFSET_COL_START + WIDTH - 1].
+ */
+export const OFFSET_COL_START: number =
+  axialToOffset(SETTLEMENT_Q, SETTLEMENT_R).col - Math.floor(HEX_MAP_WIDTH / 2);
+
+/** Pixel centre of an odd-r offset hex (pointed-top). */
+export function offsetToPixel(col: number, row: number, hexSize: number): { x: number; y: number } {
+  const sqrt3 = Math.sqrt(3);
+  return {
+    x: hexSize * sqrt3 * (col + 0.5 * (row & 1)),
+    y: hexSize * 1.5 * row,
+  };
+}
+
+// ─── Bounds checking ─────────────────────────────────────────────────────────
+
+/**
+ * Returns true if the axial hex (q, r) lies within the rectangular game grid.
+ * Converts to offset coordinates and checks against the offset bounding box.
+ */
+export function isInBounds(q: number, r: number): boolean {
+  const { col } = axialToOffset(q, r);
+  return (
+    col >= OFFSET_COL_START &&
+    col < OFFSET_COL_START + HEX_MAP_WIDTH &&
+    r >= 0 &&
+    r < HEX_MAP_HEIGHT
+  );
+}
+
+// ─── Travel speed tables ─────────────────────────────────────────────────────
 
 /**
  * Travel speed (hexes per season) on foot indexed by terrain type.
@@ -72,14 +129,9 @@ export function getNeighbours(q: number, r: number): Array<{ q: number; r: numbe
   return AXIAL_DIRECTIONS.map(d => ({ q: q + d.q, r: r + d.r }));
 }
 
-/** Returns valid neighbours that lie within the map bounds. */
-export function getBoundedNeighbours(
-  q: number,
-  r: number,
-  width = HEX_MAP_WIDTH,
-  height = HEX_MAP_HEIGHT,
-): Array<{ q: number; r: number }> {
-  return getNeighbours(q, r).filter(n => n.q >= 0 && n.q < width && n.r >= 0 && n.r < height);
+/** Returns valid neighbours that lie within the rectangular game grid. */
+export function getBoundedNeighbours(q: number, r: number): Array<{ q: number; r: number }> {
+  return getNeighbours(q, r).filter(n => isInBounds(n.q, n.r));
 }
 
 /** Axial (cube-distance) distance between two hexes. */
@@ -130,6 +182,22 @@ export function pixelToHex(
   }
 
   return { q: rq, r: rr };
+}
+
+// ─── Iteration helper ────────────────────────────────────────────────────────
+
+/**
+ * Calls `fn` for every (q, r) in the rectangular game grid.
+ * Iterates in offset-row order (top to bottom, left to right).
+ */
+function forEachGameHex(fn: (q: number, r: number) => void): void {
+  for (let row = 0; row < HEX_MAP_HEIGHT; row++) {
+    for (let ci = 0; ci < HEX_MAP_WIDTH; ci++) {
+      const col = OFFSET_COL_START + ci;
+      const { q, r } = offsetToAxial(col, row);
+      fn(q, r);
+    }
+  }
 }
 
 // ─── Map generation ───────────────────────────────────────────────────────────
@@ -188,8 +256,6 @@ function growTerrainBlob(
   radius: number,
   decayChance: number,
   rng: SeededRNG,
-  width: number,
-  height: number,
 ): void {
   const frontier: Array<{ q: number; r: number; dist: number }> = [{ q: startQ, r: startR, dist: 0 }];
   const visited = new Set<string>([hexKey(startQ, startR)]);
@@ -201,7 +267,7 @@ function growTerrainBlob(
     if (current.dist >= radius) continue;
 
     for (const nb of getNeighbours(current.q, current.r)) {
-      if (nb.q < 0 || nb.q >= width || nb.r < 0 || nb.r >= height) continue;
+      if (!isInBounds(nb.q, nb.r)) continue;
       const k = hexKey(nb.q, nb.r);
       if (visited.has(k)) continue;
       visited.add(k);
@@ -215,30 +281,55 @@ function growTerrainBlob(
 }
 
 /**
+ * Picks a random hex on the given edge of the rectangular grid.
+ * Returns axial (q, r) coordinates.
+ */
+function randomEdgeHex(
+  edge: 0 | 1 | 2 | 3,
+  rng: SeededRNG,
+): { q: number; r: number } {
+  const colEnd = OFFSET_COL_START + HEX_MAP_WIDTH - 1;
+  if (edge === 0) {
+    // Top edge: row = 0, random col
+    const col = rng.nextInt(OFFSET_COL_START + 1, colEnd - 1);
+    return offsetToAxial(col, 0);
+  } else if (edge === 1) {
+    // Right edge: col = max, random row
+    const row = rng.nextInt(1, HEX_MAP_HEIGHT - 2);
+    return offsetToAxial(colEnd, row);
+  } else if (edge === 2) {
+    // Bottom edge: row = max, random col
+    const row = HEX_MAP_HEIGHT - 1;
+    const col = rng.nextInt(OFFSET_COL_START + 1, colEnd - 1);
+    return offsetToAxial(col, row);
+  } else {
+    // Left edge: col = min, random row
+    const row = rng.nextInt(1, HEX_MAP_HEIGHT - 2);
+    return offsetToAxial(OFFSET_COL_START, row);
+  }
+}
+
+/**
  * Carves a river corridor across the map using a biased random walk.
  * The river avoids the settlement hex but may pass adjacent to it.
  */
 function carveRiver(
   cells: Map<string, TerrainType>,
   rng: SeededRNG,
-  width: number,
-  height: number,
 ): void {
   // Rivers start from a random map edge.
-  const edgeSide = rng.nextInt(0, 3); // 0=top, 1=right, 2=bottom, 3=left
-  let q: number, r: number;
-  if (edgeSide === 0) { q = rng.nextInt(1, width - 2); r = 0; }
-  else if (edgeSide === 1) { q = width - 1; r = rng.nextInt(1, height - 2); }
-  else if (edgeSide === 2) { q = rng.nextInt(1, width - 2); r = height - 1; }
-  else { q = 0; r = rng.nextInt(1, height - 2); }
+  const edgeSide = rng.nextInt(0, 3) as 0 | 1 | 2 | 3;
+  let { q, r } = randomEdgeHex(edgeSide, rng);
 
   // Walk toward the opposite edge, or meander off another edge.
-  const targetQ = edgeSide === 1 ? 0 : edgeSide === 3 ? width - 1 : rng.nextInt(1, width - 2);
-  const targetR = edgeSide === 0 ? height - 1 : edgeSide === 2 ? 0 : rng.nextInt(1, height - 2);
+  const oppositeSide = ((edgeSide + 2) % 4) as 0 | 1 | 2 | 3;
+  const target = randomEdgeHex(oppositeSide, rng);
+  const targetQ = target.q;
+  const targetR = target.r;
 
   const visited = new Set<string>();
   let steps = 0;
-  const maxSteps = width * height;
+  const maxSteps = HEX_MAP_WIDTH * HEX_MAP_HEIGHT;
 
   while (steps < maxSteps) {
     const k = hexKey(q, r);
@@ -254,7 +345,7 @@ function carveRiver(
     if (q === targetQ && r === targetR) break;
 
     // Pick neighbour that moves toward target, with 30% random drift.
-    const nbs = getNeighbours(q, r).filter(n => n.q >= 0 && n.q < width && n.r >= 0 && n.r < height);
+    const nbs = getNeighbours(q, r).filter(n => isInBounds(n.q, n.r));
     if (nbs.length === 0) break;
 
     const unvisited = nbs.filter(n => !visited.has(hexKey(n.q, n.r)));
@@ -302,13 +393,17 @@ function maybeSeedContent(
 }
 
 /**
- * Generates the full 15×15 HexMap for a new game.
+ * Generates the full HexMap for a new game.
+ *
+ * The game grid is a 21×21 rectangle in offset (pixel) space, centred on
+ * the settlement hex.  All iteration uses `forEachGameHex` / offset loops
+ * so the resulting map has no parallelogram gaps.
  *
  * Generation steps:
  * 1. Fill entire grid with plains as a base.
  * 2. Grow 6–10 terrain blobs (forest, hills, mountains, jungle, wetlands, desert).
  * 3. Carve 1–3 river corridors.
- * 4. Place settlement at (7,7) on river terrain.
+ * 4. Place settlement at (SETTLEMENT_Q, SETTLEMENT_R) on river terrain.
  * 5. Enforce safe ring-1 around settlement (no mountains, jungle, or desert).
  * 6. Seed content in eligible hexes.
  * 7. Place 2–5 tribe territories on appropriate terrain.
@@ -318,29 +413,29 @@ export function generateHexMap(config: GameConfig, rng: SeededRNG): HexMap {
   const width = HEX_MAP_WIDTH;
   const height = HEX_MAP_HEIGHT;
 
-  // Step 1 — Base terrain layer.
+  // Step 1 — Base terrain layer (offset-rectangular iteration).
   const terrainLayer = new Map<string, TerrainType>();
-  for (let q = 0; q < width; q++) {
-    for (let r = 0; r < height; r++) {
-      terrainLayer.set(hexKey(q, r), 'plains');
-    }
-  }
+  forEachGameHex((q, r) => {
+    terrainLayer.set(hexKey(q, r), 'plains');
+  });
 
   // Step 2 — Terrain blobs.
   const blobCount = rng.nextInt(6, 10);
   const blobTerrains: TerrainType[] = ['forest', 'forest', 'hills', 'mountains', 'jungle', 'wetlands', 'desert'];
   for (let i = 0; i < blobCount; i++) {
     const terrain = rng.pick(blobTerrains);
-    const bq = rng.nextInt(0, width - 1);
-    const br = rng.nextInt(0, height - 1);
+    // Pick a random hex within the game grid for the blob origin.
+    const row = rng.nextInt(0, height - 1);
+    const col = rng.nextInt(OFFSET_COL_START, OFFSET_COL_START + width - 1);
+    const { q: bq, r: br } = offsetToAxial(col, row);
     const radius = rng.nextInt(2, 4);
-    growTerrainBlob(terrainLayer, bq, br, terrain, radius, 0.5, rng, width, height);
+    growTerrainBlob(terrainLayer, bq, br, terrain, radius, 0.5, rng);
   }
 
   // Step 3 — River corridors.
   const riverCount = rng.nextInt(1, 3);
   for (let i = 0; i < riverCount; i++) {
-    carveRiver(terrainLayer, rng, width, height);
+    carveRiver(terrainLayer, rng);
   }
 
   // Step 4 — Settlement always on river.
@@ -348,7 +443,7 @@ export function generateHexMap(config: GameConfig, rng: SeededRNG): HexMap {
 
   // Step 5 — Safe ring-1 around settlement.
   const SAFE_RING_WEIGHTS = RING1_TERRAIN_WEIGHTS;
-  for (const nb of getBoundedNeighbours(SETTLEMENT_Q, SETTLEMENT_R, width, height)) {
+  for (const nb of getBoundedNeighbours(SETTLEMENT_Q, SETTLEMENT_R)) {
     const currentTerrain = terrainLayer.get(hexKey(nb.q, nb.r))!;
     const isUnsafe = currentTerrain === 'mountains' || currentTerrain === 'jungle' || currentTerrain === 'desert';
     if (isUnsafe) {
@@ -360,28 +455,25 @@ export function generateHexMap(config: GameConfig, rng: SeededRNG): HexMap {
     }
   }
 
-  // Step 6 — Build HexCell objects with content seeding.
+  // Step 6 — Build HexCell objects with content seeding (offset-rectangular).
   const cells = new Map<string, HexCell>();
-  for (let q = 0; q < width; q++) {
-    for (let r = 0; r < height; r++) {
-      const k = hexKey(q, r);
-      const terrain = terrainLayer.get(k)!;
-      // Don't seed content on settlement hex or adjacent hexes.
-      const distFromSettlement = axialDistance(q, r, SETTLEMENT_Q, SETTLEMENT_R);
-      const contents: HexContent[] = distFromSettlement >= 2
-        ? (maybeSeedContent(terrain, rng) ? [maybeSeedContent(terrain, rng)!] : [])
-        : [];
+  forEachGameHex((q, r) => {
+    const k = hexKey(q, r);
+    const terrain = terrainLayer.get(k)!;
+    // Don't seed content on settlement hex or adjacent hexes.
+    const distFromSettlement = axialDistance(q, r, SETTLEMENT_Q, SETTLEMENT_R);
+    const seededContent = distFromSettlement >= 2 ? maybeSeedContent(terrain, rng) : null;
+    const contents: HexContent[] = seededContent ? [seededContent] : [];
 
-      cells.set(k, {
-        q,
-        r,
-        terrain,
-        visibility: 'fog',
-        contents,
-        firstVisitedTurn: null,
-      });
-    }
-  }
+    cells.set(k, {
+      q,
+      r,
+      terrain,
+      visibility: 'fog',
+      contents,
+      firstVisitedTurn: null,
+    });
+  });
 
   // Step 7 — Place tribe territories based on config startingTribes.
   // Each tribe gets a territory hex seeded towards the map edges.
@@ -390,8 +482,9 @@ export function generateHexMap(config: GameConfig, rng: SeededRNG): HexMap {
     let placed = false;
     for (let attempt = 0; attempt < 30 && !placed; attempt++) {
       // Bias toward edges (distance from centre ≥ 4).
-      const q = rng.nextInt(0, width - 1);
-      const r = rng.nextInt(0, height - 1);
+      const row = rng.nextInt(0, height - 1);
+      const col = rng.nextInt(OFFSET_COL_START, OFFSET_COL_START + width - 1);
+      const { q, r } = offsetToAxial(col, row);
       const dist = axialDistance(q, r, SETTLEMENT_Q, SETTLEMENT_R);
       if (dist >= 4 && !usedTerritoryHexes.has(hexKey(q, r))) {
         usedTerritoryHexes.add(hexKey(q, r));
@@ -413,7 +506,7 @@ export function generateHexMap(config: GameConfig, rng: SeededRNG): HexMap {
   const settCell = cells.get(settKey)!;
   cells.set(settKey, { ...settCell, visibility: 'visited' });
 
-  const ring1 = getBoundedNeighbours(SETTLEMENT_Q, SETTLEMENT_R, width, height);
+  const ring1 = getBoundedNeighbours(SETTLEMENT_Q, SETTLEMENT_R);
   const scoutedIndices = new Set<number>();
   while (scoutedIndices.size < STARTING_SCOUTED_COUNT && scoutedIndices.size < ring1.length) {
     scoutedIndices.add(rng.nextInt(0, ring1.length - 1));
@@ -450,7 +543,7 @@ export function markHexVisited(hexMap: HexMap, q: number, r: number, turn: numbe
   }
 
   // Mark neighbours as at least scouted.
-  for (const nb of getBoundedNeighbours(q, r, hexMap.width, hexMap.height)) {
+  for (const nb of getBoundedNeighbours(q, r)) {
     const k = hexKey(nb.q, nb.r);
     const cell = newCells.get(k);
     if (cell && cell.visibility === 'fog') {

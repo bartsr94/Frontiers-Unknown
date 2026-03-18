@@ -46,14 +46,14 @@ function makeMap() {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 describe('constants', () => {
-  it('grid dimensions are 15×15', () => {
-    expect(HEX_MAP_WIDTH).toBe(15);
-    expect(HEX_MAP_HEIGHT).toBe(15);
+  it('grid dimensions are 21×21', () => {
+    expect(HEX_MAP_WIDTH).toBe(21);
+    expect(HEX_MAP_HEIGHT).toBe(21);
   });
 
   it('settlement sits at (7, 7)', () => {
-    expect(SETTLEMENT_Q).toBe(7);
-    expect(SETTLEMENT_R).toBe(7);
+    expect(SETTLEMENT_Q).toBe(10);
+    expect(SETTLEMENT_R).toBe(10);
   });
 
   it('BASE_FOOD_PER_PERSON_PER_SEASON is 0.25', () => {
@@ -184,9 +184,9 @@ describe('hexToPixel / pixelToHex', () => {
 // ─── generateHexMap ───────────────────────────────────────────────────────────
 
 describe('generateHexMap', () => {
-  it('produces a 15×15 map (225 cells)', () => {
+  it('produces a 21×21 map (441 cells)', () => {
     const m = makeMap();
-    expect(m.cells.size).toBe(225);
+    expect(m.cells.size).toBe(441);
   });
 
   it('settlement hex terrain is never mountains', () => {

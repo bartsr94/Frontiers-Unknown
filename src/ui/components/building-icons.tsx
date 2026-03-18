@@ -232,6 +232,300 @@ const ICONS: Partial<Record<BuildingId, React.ReactNode>> = {
       <path d="M16,13 Q17,10 16,8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </>
   ),
+
+  // ── Farms & Fields expansion ───────────────────────────────────────────────
+
+  barns_storehouses: (
+    // Wide barn with pitched roof + horizontal ribs (ventilation slats)
+    <>
+      <rect x="2" y="12" width="20" height="9" fill="none" stroke="currentColor" strokeWidth="2" />
+      <polyline points="2,12 12,4 22,12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <line x1="2" y1="15" x2="22" y2="15" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="2" y1="18" x2="22" y2="18" stroke="currentColor" strokeWidth="1.2" />
+    </>
+  ),
+  farmstead: (
+    // House with chimney + fence
+    <>
+      <rect x="3" y="12" width="12" height="9" fill="none" stroke="currentColor" strokeWidth="2" />
+      <polyline points="3,12 9,6 15,12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <line x1="8" y1="6" x2="8" y2="3" stroke="currentColor" strokeWidth="2" />
+      <rect x="6" y="16" width="3" height="5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="17" y1="10" x2="17" y2="21" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="20" y1="10" x2="20" y2="21" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="16" y1="14" x2="21" y2="14" stroke="currentColor" strokeWidth="1.5" />
+    </>
+  ),
+  grain_silo: (
+    // Rounded cylinder with dome + bands
+    <>
+      <rect x="7" y="9" width="10" height="12" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d="M7,9 Q12,3 17,9" fill="none" stroke="currentColor" strokeWidth="2" />
+      <line x1="7" y1="13" x2="17" y2="13" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="7" y1="17" x2="17" y2="17" stroke="currentColor" strokeWidth="1.2" />
+    </>
+  ),
+
+  // ── Cattle Pastures chain ──────────────────────────────────────────────────
+
+  cattle_pen: (
+    // Fence posts + horizontal rails
+    <>
+      <line x1="3" y1="9" x2="3" y2="21" stroke="currentColor" strokeWidth="2" />
+      <line x1="10" y1="9" x2="10" y2="21" stroke="currentColor" strokeWidth="2" />
+      <line x1="17" y1="9" x2="17" y2="21" stroke="currentColor" strokeWidth="2" />
+      <line x1="21" y1="9" x2="21" y2="21" stroke="currentColor" strokeWidth="2" />
+      <line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="2" y1="17" x2="22" y2="17" stroke="currentColor" strokeWidth="1.5" />
+    </>
+  ),
+  meadow: (
+    // Rolling hills + grass tufts
+    <>
+      <path d="M2,18 Q6,11 12,15 Q18,19 22,13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M5,10 Q8,5 11,8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M14,9 Q17,4 20,7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </>
+  ),
+  cattle_ranch: (
+    // Gate arch + fence rails
+    <>
+      <line x1="2" y1="10" x2="2" y2="21" stroke="currentColor" strokeWidth="2" />
+      <line x1="22" y1="10" x2="22" y2="21" stroke="currentColor" strokeWidth="2" />
+      <path d="M2,10 Q12,3 22,10" fill="none" stroke="currentColor" strokeWidth="2" />
+      <line x1="2" y1="15" x2="22" y2="15" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="2" y1="20" x2="22" y2="20" stroke="currentColor" strokeWidth="1.5" />
+    </>
+  ),
+  stock_farm: (
+    // Multi-pen grid (outer wall + crossed dividers + cattle dots)
+    <>
+      <rect x="2" y="6" width="20" height="15" fill="none" stroke="currentColor" strokeWidth="2" />
+      <line x1="2" y1="14" x2="22" y2="14" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="12" y1="6" x2="12" y2="21" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="7" cy="10" r="1.5" fill="currentColor" />
+      <circle cx="17" cy="10" r="1.5" fill="currentColor" />
+      <circle cx="7" cy="17" r="1.5" fill="currentColor" />
+      <circle cx="17" cy="17" r="1.5" fill="currentColor" />
+    </>
+  ),
+
+  // ── Orchard chain ─────────────────────────────────────────────────────────
+
+  orchard: (
+    // Three tree circles on trunks + ground line
+    <>
+      <circle cx="5" cy="9" r="3" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="5" y1="12" x2="5" y2="21" stroke="currentColor" strokeWidth="2" />
+      <circle cx="12" cy="8" r="3" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="12" y1="11" x2="12" y2="21" stroke="currentColor" strokeWidth="2" />
+      <circle cx="19" cy="9" r="3" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="19" y1="12" x2="19" y2="21" stroke="currentColor" strokeWidth="2" />
+      <line x1="2" y1="21" x2="22" y2="21" stroke="currentColor" strokeWidth="1.5" />
+    </>
+  ),
+  berry_grove: (
+    // Low shrub wave + berry dots
+    <>
+      <path d="M2,18 Q5,12 8,14 Q11,16 14,12 Q17,8 20,14 Q22,18 22,18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="6" cy="14" r="1" fill="currentColor" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" />
+      <circle cx="18" cy="13" r="1" fill="currentColor" />
+      <line x1="2" y1="20" x2="22" y2="20" stroke="currentColor" strokeWidth="1.5" />
+    </>
+  ),
+  beekeeper: (
+    // Straw beehive (layered dome) + base board
+    <>
+      <path d="M12,4 Q17,7 17,12 Q17,17 12,20 Q7,17 7,12 Q7,7 12,4" fill="none" stroke="currentColor" strokeWidth="2" />
+      <line x1="7" y1="9" x2="17" y2="9" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="7" y1="13" x2="17" y2="13" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="7" y1="17" x2="17" y2="17" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="5" y1="21" x2="19" y2="21" stroke="currentColor" strokeWidth="2" />
+    </>
+  ),
+  grand_orchard: (
+    // Ornamental gate arch + two flowering trees
+    <>
+      <line x1="4" y1="10" x2="4" y2="21" stroke="currentColor" strokeWidth="2" />
+      <line x1="20" y1="10" x2="20" y2="21" stroke="currentColor" strokeWidth="2" />
+      <path d="M4,10 Q12,3 20,10" fill="none" stroke="currentColor" strokeWidth="2" />
+      <circle cx="8" cy="16" r="3.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="16" cy="16" r="3.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+    </>
+  ),
+
+  // ── Forestry chain ────────────────────────────────────────────────────────
+
+  logging_camp: (
+    // Axe handle + blade + stump
+    <>
+      <line x1="8" y1="17" x2="17" y2="7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M17,7 L21,4 L19,9 Z" fill="currentColor" />
+      <ellipse cx="8" cy="19" rx="5" ry="2" fill="none" stroke="currentColor" strokeWidth="2" />
+      <line x1="5" y1="19" x2="5" y2="22" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="11" y1="19" x2="11" y2="22" stroke="currentColor" strokeWidth="1.5" />
+    </>
+  ),
+  charcoal_burners: (
+    // Cone kiln (mound shape) + smoke wisps
+    <>
+      <polygon points="12,7 3,20 21,20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M9,4 Q10,2 11,3 Q12,1 13,3 Q14,2 15,4" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <line x1="6" y1="20" x2="18" y2="20" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </>
+  ),
+  wood_pasture: (
+    // Two trees + two fence rails
+    <>
+      <line x1="7" y1="11" x2="7" y2="21" stroke="currentColor" strokeWidth="2" />
+      <path d="M4,14 Q7,8 10,14" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="17" y1="11" x2="17" y2="21" stroke="currentColor" strokeWidth="2" />
+      <path d="M14,14 Q17,8 20,14" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="2" y1="17" x2="22" y2="17" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="2" y1="21" x2="22" y2="21" stroke="currentColor" strokeWidth="1.5" />
+    </>
+  ),
+  sawmill: (
+    // Circular saw blade with spokes
+    <>
+      <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
+      <circle cx="12" cy="12" r="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="12" y1="4" x2="12" y2="8" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="12" y1="16" x2="12" y2="20" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="4" y1="12" x2="8" y2="12" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="16" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="6.3" y1="6.3" x2="9.2" y2="9.2" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="14.8" y1="14.8" x2="17.7" y2="17.7" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="17.7" y1="6.3" x2="14.8" y2="9.2" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="9.2" y1="14.8" x2="6.3" y2="17.7" stroke="currentColor" strokeWidth="1.5" />
+    </>
+  ),
+
+  // ── Hunting Grounds chain ─────────────────────────────────────────────────
+
+  hunters_lodge: (
+    // Antler fork above small hut roof
+    <>
+      <polyline points="8,11 8,7 10,4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="8" y1="9" x2="6" y2="6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <polyline points="16,11 16,7 14,4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="16" y1="9" x2="18" y2="6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <rect x="5" y="14" width="14" height="7" fill="none" stroke="currentColor" strokeWidth="2" />
+      <polyline points="5,14 12,11 19,14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+    </>
+  ),
+  hound_pens: (
+    // Dog head profile + fence
+    <>
+      <circle cx="9" cy="9" r="4" fill="none" stroke="currentColor" strokeWidth="2" />
+      <ellipse cx="7" cy="7" rx="1.5" ry="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <ellipse cx="11" cy="7" rx="1.5" ry="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="16" y1="6" x2="16" y2="21" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="20" y1="6" x2="20" y2="21" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="15" y1="10" x2="21" y2="10" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="15" y1="15" x2="21" y2="15" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="15" y1="20" x2="21" y2="20" stroke="currentColor" strokeWidth="1.5" />
+    </>
+  ),
+  hunting_towers: (
+    // Narrow tower + arrow flying out
+    <>
+      <rect x="8" y="5" width="8" height="16" fill="none" stroke="currentColor" strokeWidth="2" />
+      <line x1="8" y1="10" x2="16" y2="10" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="8" y1="15" x2="16" y2="15" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="11" y1="15" x2="11" y2="21" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="13" y1="15" x2="13" y2="21" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="18" y1="8" x2="22" y2="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <polyline points="18,4 22,4 22,8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    </>
+  ),
+  hunting_reserve: (
+    // Two trees flanking a gate + antler above
+    <>
+      <line x1="4" y1="13" x2="4" y2="21" stroke="currentColor" strokeWidth="2" />
+      <circle cx="4" cy="10" r="3" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="20" y1="13" x2="20" y2="21" stroke="currentColor" strokeWidth="2" />
+      <circle cx="20" cy="10" r="3" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="4" y1="17" x2="20" y2="17" stroke="currentColor" strokeWidth="1.5" />
+      <polyline points="10,5 12,8 14,5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+
+  // ── Quarry chain ──────────────────────────────────────────────────────────
+
+  stone_quarry: (
+    // Angular rock polygon + pick lines
+    <>
+      <polygon points="12,4 20,12 16,20 8,20 4,12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <line x1="8" y1="14" x2="16" y2="10" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="12" y1="18" x2="12" y2="11" stroke="currentColor" strokeWidth="1.5" />
+    </>
+  ),
+  ore_mine: (
+    // Mine cart with wheels
+    <>
+      <rect x="4" y="10" width="14" height="9" rx="1" fill="none" stroke="currentColor" strokeWidth="2" />
+      <polyline points="5,10 7,6 15,6 17,10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <circle cx="7" cy="21" r="2" fill="none" stroke="currentColor" strokeWidth="2" />
+      <circle cx="15" cy="21" r="2" fill="none" stroke="currentColor" strokeWidth="2" />
+      <line x1="3" y1="19" x2="19" y2="19" stroke="currentColor" strokeWidth="1.5" />
+    </>
+  ),
+  large_quarry: (
+    // Stepped open-cut quarry face with ladder
+    <>
+      <polyline points="2,20 2,14 8,14 8,9 14,9 14,5 22,5 22,20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <line x1="2" y1="20" x2="22" y2="20" stroke="currentColor" strokeWidth="2" />
+      <line x1="16" y1="5" x2="16" y2="20" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="14" y1="8" x2="18" y2="8" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="14" y1="12" x2="18" y2="12" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="14" y1="16" x2="18" y2="16" stroke="currentColor" strokeWidth="1.2" />
+    </>
+  ),
+  shaft_mine: (
+    // Arched mine entrance + shaft cross-beams
+    <>
+      <path d="M5,21 L5,10 Q5,4 12,4 Q19,4 19,10 L19,21" fill="none" stroke="currentColor" strokeWidth="2" />
+      <line x1="5" y1="21" x2="19" y2="21" stroke="currentColor" strokeWidth="2" />
+      <line x1="10" y1="10" x2="10" y2="21" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="14" y1="10" x2="14" y2="21" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="9" y1="13" x2="15" y2="13" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="9" y1="17" x2="15" y2="17" stroke="currentColor" strokeWidth="1.2" />
+    </>
+  ),
+
+  // ── Hospice chain ─────────────────────────────────────────────────────────
+
+  infirmary: (
+    // Cross + cot/bed outline
+    <>
+      <line x1="12" y1="4" x2="12" y2="14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="7" y1="9" x2="17" y2="9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+      <rect x="3" y="16" width="18" height="5" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="3" y="14" width="4" height="3" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
+    </>
+  ),
+  hospital: (
+    // Building facade with cross on it
+    <>
+      <rect x="3" y="9" width="18" height="12" fill="none" stroke="currentColor" strokeWidth="2" />
+      <polyline points="3,9 12,3 21,9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <line x1="12" y1="11" x2="12" y2="19" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="9" y1="14" x2="15" y2="14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    </>
+  ),
+  grand_hospital: (
+    // Grand arch facade + pillar lines + cross
+    <>
+      <rect x="2" y="9" width="20" height="12" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d="M2,9 Q12,2 22,9" fill="none" stroke="currentColor" strokeWidth="2" />
+      <line x1="5" y1="9" x2="5" y2="21" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="19" y1="9" x2="19" y2="21" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="12" y1="11" x2="12" y2="19" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="9" y1="14" x2="15" y2="14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    </>
+  ),
 };
 
 // Fallback: building outline with a question mark

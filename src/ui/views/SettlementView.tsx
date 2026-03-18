@@ -39,11 +39,6 @@ const CATEGORY_COLOR: Record<string, string> = {
   dwelling: 'bg-rose-900/60 text-rose-300',
 };
 
-const STYLE_LABEL: Record<BuildingStyle, string> = {
-  imanian:     'Imanian',
-  sauromatian: 'Sauromatian',
-};
-
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function ShelterBar({ pop, capacity }: { pop: number; capacity: number }) {
@@ -72,52 +67,6 @@ function ShelterBar({ pop, capacity }: { pop: number; capacity: number }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-    </div>
-  );
-}
-
-function BuildingCard({ building }: { building: BuiltBuilding }) {
-  const def = BUILDING_CATALOG[building.defId];
-  if (!def) return null;
-  const displayName = getBuildingDisplayName(building.defId, building.style);
-  const workerCount = (building.assignedWorkerIds ?? []).length;
-  const workerCap   = def.workerSlots ?? 0;
-  const isAtCap     = workerCap > 0 && workerCount >= workerCap;
-  const households  = useGameStore(s => s.gameState?.households);
-  const ownerName   = building.ownerHouseholdId
-    ? (households?.get(building.ownerHouseholdId)?.name ?? 'Household')
-    : null;
-
-  return (
-    <div className="bg-stone-800 border border-stone-700 rounded p-3 mb-2">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <span className="text-sm font-medium text-slate-200">{displayName}</span>
-          {building.style && (
-            <span className="ml-2 text-xs text-slate-500">
-              {STYLE_LABEL[building.style]}
-            </span>
-          )}
-        </div>
-        <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${CATEGORY_COLOR[def.category] ?? 'bg-stone-700 text-slate-400'}`}>
-          {CATEGORY_LABEL[def.category] ?? def.category}
-        </span>
-      </div>
-      <p className="text-xs text-slate-500 mt-1">{def.description}</p>
-      {workerCap > 0 && (
-        <div className="flex items-center gap-2 mt-1.5 text-xs">
-          <span className="text-slate-500">Workers:</span>
-          <span className={isAtCap ? 'text-amber-400 font-semibold' : 'text-slate-400'}>
-            {workerCount} / {workerCap}
-          </span>
-          {ownerName && (
-            <span className="ml-auto text-amber-700 italic text-[10px]">⌂ {ownerName}</span>
-          )}
-        </div>
-      )}
-      {workerCap === 0 && ownerName && (
-        <div className="mt-1.5 text-[10px] text-amber-700 italic">⌂ {ownerName}</div>
-      )}
     </div>
   );
 }
@@ -281,8 +230,8 @@ export default function SettlementView() {
   const removeBuilder     = useGameStore(s => s.removeBuilder);
   const cancelConstr      = useGameStore(s => s.cancelConstruction);
 
-  const [pendingStyle, setPendingStyle] = useState<Record<string, BuildingStyle>>({});
-  const [showBuildMenu, setShowBuildMenu] = useState(false);
+  const [showCommunalPicker, setShowCommunalPicker] = useState(false);
+  const [selectedCommunalBuilding, setSelectedCommunalBuilding] = useState<BuiltBuilding | null>(null);
 
   // Modal state for household building grid
   const [pickerState, setPickerState] = useState<{
@@ -310,18 +259,13 @@ export default function SettlementView() {
   const allIds      = Object.keys(BUILDING_CATALOG) as BuildingId[];
   const buildableIds = allIds.filter(id => id !== 'camp');
 
-  function handleBuild(defId: BuildingId) {
-    const def = BUILDING_CATALOG[defId];
-    const style = def.hasStyleVariants ? (pendingStyle[defId] ?? 'imanian') : null;
-    startConstruction(defId, style);
-    setShowBuildMenu(false);
-  }
-
-  // Communal buildings are those not flagged as household-only
+  // Communal buildings: ownership is 'communal' or unset (defaulting to communal)
   const communalBuildings = settlement.buildings.filter(b => {
     const def = BUILDING_CATALOG[b.defId];
-    return !def || def.category !== 'dwelling';
+    return !def?.ownership || def.ownership === 'communal';
   });
+  // Sorted by build order for stable slot positions; padded to 12 for the grid
+  const communalSlots = [...communalBuildings].sort((a, b) => a.builtTurn - b.builtTurn);
 
   return (
     <div className="flex gap-0 h-full overflow-hidden">
@@ -349,86 +293,89 @@ export default function SettlementView() {
           )}
         </div>
 
-        {/* Communal buildings list */}
+        {/* Communal buildings grid (12 slots, 3×4) */}
         <div className="flex-1 overflow-y-auto px-4 py-3">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Communal Buildings
-            </h3>
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+            Communal Buildings
+          </h3>
+
+          <div className="grid grid-cols-3 gap-0.5 mb-2">
+            {Array.from({ length: 12 }, (_, idx) => {
+              const building = communalSlots[idx] ?? null;
+              const def = building ? BUILDING_CATALOG[building.defId] : null;
+              const isOccupied = !!building;
+              const isSelected = !!building && selectedCommunalBuilding?.instanceId === building.instanceId;
+              return (
+                <button
+                  key={idx}
+                  title={isOccupied
+                    ? getBuildingDisplayName(building.defId, building.style)
+                    : 'Empty — click to build'}
+                  onClick={() => {
+                    if (isOccupied) {
+                      setSelectedCommunalBuilding(prev =>
+                        prev?.instanceId === building.instanceId ? null : building
+                      );
+                    } else if (canManage) {
+                      setShowCommunalPicker(true);
+                    }
+                  }}
+                  className={`
+                    relative aspect-square rounded border flex flex-col items-center justify-center gap-0.5 p-0.5 transition-colors
+                    ${
+                      isOccupied
+                        ? isSelected
+                          ? 'bg-stone-700 border-amber-500 cursor-pointer'
+                          : 'bg-stone-800 border-stone-600 hover:border-amber-600 cursor-pointer'
+                        : canManage
+                          ? 'bg-stone-950 border-stone-700 border-dashed hover:border-stone-500 cursor-pointer'
+                          : 'bg-stone-950 border-stone-800 border-dashed cursor-default opacity-40'
+                    }
+                  `}
+                >
+                  {isOccupied && def ? (
+                    <>
+                      <BuildingIcon id={building.defId} size={28} className="text-amber-400" />
+                      <span className="text-[7px] text-slate-400 text-center leading-tight line-clamp-2 px-0.5">
+                        {getBuildingDisplayName(building.defId, building.style)}
+                      </span>
+                      {def.upgradeChainId && def.tierInChain !== undefined && (
+                        <span className="absolute top-0.5 right-0.5 text-[7px] bg-stone-950/80 text-slate-400 rounded px-0.5 leading-tight pointer-events-none">
+                          T{def.tierInChain}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-stone-700 text-xs select-none">+</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
-          {communalBuildings.length === 0 ? (
-            <p className="text-xs text-slate-600 italic mb-3">Camp only.</p>
-          ) : (
-            communalBuildings.map(b => (
-              <BuildingCard key={b.instanceId} building={b} />
-            ))
-          )}
+          {/* Selected communal building detail */}
+          {selectedCommunalBuilding && (() => {
+            const def = BUILDING_CATALOG[selectedCommunalBuilding.defId];
+            return (
+              <div className="mb-3 px-2 py-2 bg-stone-900 border border-amber-800/50 rounded text-xs">
+                <div className="font-semibold text-amber-300 mb-1">
+                  {getBuildingDisplayName(selectedCommunalBuilding.defId, selectedCommunalBuilding.style)}
+                </div>
+                {def?.description && (
+                  <p className="text-slate-400 leading-relaxed">{def.description}</p>
+                )}
+              </div>
+            );
+          })()}
 
-          {/* Build button */}
+          {/* Build communal building */}
           <button
             disabled={!canManage}
-            onClick={() => setShowBuildMenu(v => !v)}
-            className="w-full mt-2 text-xs py-1.5 rounded border border-dashed border-stone-600 text-stone-400 hover:border-amber-700 hover:text-amber-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            onClick={() => setShowCommunalPicker(true)}
+            className="w-full mb-4 text-xs py-1.5 rounded border border-dashed border-stone-600 text-stone-400 hover:border-amber-700 hover:text-amber-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             + Build communal building
           </button>
-
-          {/* Inline build menu */}
-          {showBuildMenu && canManage && (
-            <div className="mt-3 border border-stone-700 rounded bg-stone-900">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-stone-700">
-                <span className="text-xs font-semibold text-slate-300">Build Menu</span>
-                <button onClick={() => setShowBuildMenu(false)} className="text-slate-500 hover:text-slate-300 text-xs">✕</button>
-              </div>
-              <div className="p-2 max-h-96 overflow-y-auto">
-                {(['civic', 'food', 'industry', 'social', 'defence'] as const).map(category => {
-                  const ids = buildableIds.filter(id => BUILDING_CATALOG[id]?.category === category);
-                  if (ids.length === 0) return null;
-                  return (
-                    <div key={category} className="mb-3">
-                      <span className={`text-xs px-1.5 py-0.5 rounded font-semibold mb-1.5 inline-block ${CATEGORY_COLOR[category]}`}>
-                        {CATEGORY_LABEL[category]}
-                      </span>
-                      {ids.map(defId => {
-                        const def   = BUILDING_CATALOG[defId];
-                        const style = def?.hasStyleVariants ? (pendingStyle[defId] ?? 'imanian') : null;
-                        const check = canBuild(settlement, defId, style);
-                        return (
-                          <div key={defId}>
-                            {def?.hasStyleVariants && (
-                              <div className="flex gap-1 mb-1">
-                                {(['imanian', 'sauromatian'] as BuildingStyle[]).map(s => (
-                                  <button
-                                    key={s}
-                                    onClick={() => setPendingStyle(prev => ({ ...prev, [defId]: s }))}
-                                    className={`text-xs px-2 py-0.5 rounded transition-colors ${
-                                      (pendingStyle[defId] ?? 'imanian') === s
-                                        ? 'bg-amber-800 text-amber-200'
-                                        : 'bg-stone-700 text-slate-400 hover:bg-stone-600'
-                                    }`}
-                                  >
-                                    {STYLE_LABEL[s]}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                            <BuildMenuItem
-                              defId={defId}
-                              style={style}
-                              allowed={check.ok}
-                              reason={check.ok ? undefined : check.reason}
-                              onBuild={() => handleBuild(defId)}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {/* Dwelling section */}
           {(() => {
@@ -528,6 +475,13 @@ export default function SettlementView() {
           householdId={pickerState.householdId}
           mode="household"
           onClose={() => setPickerState(null)}
+        />
+      )}
+      {showCommunalPicker && (
+        <BuildingPickerModal
+          householdId={null}
+          mode="communal"
+          onClose={() => setShowCommunalPicker(false)}
         />
       )}
       {slotDetailState && (

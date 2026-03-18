@@ -479,6 +479,206 @@ describe('evaluateAmbition — seek_companion', () => {
   });
 });
 
+// ─── seek_better_housing — evaluation & generation ───────────────────────────
+
+describe('evaluateAmbition — seek_better_housing', () => {
+  function makeHousingState(
+    memberIds: string[],
+    dwellingDefId: string,
+    dwellingInstanceId = 'dw1',
+  ) {
+    return makeState({
+      turnNumber: 5,
+      households: new Map([
+        ['hh1', {
+          id: 'hh1',
+          memberIds,
+          dwellingBuildingId: dwellingInstanceId,
+          buildingSlots: [dwellingInstanceId, null, null, null, null, null, null, null, null],
+        } as import('../../src/simulation/turn/game-state').Household],
+      ]),
+      settlement: {
+        buildings: [
+          { defId: dwellingDefId, instanceId: dwellingInstanceId, builtTurn: 1, style: null },
+        ],
+      },
+    });
+  }
+
+  it('is ongoing when household is at exactly 50% of wattle_hut capacity (2/4)', () => {
+    const p = makePerson('a', {
+      householdId: 'hh1',
+      ambition: makeAmbition({ type: 'seek_better_housing', formedTurn: 1 }),
+    });
+    // memberIds = 2, shelterCapacity = 4 → 2 >= 2 → still overcrowded intent
+    const state = makeHousingState(['a', 'b'], 'wattle_hut');
+    expect(evaluateAmbition(p, state)).toBe('ongoing');
+  });
+
+  it('is fulfilled when household drops below 50% after an upgrade (1 member in cottage)', () => {
+    const p = makePerson('a', {
+      householdId: 'hh1',
+      ambition: makeAmbition({ type: 'seek_better_housing', formedTurn: 1 }),
+    });
+    // cottage shelterCapacity = 6 → threshold = 3; 1 member < 3 → fulfilled
+    const state = makeHousingState(['a'], 'cottage');
+    expect(evaluateAmbition(p, state)).toBe('fulfilled');
+  });
+
+  it('is ongoing when household still at 50%+ of upgraded dwelling (3 in cottage)', () => {
+    const p = makePerson('a', {
+      householdId: 'hh1',
+      ambition: makeAmbition({ type: 'seek_better_housing', formedTurn: 1 }),
+    });
+    // cottage cap 6 → threshold = 3; 3 >= 3 → still needs next tier
+    const state = makeHousingState(['a', 'b', 'c'], 'cottage');
+    expect(evaluateAmbition(p, state)).toBe('ongoing');
+  });
+
+  it('is fulfilled when household reaches compound regardless of occupancy', () => {
+    const p = makePerson('a', {
+      householdId: 'hh1',
+      ambition: makeAmbition({ type: 'seek_better_housing', formedTurn: 1 }),
+    });
+    // compound = top tier, always fulfilled
+    const state = makeHousingState(['a', 'b', 'c', 'd', 'e', 'f'], 'compound');
+    expect(evaluateAmbition(p, state)).toBe('fulfilled');
+  });
+
+  it('is failed when person has no household', () => {
+    const p = makePerson('a', {
+      householdId: null,
+      ambition: makeAmbition({ type: 'seek_better_housing', formedTurn: 1 }),
+    });
+    const state = makeState({ turnNumber: 5 });
+    expect(evaluateAmbition(p, state)).toBe('failed');
+  });
+});
+
+describe('determineAmbitionType — seek_better_housing (capacity-based)', () => {
+  const rng = { nextInt: () => 0, nextFloat: () => 0, nextGaussian: () => 0 } as import('../../src/utils/rng').SeededRNG;
+
+  function makeHousingPerson(memberIds: string[], dwellingDefId: string | null) {
+    const p = makePerson('a', {
+      householdId: 'hh1',
+      spouseIds: [],
+      age: 30,
+      // high skills so council/prestige ambitions don't fire first
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+    });
+    const household = {
+      id: 'hh1',
+      memberIds,
+      dwellingBuildingId: dwellingDefId ? 'dw1' : null,
+      buildingSlots: dwellingDefId ? ['dw1', null, null, null, null, null, null, null, null] : Array(9).fill(null),
+    } as import('../../src/simulation/turn/game-state').Household;
+    const buildings = dwellingDefId
+      ? [{ defId: dwellingDefId, instanceId: 'dw1', builtTurn: 1, style: null }]
+      : [];
+    const state = makeState({
+      turnNumber: 5,
+      households: new Map([['hh1', household]]),
+      settlement: {
+        buildings,
+        courtshipNorms: 'traditional', // prevents seek_companion/spouse from firing
+      },
+      councilMemberIds: ['a'], // prevents seek_council
+      people: new Map(memberIds.map(id => [id, makePerson(id)])),
+    });
+    return { p, state };
+  }
+
+  it('fires when couple (2) is at 50% of wattle_hut capacity (4)', () => {
+    const { p, state } = makeHousingPerson(['a', 'b'], 'wattle_hut');
+    const result = determineAmbitionType(p, state, rng);
+    expect(result?.type).toBe('seek_better_housing');
+  });
+
+  it('does not fire when single occupant (1) is below 50% of wattle_hut', () => {
+    const { p, state } = makeHousingPerson(['a'], 'wattle_hut');
+    const result = determineAmbitionType(p, state, rng);
+    expect(result?.type).not.toBe('seek_better_housing');
+  });
+
+  it('fires when 3-member family is at 50% of cottage (6)', () => {
+    const { p, state } = makeHousingPerson(['a', 'b', 'c'], 'cottage');
+    const result = determineAmbitionType(p, state, rng);
+    expect(result?.type).toBe('seek_better_housing');
+  });
+
+  it('does not fire when only 2 of 6 cottage slots used (below 50%)', () => {
+    const { p, state } = makeHousingPerson(['a', 'b'], 'cottage');
+    const result = determineAmbitionType(p, state, rng);
+    expect(result?.type).not.toBe('seek_better_housing');
+  });
+
+  it('does not fire when household is in compound (top tier)', () => {
+    const { p, state } = makeHousingPerson(['a', 'b', 'c', 'd', 'e', 'f'], 'compound');
+    const result = determineAmbitionType(p, state, rng);
+    expect(result?.type).not.toBe('seek_better_housing');
+  });
+
+  it('does not fire when household has no dwelling (Path A handles this)', () => {
+    const { p, state } = makeHousingPerson(['a'], null);
+    const result = determineAmbitionType(p, state, rng);
+    expect(result?.type).not.toBe('seek_better_housing');
+  });
+});
+
+describe('determineAmbitionType — seek_production_building requires dwelling', () => {
+  const rng = { nextInt: () => 0, nextFloat: () => 0, nextGaussian: () => 0 } as import('../../src/utils/rng').SeededRNG;
+
+  it('does not fire when household has no dwelling (shelter first)', () => {
+    const p = makePerson('a', {
+      role: 'blacksmith',
+      householdId: 'hh1',
+      age: 30,
+    });
+    const household = {
+      id: 'hh1',
+      memberIds: ['a'],
+      dwellingBuildingId: null, // no dwelling
+      buildingSlots: Array(9).fill(null),
+    } as import('../../src/simulation/turn/game-state').Household;
+    const state = makeState({
+      turnNumber: 5,
+      councilMemberIds: ['a'],
+      households: new Map([['hh1', household]]),
+      settlement: { buildings: [], courtshipNorms: 'traditional' },
+      people: new Map([['a', p]]),
+    });
+    const result = determineAmbitionType(p, state, rng);
+    expect(result?.type).not.toBe('seek_production_building');
+  });
+
+  it('fires when household has a dwelling and lacks the matching building', () => {
+    const p = makePerson('a', {
+      role: 'blacksmith',
+      householdId: 'hh1',
+      age: 30,
+    });
+    const household = {
+      id: 'hh1',
+      memberIds: ['a'],
+      dwellingBuildingId: 'dw1',
+      buildingSlots: ['dw1', null, null, null, null, null, null, null, null],
+    } as import('../../src/simulation/turn/game-state').Household;
+    const state = makeState({
+      turnNumber: 5,
+      councilMemberIds: ['a'],
+      households: new Map([['hh1', household]]),
+      settlement: {
+        buildings: [{ defId: 'wattle_hut', instanceId: 'dw1', builtTurn: 1, style: null }],
+        courtshipNorms: 'traditional',
+      },
+      people: new Map([['a', p]]),
+    });
+    const result = determineAmbitionType(p, state, rng);
+    expect(result?.type).toBe('seek_production_building');
+  });
+});
+
+
 // ─── getAmbitionLabel — seek_companion (with target) ─────────────────────────
 
 describe('getAmbitionLabel — seek_companion with target', () => {

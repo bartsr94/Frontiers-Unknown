@@ -22,6 +22,8 @@ import {
   BASE_FOOD_PER_PERSON_PER_SEASON,
   axialDistance,
   getBoundedNeighbours,
+  SETTLEMENT_Q,
+  SETTLEMENT_R,
 } from './hex-map';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -98,8 +100,8 @@ export function createExpedition(
     memberIds: params.memberIds,
     hasBoat: params.hasBoat,
     provisions: { ...params.provisions },
-    currentQ: 7, // Settlement position
-    currentR: 7,
+    currentQ: SETTLEMENT_Q,
+    currentR: SETTLEMENT_R,
     destinationQ: params.destinationQ,
     destinationR: params.destinationR,
     waypoints: [{ q: params.destinationQ, r: params.destinationR, estimatedArrivalTurn: 0 }],
@@ -149,8 +151,8 @@ export function processExpeditionTurn(
 
   // ── Determine target this turn ────────────────────────────────────────────
   const isReturning = expedition.status === 'returning';
-  const targetQ = isReturning ? 7 : expedition.destinationQ; // settlement = (7,7)
-  const targetR = isReturning ? 7 : expedition.destinationR;
+  const targetQ = isReturning ? SETTLEMENT_Q : expedition.destinationQ;
+  const targetR = isReturning ? SETTLEMENT_R : expedition.destinationR;
 
   // ── Food consumption ──────────────────────────────────────────────────────
   const partySize = 1 + expedition.memberIds.length;
@@ -180,7 +182,7 @@ export function processExpeditionTurn(
 
   while (remainingMovement > 0 && !(q === targetQ && r === targetR)) {
     // Pick the neighbour that minimises distance to target.
-    const neighbours = getBoundedNeighbours(q, r, hexMap.width, hexMap.height);
+    const neighbours = getBoundedNeighbours(q, r);
     if (neighbours.length === 0) break;
 
     // Sort by distance to target.
