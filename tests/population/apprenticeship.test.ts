@@ -110,6 +110,9 @@ describe('getTradeSkill', () => {
   it('maps brewer to custom', () => {
     expect(getTradeSkill('brewer')).toBe('custom');
   });
+  it('maps hunter to combat', () => {
+    expect(getTradeSkill('hunter')).toBe('combat');
+  });
 });
 
 // ─── getMasterProgressRate ────────────────────────────────────────────────────
@@ -189,6 +192,7 @@ describe('computeCompletionBonus', () => {
 describe('TRAINABLE_TRADES', () => {
   it('includes farmer', () => expect(TRAINABLE_TRADES.has('farmer')).toBe(true));
   it('includes blacksmith', () => expect(TRAINABLE_TRADES.has('blacksmith')).toBe(true));
+  it('includes hunter', () => expect(TRAINABLE_TRADES.has('hunter')).toBe(true));
   it('does not include guard', () => expect(TRAINABLE_TRADES.has('guard')).toBe(false));
   it('does not include unassigned', () => expect(TRAINABLE_TRADES.has('unassigned')).toBe(false));
   it('does not include away', () => expect(TRAINABLE_TRADES.has('away')).toBe(false));

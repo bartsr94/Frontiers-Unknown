@@ -61,7 +61,7 @@ import {
 } from '../economy/company';
 import { distributeHouseholdWages, processPrivateBuilding } from '../economy/private-economy';
 import type { WageResult } from '../economy/private-economy';
-import { applyOpinionDrift, applyCourtshipOpinionDrift, applySharedRoleOpinionDrift, decayOpinions, decayOpinionModifiers, initializeBaselineOpinions } from '../population/opinions';
+import { applyOpinionDrift, applyCourtshipOpinionDrift, applySharedRoleOpinionDrift, decayOpinions, decayOpinionModifiers, initializeBaselineOpinions, initializeFamilyOpinions, adjustOpinion } from '../population/opinions';
 import { processNamedRelationships } from '../population/named-relationships';
 import { canMarry, performMarriage } from '../population/marriage';
 import { processSchemes } from '../personality/scheme-engine';
@@ -488,6 +488,25 @@ function processDemographicPhase(
 
     const namedChild: Person = { ...result.child, firstName, familyName };
     updatedPeople.set(namedChild.id, namedChild);
+
+    // Seed family opinions immediately so the child and their parents/siblings
+    // start with meaningful positive regard for each other. Without this, new
+    // people enter the world with empty relationship maps and may never reach
+    // the opinion threshold needed to form seek_spouse ambitions later.
+    const siblings = Array.from(updatedPeople.values()).filter(
+      p =>
+        p.id !== namedChild.id &&
+        (p.motherId === mother.id || (father !== undefined && p.fatherId === father.id)),
+    );
+    for (const { observerId, targetId: opTarget, delta } of initializeFamilyOpinions(
+      namedChild,
+      mother,
+      father ?? null,
+      siblings,
+    )) {
+      const observer = updatedPeople.get(observerId);
+      if (observer) updatedPeople.set(observerId, adjustOpinion(observer, opTarget, delta));
+    }
 
     // Assign child to the appropriate household
     const liveMother = result.motherDied ? mother : (updatedPeople.get(mother.id) ?? mother);

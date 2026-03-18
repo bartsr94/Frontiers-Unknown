@@ -427,7 +427,11 @@ export function inheritAptitudeTraits(
     const threshold = (motherHas && fatherHas) ? baseWeight * 1.5 : baseWeight;
 
     if (roll < Math.min(threshold, 0.95)) {
-      inherited.push(traitId as TraitId);
+      // Skip if a conflicting trait was already inherited (e.g. brave vs cowardly)
+      const hasConflict = inherited.some(t => def.conflicts.includes(t));
+      if (!hasConflict) {
+        inherited.push(traitId as TraitId);
+      }
     }
   }
 

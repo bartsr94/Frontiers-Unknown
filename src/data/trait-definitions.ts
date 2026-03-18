@@ -25,6 +25,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Sets their sights high and chafes at limitation. Will not rest content with what they have.',
     conflicts: ['content'],
     effects: [{ target: 'ambition_intensity_growth', modifier: 1.2 }],
+    inheritWeight: 0.15,
   },
   content: {
     id: 'content',
@@ -33,6 +34,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Finds peace in the life they have. Neither ambition nor restlessness disturbs their sleep.',
     conflicts: ['ambitious'],
     effects: [{ target: 'ambition_intensity_growth', modifier: 0.0 }],
+    inheritWeight: 0.10,
   },
   gregarious: {
     id: 'gregarious',
@@ -44,6 +46,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
       { target: 'opinion_baseline_from_others', modifier: 8 },
       { target: 'skill_growth_bargaining', modifier: 1 },
     ],
+    inheritWeight: 0.20,
   },
   shy: {
     id: 'shy',
@@ -52,6 +55,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Retreats from crowded spaces and easy conversation. Their inner world is rich; the outer world is loud.',
     conflicts: ['gregarious'],
     effects: [{ target: 'opinion_baseline_from_others', modifier: -5 }],
+    inheritWeight: 0.18,
   },
   brave: {
     id: 'brave',
@@ -60,6 +64,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Does not falter when others would. Danger sharpens them where it blunts the rest.',
     conflicts: ['craven'],
     effects: [{ target: 'combat_strength', modifier: 0.15 }],
+    inheritWeight: 0.15,
   },
   craven: {
     id: 'craven',
@@ -68,6 +73,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'The first to list the reasons not to act. Fear speaks louder than duty.',
     conflicts: ['brave'],
     effects: [{ target: 'combat_strength', modifier: -0.15 }],
+    inheritWeight: 0.10,
   },
   cruel: {
     id: 'cruel',
@@ -124,6 +130,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Their anger arrives fast and leaves structures standing but relationships in rubble.',
     conflicts: ['patient'],
     effects: [{ target: 'event_weight_domestic', modifier: 1.5 }],
+    inheritWeight: 0.15,
   },
   patient: {
     id: 'patient',
@@ -132,6 +139,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Waits for the right moment. Rarely surprised because they were watching all along.',
     conflicts: ['wrathful', 'reckless'],
     effects: [],
+    inheritWeight: 0.12,
   },
   deceitful: {
     id: 'deceitful',
@@ -191,6 +199,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Carries a weight that does not lift even in good seasons. Loss, when it comes, cuts to the bone.',
     conflicts: ['sanguine'],
     effects: [{ target: 'event_weight_domestic', modifier: 1.0 }],
+    inheritWeight: 0.15,
   },
   sanguine: {
     id: 'sanguine',
@@ -199,6 +208,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Finds reasons to continue even when the facts don\'t support them. Contagiously so.',
     conflicts: ['melancholic'],
     effects: [{ target: 'opinion_baseline_from_others', modifier: 5 }],
+    inheritWeight: 0.15,
   },
   zealous: {
     id: 'zealous',
@@ -229,6 +239,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
       { target: 'language_learning_rate', modifier: 1.5 },
       { target: 'event_weight_cultural', modifier: 2.0 },
     ],
+    inheritWeight: 0.15,
   },
   stubborn: {
     id: 'stubborn',
@@ -237,6 +248,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Does not move from a position once it is taken. Sometimes this is wisdom. Sometimes it is not.',
     conflicts: ['curious'],
     effects: [{ target: 'cultural_resistance', modifier: 0.5 }],
+    inheritWeight: 0.10,
   },
   charming: {
     id: 'charming',
@@ -253,6 +265,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Assumes the worst of intentions until proven otherwise, and sometimes even then.',
     conflicts: ['trusting'],
     effects: [{ target: 'opinion_same_trait', modifier: -8 }],
+    inheritWeight: 0.10,
   },
   trusting: {
     id: 'trusting',
@@ -261,6 +274,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Extends good faith until it is violated. The betrayals, when they come, are remembered.',
     conflicts: ['suspicious'],
     effects: [{ target: 'opinion_baseline_from_others', modifier: 5 }],
+    inheritWeight: 0.10,
   },
   reckless: {
     id: 'reckless',
@@ -296,6 +310,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Assumes things will turn out well, even when the evidence is mixed. Their certainty sometimes becomes self-fulfilling.',
     conflicts: ['cynical', 'melancholic'],
     effects: [],
+    inheritWeight: 0.12,
   },
   hot_tempered: {
     id: 'hot_tempered',
@@ -304,6 +319,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Patience burns away fast. Small provocations flare without warning and leave scorch marks on the people nearest them.',
     conflicts: ['patient'],
     effects: [{ target: 'event_weight_domestic', modifier: 1.3 }],
+    inheritWeight: 0.12,
   },
   cowardly: {
     id: 'cowardly',
@@ -312,6 +328,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Threat amplifies dramatically in the mind before it reaches the body. Avoidance feels like strategy even when it is not.',
     conflicts: ['brave'],
     effects: [{ target: 'combat_strength', modifier: -0.10 }],
+    inheritWeight: 0.10,
   },
   romantic: {
     id: 'romantic',
@@ -320,6 +337,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Does not merely love — they pine and long. Life without deep attachment is not really lived to the full.',
     conflicts: ['cynical', 'chaste'],
     effects: [{ target: 'opinion_drift_spouse', modifier: 2 }],
+    inheritWeight: 0.10,
   },
   lonely: {
     id: 'lonely',
@@ -328,6 +346,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Craves connection with a hunger that cannot be fully hidden. In a crowd or out of it, the absence of true belonging weighs on them.',
     conflicts: [],
     effects: [],
+    inheritWeight: 0.08,
   },
   solitary: {
     id: 'solitary',
@@ -336,6 +355,7 @@ export const TRAIT_DEFINITIONS: Readonly<Record<string, TraitDefinition>> = {
     description: 'Finds crowds exhausting and the presence of others an intrusion. Needs space and silence to recover their equilibrium.',
     conflicts: ['gregarious'],
     effects: [],
+    inheritWeight: 0.12,
   },
 
   // ── Social / relationship ──────────────────────────────────────────────────

@@ -540,6 +540,65 @@ describe('calculateProduction — herder (stable)', () => {
   });
 });
 
+// ─── calculateProduction — hunter ────────────────────────────────────────────
+
+describe('calculateProduction — hunter', () => {
+  /** Minimal person with hunter role and specified combat skill. */
+  function makeHunter(combat: number): Person {
+    return {
+      role: 'hunter',
+      skills: { animals: 25, bargaining: 25, combat, custom: 25, leadership: 25, plants: 25 },
+      tradeTraining: {},
+    } as unknown as Person;
+  }
+
+  it('produces 1 food with Fair combat skill (<26), spring', () => {
+    const map = new Map([['p0', makeHunter(10)]]);
+    expect(calculateProduction(map, makeSettlement(), 'spring').food).toBe(1);
+  });
+
+  it('produces 2 food with Good combat skill (26+), spring', () => {
+    const map = new Map([['p0', makeHunter(30)]]);
+    expect(calculateProduction(map, makeSettlement(), 'spring').food).toBe(2);
+  });
+
+  it('produces 3 food with Excellent combat skill (63+), spring', () => {
+    const map = new Map([['p0', makeHunter(65)]]);
+    expect(calculateProduction(map, makeSettlement(), 'spring').food).toBe(3);
+  });
+
+  it('food output is seasonally scaled — autumn ×1.6: Math.floor(3 × 1.6) = 4', () => {
+    const map = new Map([['p0', makeHunter(65)]]);
+    expect(calculateProduction(map, makeSettlement(), 'autumn').food).toBe(4);
+  });
+
+  it('food output is seasonally scaled — winter ×0.4: Math.floor(2 × 0.4) = 0', () => {
+    const map = new Map([['p0', makeHunter(30)]]);
+    expect(calculateProduction(map, makeSettlement(), 'winter').food).toBe(0);
+  });
+
+  it('produces 0 stone and 0 lumber directly', () => {
+    const map = new Map([['p0', makeHunter(65)]]);
+    const result = calculateProduction(map, makeSettlement(), 'spring');
+    expect(result.stone).toBe(0);
+    expect(result.lumber).toBe(0);
+  });
+
+  it("hunters_lodge roleProductionBonus adds 1 food per hunter", () => {
+    // Good combat: base 2 food; hunters_lodge bonus: +1 food → total 3 in spring
+    const map = new Map([['p0', makeHunter(30)]]);
+    expect(calculateProduction(map, makeSettlement(0, [makeBuilding('hunters_lodge')]), 'spring').food).toBe(3);
+  });
+
+  it("hound_pens roleProductionBonus adds 2 food and 1 goods per hunter", () => {
+    // Good combat: base 2 food; hound_pens bonus: +2 food, +1 goods → food 4, goods 1 in spring
+    const map = new Map([['p0', makeHunter(30)]]);
+    const result = calculateProduction(map, makeSettlement(0, [makeBuilding('hound_pens')]), 'spring');
+    expect(result.food).toBe(4);
+    expect(result.goods).toBe(1);
+  });
+});
+
 // ─── calculateProduction — tradeTraining multiplier ──────────────────────────
 
 describe('calculateProduction — tradeTraining bonus', () => {

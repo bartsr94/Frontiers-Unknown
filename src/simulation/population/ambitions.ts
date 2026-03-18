@@ -269,12 +269,16 @@ export function determineAmbitionType(
   // 1. seek_spouse — unmarried adult with at least a neutral opinion of an eligible partner.
   // Threshold differentiated by culture:
   //   - Sauromatian women: 5 (she builds from near-neutral)
-  //   - Imanian / orthodox: 25 (formal courtship requires meaningful positive regard)
+  //   - settlement_native / mixed-heritage: 10 (grew up in the settlement together;
+  //     baseline ~18 for same-culture pairs, which never drifts past the old 25 threshold
+  //     because same-culture +1 drift and −1 decay cancel out exactly)
+  //   - All others: 10 (same reasoning — keep the bar low enough to be reachable
+  //     from the natural baseline without requiring boosted founding opinions)
   if (person.spouseIds.length === 0 && person.age >= 18) {
     const isSauroFemale =
       person.sex === 'female' &&
       SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture);
-    const spouseOpinionThreshold = isSauroFemale ? 5 : 25;
+    const spouseOpinionThreshold = isSauroFemale ? 5 : 10;
 
     // Sauromatian women also require the target to have room for another wife
     const candidates = Array.from(state.people.values()).filter(
@@ -327,8 +331,9 @@ export function determineAmbitionType(
     return { type: 'seek_cultural_duty', targetPersonId: null };
   }
 
-  // 5. seek_informal_union — non-Sauromatian man with at least a neutral opinion of an eligible woman.
-  // Threshold kept lower (25) to allow courtship ambitions to form once early barriers begin to ease.
+  // 5. seek_informal_union — non-Sauromatian man with at least a mildly positive opinion
+  // of an eligible woman. Threshold 10 matches seek_spouse so that second-generation
+  // settlement_native men (baseline opinion ~18) can form this ambition.
   if (
     person.sex === 'male' &&
     !SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture) &&
@@ -340,7 +345,7 @@ export function determineAmbitionType(
         other.sex === 'female' &&
         other.spouseIds.length === 0 &&
         other.age >= 16 &&
-        getEffectiveOpinion(person, other.id) >= 25,
+        getEffectiveOpinion(person, other.id) >= 10,
     );
     if (targets.length > 0) {
       const target = targets[rng.nextInt(0, targets.length - 1)]!;
