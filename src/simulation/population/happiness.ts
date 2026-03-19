@@ -288,6 +288,29 @@ export function computeHappinessFactors(
     }
   }
 
+  // ── Social: Cultural Identity Displacement ─────────────────────────────────
+  // Persons whose cultural heritage sharply diverges from the settlement's blend
+  // feel alienated — Sauromatian women under heavy Imanian pressure, or longtime
+  // Imanian settlers watching the community become unrecognisable.
+  const blend = state.culture?.culturalBlend ?? 0.5;
+  const isNativeHeritage = SAUROMATIAN_CULTURE_IDS.has(person.heritage.primaryCulture);
+  const isPredominantlyImanian = person.heritage.primaryCulture === 'imanian';
+  if (isNativeHeritage) {
+    if (blend < 0.10) {
+      const amplifier = person.traits.includes('homesick') ? 1.5 : 1.0;
+      factors.push({ label: 'A stranger in their own home', delta: Math.round(-10 * amplifier), category: 'social' });
+    } else if (blend < 0.25) {
+      const amplifier = person.traits.includes('homesick') ? 1.5 : 1.0;
+      factors.push({ label: 'Cultural ways feel under pressure', delta: Math.round(-5 * amplifier), category: 'social' });
+    }
+  } else if (isPredominantlyImanian) {
+    if (blend > 0.80) {
+      factors.push({ label: 'Dissonant with local customs', delta: -8, category: 'social' });
+    } else if (blend > 0.65) {
+      factors.push({ label: 'Uncomfortable with cultural changes', delta: -4, category: 'social' });
+    }
+  }
+
   // ── Purpose: Work Role ────────────────────────────────────────────────────
   const role = person.role;
   const isProductive = role !== 'unassigned' && role !== 'away' && role !== 'keth_thara';

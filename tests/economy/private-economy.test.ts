@@ -3,12 +3,15 @@ import {
   distributeHouseholdWages,
   getSurplus,
   ROLE_TO_BUILDING,
+  ROLE_TO_PRODUCTION_CHAINS,
   processPrivateBuilding,
+  getNextHouseholdProductionTarget,
 } from '../../src/simulation/economy/private-economy';
 import type { Person, AmbitionId } from '../../src/simulation/population/person';
 import type {
   ResourceStock,
   Household,
+  BuiltBuilding,
   GameState,
 } from '../../src/simulation/turn/game-state';
 import type { PersonAmbition } from '../../src/simulation/population/person';
@@ -25,20 +28,15 @@ function makePerson(
     householdId: householdId ?? null,
     age: opts.age ?? 25,
     role: opts.role ?? 'farmer',
-    socialStatus: opts.socialStatus ?? 'free',
-    // Stub-minimum fields to satisfy the type
-    name: id,
+    socialStatus: opts.socialStatus ?? 'settler',
     sex: 'male',
-    generationDepth: 1,
-    aliveStatus: 'alive',
-    birthTurn: 0,
     traits: [],
     religion: 'imanian_orthodox',
-    primaryCulture: 'imanian',
-    cultureScores: {},
-    languageFluencies: {},
-    bloodline: { imanian: 1 },
-    heritage: { primaryCulture: 'imanian', ethnicGroup: 'imanian', bloodline: { imanian: 1 } },
+    heritage: {
+      bloodline: [{ group: 'imanian', fraction: 1.0 }],
+      primaryCulture: 'imanian',
+      culturalFluency: new Map(),
+    },
     skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
     tradeTraining: {},
     apprenticeship: null,
@@ -47,7 +45,7 @@ function makePerson(
     activeScheme: null,
     ambition: null,
     lowHappinessTurns: 0,
-    relationships: {},
+    relationships: new Map(),
     opinionModifiers: [],
     traitExpiry: {},
   } as unknown as Person;
@@ -1164,5 +1162,76 @@ describe('replaceDeadHouseholdBuilders', () => {
 
     expect(updatedQueue[0]!.assignedWorkerIds).toEqual(['w1']);
     expect(updatedPeople.size).toBe(0);
+  });
+});
+
+// ─── getNextHouseholdProductionTarget ──────────────────────────────────────────
+
+describe('getNextHouseholdProductionTarget', () => {
+  function makeSlottedHH(id: string, slots: (string | null)[] = Array(9).fill(null)): Household {
+    return {
+      id,
+      name: `HH ${id}`,
+      tradition: 'imanian',
+      headId: null,
+      seniorWifeId: null,
+      memberIds: [],
+      ashkaMelathiBonds: [],
+      foundedTurn: 0,
+      dwellingBuildingId: null,
+      productionBuildingIds: [],
+      isAutoNamed: true,
+      buildingSlots: slots,
+      householdGold: 0,
+    };
+  }
+
+  function makeBuilding(defId: string, instanceId: string): BuiltBuilding {
+    return {
+      defId,
+      instanceId,
+      builtTurn: 0,
+      style: null,
+      claimedByPersonIds: [],
+      ownerHouseholdId: null,
+      assignedWorkerIds: [],
+    } as unknown as BuiltBuilding;
+  }
+
+  it('farmer with no buildings targets agriculture tier 1 (fields)', () => {
+    // plants=25 ≥ CHAIN_TIER_SKILL_THRESHOLDS[1]=0
+    const farmer = makePerson('p1', 'hh1', { role: 'farmer' });
+    expect(getNextHouseholdProductionTarget(farmer, makeSlottedHH('hh1'), [])).toBe('fields');
+  });
+
+  it('farmer with fields already owned (plants=25 < 26) targets orchard tier 1', () => {
+    // Agriculture tier 2 threshold=26 blocked; orchard tier 1 threshold=0 → 'orchard'
+    const farmer = makePerson('p1', 'hh1', { role: 'farmer' });
+    const hh = makeSlottedHH('hh1', [null, 'fi', null, null, null, null, null, null, null]);
+    expect(getNextHouseholdProductionTarget(farmer, hh, [makeBuilding('fields', 'fi')])).toBe('orchard');
+  });
+
+  it('farmer with fields and orchard but low skill returns null', () => {
+    // Both accessible tiers (fields + orchard) already owned; tier 2 of each blocked by skill
+    const farmer = makePerson('p1', 'hh1', { role: 'farmer' });
+    const hh = makeSlottedHH('hh1', [null, 'fi', 'or', null, null, null, null, null, null]);
+    const buildings = [makeBuilding('fields', 'fi'), makeBuilding('orchard', 'or')];
+    expect(getNextHouseholdProductionTarget(farmer, hh, buildings)).toBeNull();
+  });
+
+  it('blacksmith with no smithy returns "smithy"', () => {
+    const smith = makePerson('p1', 'hh1', { role: 'blacksmith' });
+    expect(getNextHouseholdProductionTarget(smith, makeSlottedHH('hh1'), [])).toBe('smithy');
+  });
+
+  it('blacksmith with smithy already owned returns null', () => {
+    const smith = makePerson('p1', 'hh1', { role: 'blacksmith' });
+    const hh = makeSlottedHH('hh1', [null, 'sm', null, null, null, null, null, null, null]);
+    expect(getNextHouseholdProductionTarget(smith, hh, [makeBuilding('smithy', 'sm')])).toBeNull();
+  });
+
+  it('guard returns null (no production chain defined)', () => {
+    const guard = makePerson('p1', 'hh1', { role: 'guard' });
+    expect(getNextHouseholdProductionTarget(guard, makeSlottedHH('hh1'), [])).toBeNull();
   });
 });

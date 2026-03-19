@@ -12,8 +12,9 @@ import {
   computeReligiousTension,
   computeHiddenWheelDivergence,
   computeCompanyReligiousPressure,
+  computeReligionDistribution,
 } from '../../src/simulation/population/culture';
-import type { ReligionId } from '../../src/simulation/population/person';
+import type { Person, ReligionId } from '../../src/simulation/population/person';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -172,5 +173,57 @@ describe('computeHiddenWheelDivergence', () => {
     }
     expect(fired).toBe(true);
     expect(divergence).toBe(0);
+  });
+});
+
+// ─── computeReligionDistribution ────────────────────────────────────────────────────
+
+function makePerson(id: string, religion: ReligionId): Person {
+  return { id, religion } as unknown as Person;
+}
+
+describe('computeReligionDistribution', () => {
+  it('returns an empty Map for an empty population', () => {
+    expect(computeReligionDistribution(new Map()).size).toBe(0);
+  });
+
+  it('single Orthodox person gives {imanian_orthodox: 1.0}', () => {
+    const people = new Map([['p1', makePerson('p1', 'imanian_orthodox')]]);
+    const dist = computeReligionDistribution(people);
+    expect(dist.get('imanian_orthodox')).toBeCloseTo(1.0);
+    expect(dist.size).toBe(1);
+  });
+
+  it('2 people (1 orthodox + 1 wheel) each receive fraction 0.5', () => {
+    const people = new Map([
+      ['p1', makePerson('p1', 'imanian_orthodox')],
+      ['p2', makePerson('p2', 'sacred_wheel')],
+    ]);
+    const dist = computeReligionDistribution(people);
+    expect(dist.get('imanian_orthodox')).toBeCloseTo(0.5);
+    expect(dist.get('sacred_wheel')).toBeCloseTo(0.5);
+  });
+
+  it('3 people (2 orthodox + 1 wheel) gives orthodox \u22480.667', () => {
+    const people = new Map([
+      ['p1', makePerson('p1', 'imanian_orthodox')],
+      ['p2', makePerson('p2', 'imanian_orthodox')],
+      ['p3', makePerson('p3', 'sacred_wheel')],
+    ]);
+    const dist = computeReligionDistribution(people);
+    expect(dist.get('imanian_orthodox')).toBeCloseTo(2 / 3, 5);
+    expect(dist.get('sacred_wheel')).toBeCloseTo(1 / 3, 5);
+  });
+
+  it('fractions across all religions sum to 1.0', () => {
+    const people = new Map([
+      ['p1', makePerson('p1', 'imanian_orthodox')],
+      ['p2', makePerson('p2', 'sacred_wheel')],
+      ['p3', makePerson('p3', 'syncretic_hidden_wheel')],
+      ['p4', makePerson('p4', 'imanian_orthodox')],
+    ]);
+    const dist = computeReligionDistribution(people);
+    const total = Array.from(dist.values()).reduce((a, b) => a + b, 0);
+    expect(total).toBeCloseTo(1.0, 10);
   });
 });

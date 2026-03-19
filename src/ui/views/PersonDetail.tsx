@@ -160,6 +160,32 @@ const RATING_BORDER_CLASS: Record<SkillRating, string> = {
   renowned:  'border-l-purple-500',
   heroic:    'border-l-amber-400',
 };
+
+// ─── Health / religion display constants ──────────────────────────────────────
+
+const CONDITION_LABELS: Record<string, string> = {
+  wounded:         'Wounded',
+  ill:             'Ill',
+  malnourished:    'Malnourished',
+  recovering:      'Recovering',
+  chronic_illness: 'Chronic Illness',
+  frail:           'Frail',
+};
+
+const CONDITION_COLORS: Record<string, string> = {
+  wounded:         'bg-red-900 text-red-200',
+  ill:             'bg-orange-900 text-orange-200',
+  malnourished:    'bg-yellow-900 text-yellow-300',
+  recovering:      'bg-teal-900 text-teal-200',
+  chronic_illness: 'bg-orange-950 text-orange-400',
+  frail:           'bg-stone-700 text-stone-400',
+};
+
+const RELIGION_LABELS: Record<string, string> = {
+  imanian_orthodox:       'Imanian Orthodox',
+  sacred_wheel:           'Sacred Wheel',
+  syncretic_hidden_wheel: 'Hidden Wheel (syncretic)',
+};
 // ─── Section components ───────────────────────────────────────────────────────
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
@@ -224,36 +250,6 @@ export default function PersonDetail({ personId, onClose, onNavigate, onOpenFami
 
   const [motherId, fatherId] = person.parentIds;
 
-  // ── Health label helpers ──────────────────────────────────────────────────
-
-  const conditionLabels: Record<string, string> = {
-    wounded:         'Wounded',
-    ill:             'Ill',
-    malnourished:    'Malnourished',
-    recovering:      'Recovering',
-    chronic_illness: 'Chronic Illness',
-    frail:           'Frail',
-  };
-
-  const conditionColors: Record<string, string> = {
-    wounded:         'bg-red-900 text-red-200',
-    ill:             'bg-orange-900 text-orange-200',
-    malnourished:    'bg-yellow-900 text-yellow-300',
-    recovering:      'bg-teal-900 text-teal-200',
-    chronic_illness: 'bg-orange-950 text-orange-400',
-    frail:           'bg-stone-700 text-stone-400',
-  };
-
-  // ── Religion label ────────────────────────────────────────────────────────
-  const religionLabels: Record<string, string> = {
-    imanian_orthodox:       'Imanian Orthodox',
-    sacred_wheel:           'Sacred Wheel',
-    syncretic_hidden_wheel: 'Hidden Wheel (syncretic)',
-  };
-
-  // ── Culture label ─────────────────────────────────────────────────────────
-  const cultureLabels = CULTURE_LABELS;
-
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -301,10 +297,10 @@ export default function PersonDetail({ personId, onClose, onNavigate, onOpenFami
             <span className="text-stone-300 capitalize">{person.socialStatus.replace(/_/g, ' ')}</span>
 
             <span className="text-stone-500">Culture</span>
-            <span className="text-stone-300">{cultureLabels[person.heritage.primaryCulture] ?? person.heritage.primaryCulture}</span>
+            <span className="text-stone-300">{CULTURE_LABELS[person.heritage.primaryCulture] ?? person.heritage.primaryCulture}</span>
 
             <span className="text-stone-500">Religion</span>
-            <span className="text-stone-300">{religionLabels[person.religion] ?? person.religion}</span>
+            <span className="text-stone-300">{RELIGION_LABELS[person.religion] ?? person.religion}</span>
 
             <span className="text-stone-500">Health</span>
             <span className={person.health.currentHealth > 70 ? 'text-green-300' : person.health.currentHealth > 40 ? 'text-yellow-300' : 'text-red-400'}>
@@ -369,7 +365,7 @@ export default function PersonDetail({ personId, onClose, onNavigate, onOpenFami
               <div className="flex flex-col gap-1 mb-1">
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-teal-200 w-36 truncate">
-                    {cultureLabels[person.heritage.primaryCulture] ?? person.heritage.primaryCulture}
+                    {CULTURE_LABELS[person.heritage.primaryCulture] ?? person.heritage.primaryCulture}
                   </span>
                   <div className="flex-1 h-1.5 bg-stone-700 rounded overflow-hidden">
                     <div
@@ -385,7 +381,7 @@ export default function PersonDetail({ personId, onClose, onNavigate, onOpenFami
                 {secondaryCultures.map(([cid, val]) => (
                   <div key={cid} className="flex items-center gap-2 text-xs">
                     <span className="text-stone-400 w-36 truncate">
-                      {cultureLabels[cid] ?? cid}
+                      {CULTURE_LABELS[cid] ?? cid}
                     </span>
                     <div className="flex-1 h-1.5 bg-stone-700 rounded overflow-hidden">
                       <div
@@ -519,9 +515,9 @@ export default function PersonDetail({ personId, onClose, onNavigate, onOpenFami
               {person.health.conditions.map(cond => (
                 <span
                   key={cond}
-                  className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${conditionColors[cond] ?? 'bg-stone-700 text-stone-300'}`}
+                  className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${CONDITION_COLORS[cond] ?? 'bg-stone-700 text-stone-300'}`}
                 >
-                  {conditionLabels[cond] ?? cond}
+                  {CONDITION_LABELS[cond] ?? cond}
                 </span>
               ))}
             </div>

@@ -25,6 +25,12 @@ export interface TradeResult {
   newTradeHistoryCount: number;
   /** Turn number to record as lastTradeTurn. */
   tradeTurn: number;
+  /**
+   * Disposition delta contributed by the assigned trader's bargaining skill alone.
+   * Range: −2 (Fair skill) to +5 (Heroic skill). Zero when no trader is assigned.
+   * Exposed separately so the TradeView UI can label the skill contribution.
+   */
+  traderSkillBonus: number;
 }
 
 /** Result of validateTrade(). Discriminated by `ok`. */
@@ -215,6 +221,28 @@ export function validateTrade(
   return { ok: true };
 }
 
+// ─── Trader Skill Helpers ─────────────────────────────────────────────────────
+
+/**
+ * Returns the disposition bonus/penalty contributed by the settlement's
+ * assigned trader's bargaining skill, on top of the base fairness calculation.
+ *
+ * A skilled negotiator earns better outcomes without needing to offer more;
+ * a poor one mars even a fair trade with clumsy dealings.
+ *
+ * @param bargaining - The trader's bargaining skill value (1–100), or undefined.
+ * @returns Integer delta in the range [−2, +5].
+ */
+export function computeTraderSkillBonus(bargaining: number | undefined): number {
+  if (bargaining === undefined) return 0;
+  if (bargaining >= 91) return 5;  // Heroic
+  if (bargaining >= 78) return 4;  // Renowned
+  if (bargaining >= 63) return 3;  // Excellent
+  if (bargaining >= 46) return 2;  // Very Good
+  if (bargaining >= 26) return 0;  // Good — baseline
+  return -2;                        // Fair — lacks finesse
+}
+
 // ─── Trade Execution ──────────────────────────────────────────────────────────
 
 /**
@@ -227,6 +255,8 @@ export function validateTrade(
  * @param playerRequests - What the player is receiving.
  * @param tribe - The tribe being traded with.
  * @param currentTurn - Current turn number; recorded as lastTradeTurn.
+ * @param traderBargaining - Bargaining skill of the assigned trader (optional).
+ *   When provided, the trader's skill modifies the final disposition delta.
  */
 export function executeTribeTradeLogic(
   currentResources: ResourceStock,
@@ -234,6 +264,7 @@ export function executeTribeTradeLogic(
   playerRequests: TradeOffer,
   tribe: ExternalTribe,
   currentTurn: number,
+  traderBargaining?: number,
 ): TradeResult {
   // Apply resource delta to the player's stock.
   const newResources = { ...currentResources };
@@ -250,12 +281,14 @@ export function executeTribeTradeLogic(
   const playerValue = getTradeValue(playerRequests, tribe, 'tribe');
   const tribeValue  = getTradeValue(playerOffer,    tribe, 'player');
 
-  const dispositionDelta = calculateDispositionDelta(playerValue, tribeValue, tribe.tradeHistoryCount);
+  const traderSkillBonus = computeTraderSkillBonus(traderBargaining);
+  const dispositionDelta = calculateDispositionDelta(playerValue, tribeValue, tribe.tradeHistoryCount) + traderSkillBonus;
 
   return {
     newResources,
     dispositionDelta,
     newTradeHistoryCount: tribe.tradeHistoryCount + 1,
     tradeTurn: currentTurn,
+    traderSkillBonus,
   };
 }

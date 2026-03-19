@@ -18,7 +18,8 @@
 
 import type { Person, PersonScheme, SchemeType, SkillId } from '../population/person';
 import type { NamedRelationshipType } from '../population/person';
-import { getEffectiveOpinion } from '../population/opinions';
+import { getEffectiveOpinion, addOpinionModifier } from '../population/opinions';
+import type { OpinionModifier } from '../population/person';
 import { SAUROMATIAN_CULTURE_IDS } from '../population/culture';
 import type { SeededRNG } from '../../utils/rng';
 import { clamp } from '../../utils/math';
@@ -451,8 +452,32 @@ function resolveSchemeCompletion(
       const existingRels = person.namedRelationships.filter(
         r => !(r.type === 'friend' && r.targetId === scheme.targetId),
       );
+      // Cement the bond with a timed opinion modifier: the effort invested in
+      // deliberate friendship-building creates a lasting positive halo.
+      const modId = `sch_befriend:${person.id}:${scheme.targetId}`;
+      const bondMod: OpinionModifier = {
+        id: modId,
+        targetId: scheme.targetId,
+        label: 'Forged friendship',
+        value: 12,
+        eventId: 'sch_befriend',
+      };
+      const baseUpdated = { ...person, namedRelationships: [...existingRels, friendRel] };
+      const updatedWithMod = addOpinionModifier(baseUpdated, bondMod);
+      // Apply the reverse modifier to the target so the feeling is mutual.
+      if (target) {
+        const revModId = `sch_befriend:${scheme.targetId}:${person.id}`;
+        const revMod: OpinionModifier = {
+          id: revModId,
+          targetId: person.id,
+          label: 'Forged friendship',
+          value: 12,
+          eventId: 'sch_befriend',
+        };
+        _people.set(target.id, addOpinionModifier(target, revMod));
+      }
       return {
-        updatedPerson: { ...person, namedRelationships: [...existingRels, friendRel] },
+        updatedPerson: updatedWithMod,
         eventId: null,
         silent: true,
       };

@@ -14,6 +14,7 @@ import type {
   QuotaStatus,
   ResourceType,
 } from '../turn/game-state';
+import { clamp } from '../../utils/math';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -200,7 +201,7 @@ export function applyQuotaResult(
     : deriveSupportLevel(newConsecutiveFailures);
 
   const standingDelta = QUOTA_STANDING_DELTAS[status];
-  const newStanding = Math.max(0, Math.min(100, company.standing + standingDelta));
+  const newStanding = clamp(company.standing + standingDelta, 0, 100);
 
   return {
     ...company,

@@ -76,9 +76,10 @@ import {
 } from '../population/ambitions';
 import { processIdentityPressure } from '../culture/identity-pressure';
 import type { IdentityPressureResult } from '../culture/identity-pressure';
-import { processFactions } from '../world/factions';
+import { processFactions, applyFactionOpinionDrift } from '../world/factions';
 import type { FactionProcessResult } from '../world/factions';
 import { computeTraitCategoryBoosts, applyTraitOpinionEffects, getTraitSkillGrowthBonuses } from '../personality/trait-behavior';
+import { computeCouncilEventBoosts } from '../events/council-advice';
 import { applyTemporaryTraitExpiry, checkEarnedTraitAcquisition } from '../personality/assignment';
 import { applyHappinessTracking } from '../population/happiness';
 import { processApprenticeships } from '../population/apprenticeship';
@@ -730,16 +731,19 @@ function processHouseholdBonds(
 /**
  * Applies per-turn opinion drift, decay, modifier decay, and (every 8 turns)
  * baseline re-seeding for any new settler pairs.
+ * Also applies faction solidarity/repulsion drift based on the current faction list.
  * Mutates `updatedPeople` in-place.
  */
 function processOpinionSystems(
   updatedPeople: Map<string, Person>,
   turnNumber: number,
   courtshipNorms: 'traditional' | 'mixed' | 'open' = 'mixed',
+  factions: import('../turn/game-state').Faction[] = [],
 ): void {
   mergePeopleUpdates(updatedPeople, applyOpinionDrift(updatedPeople));
   mergePeopleUpdates(updatedPeople, applyCourtshipOpinionDrift(updatedPeople, courtshipNorms, turnNumber));
   mergePeopleUpdates(updatedPeople, applySharedRoleOpinionDrift(updatedPeople));
+  mergePeopleUpdates(updatedPeople, applyFactionOpinionDrift(factions, updatedPeople));
   mergePeopleUpdates(updatedPeople, decayOpinions(updatedPeople));
   mergePeopleUpdates(updatedPeople, decayOpinionModifiers(updatedPeople));
   if (turnNumber % OPINION_INIT_INTERVAL === 0) {
@@ -1341,7 +1345,8 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
   );
 
   // 8.8–8.9. Social systems: opinions and ambitions.
-  processOpinionSystems(updatedPeople, state.turnNumber, state.settlement.courtshipNorms ?? 'mixed');
+  // Pass the previous turn's faction list — factions are recomputed at step 9.6b.
+  processOpinionSystems(updatedPeople, state.turnNumber, state.settlement.courtshipNorms ?? 'mixed', state.factions ?? []);
   const ambitionResult = processAmbitionSystems(updatedPeople, state, rng, state.turnNumber);
   const ambitionEntries = ambitionResult.entries;
   const autoJoinedCouncilIds = ambitionResult.autoJoinedCouncilIds;
@@ -1443,8 +1448,20 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
 
   const creoleEmerged = newLanguageDiversityTurns >= 20 && state.culture.languageDiversityTurns < 20;
 
-  // 9.7. Trait-driven event deck shaping (computed last; used by the store's drawEvents call).
+  // 9.7. Trait-driven event deck shaping.
   const traitCategoryBoosts = computeTraitCategoryBoosts(updatedPeople);
+
+  // 9.7b. Council-composition event deck shaping — merged with trait boosts.
+  const councilBoosts = computeCouncilEventBoosts(
+    state.councilMemberIds,
+    updatedPeople,
+    factionResult.updatedFactions,
+  );
+  // Merge council boosts into trait boosts (additive; overall effect is a single map)
+  const mergedCategoryBoosts: Partial<Record<EventCategory, number>> = { ...traitCategoryBoosts };
+  for (const [cat, boost] of Object.entries(councilBoosts) as [EventCategory, number][]) {
+    mergedCategoryBoosts[cat] = (mergedCategoryBoosts[cat] ?? 0) + boost;
+  }
 
   // 9.7.5. Autonomous private building pass — households spend savings on private projects.
   const privateBuildResult = processPrivateBuilding({
@@ -1552,7 +1569,7 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     shouldFireHiddenWheelEvent: divergenceResult.shouldFireEvent,
     identityPressureResult,
     traitChanges,
-    traitCategoryBoosts,
+    traitCategoryBoosts: mergedCategoryBoosts,
     idleRoleAssignments,
     newRelationshipEntries: namedRelResult.logEntries,
     pendingSchemeEvents: schemeResult.pendingSchemeEvents,

@@ -345,6 +345,89 @@ export function processFactions(
   return { updatedFactions, pendingFactionEvents, logEntries };
 }
 
+// ─── Faction → Opinion Drift ──────────────────────────────────────────────────
+
+/**
+ * Opposing faction type pairs. Members of these pairs drift apart each turn.
+ * Must stay in sync with `getOpposingType` below.
+ */
+const OPPOSING_FACTION_PAIRS: ReadonlyArray<readonly [FactionType, FactionType]> = [
+  ['orthodox_faithful',         'wheel_devotees'],
+  ['cultural_preservationists', 'company_loyalists'],
+] as const;
+
+/**
+ * Applies ±1 opinion drift per turn based on faction membership.
+ *
+ * Same-faction solidarity: every member pair gains +1 opinion of each other.
+ * Opposing-faction repulsion: cross-faction pairs lose −1 opinion of each other.
+ *
+ * Net faction contribution to any single relationship is capped at ±3/turn
+ * so this never dominates over direct relationship events.
+ *
+ * Returns a delta map of only changed persons (same contract as other opinion helpers).
+ */
+export function applyFactionOpinionDrift(
+  factions: Faction[],
+  people: Map<string, Person>,
+): Map<string, Person> {
+  // Accumulate raw deltas first, then clamp, then apply.
+  const raw = new Map<string, Map<string, number>>(); // personId → targetId → delta
+
+  const addDelta = (fromId: string, toId: string, delta: number): void => {
+    if (!raw.has(fromId)) raw.set(fromId, new Map());
+    const inner = raw.get(fromId)!;
+    inner.set(toId, (inner.get(toId) ?? 0) + delta);
+  };
+
+  // Same-faction solidarity
+  for (const faction of factions) {
+    const { memberIds } = faction;
+    for (let i = 0; i < memberIds.length; i++) {
+      for (let j = i + 1; j < memberIds.length; j++) {
+        const a = memberIds[i]!;
+        const b = memberIds[j]!;
+        if (!people.has(a) || !people.has(b)) continue;
+        addDelta(a, b, +1);
+        addDelta(b, a, +1);
+      }
+    }
+  }
+
+  // Opposing-faction repulsion
+  for (const [typeA, typeB] of OPPOSING_FACTION_PAIRS) {
+    const factionA = factions.find(f => f.type === typeA);
+    const factionB = factions.find(f => f.type === typeB);
+    if (!factionA || !factionB) continue;
+    for (const aId of factionA.memberIds) {
+      for (const bId of factionB.memberIds) {
+        if (!people.has(aId) || !people.has(bId)) continue;
+        addDelta(aId, bId, -1);
+        addDelta(bId, aId, -1);
+      }
+    }
+  }
+
+  // Apply clamped deltas to people
+  const result = new Map<string, Person>();
+  for (const [personId, targetDeltas] of raw) {
+    const person = people.get(personId);
+    if (!person) continue;
+    let updated = person;
+    for (const [targetId, delta] of targetDeltas) {
+      const clamped = clamp(delta, -3, 3);
+      if (clamped === 0) continue;
+      const current = updated.relationships.get(targetId) ?? 0;
+      const next = clamp(current + clamped, -100, 100);
+      if (next !== current) {
+        updated = { ...updated, relationships: new Map(updated.relationships).set(targetId, next) };
+      }
+    }
+    if (updated !== person) result.set(personId, updated);
+  }
+  return result;
+}
+
 // ─── Faction demand resolution ────────────────────────────────────────────────
 
 /**

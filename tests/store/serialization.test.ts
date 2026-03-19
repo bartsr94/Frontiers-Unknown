@@ -10,6 +10,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { deserializeGameState, serializeGameState, deserializePerson, serializePerson } from '../../src/stores/serialization';
+import { createInitialState } from '../../src/simulation/turn/initial-state';
 import type { GameState } from '../../src/simulation/turn/game-state';
 
 // ─── Minimal save builder ─────────────────────────────────────────────────────
@@ -645,5 +646,61 @@ describe('deserializeGameState -- private economy fallbacks', () => {
       }]],
     }));
     expect(state.households.get('hh1')!.householdGold).toBe(42);
+  });
+});
+
+// ─── hexMap round-trip ───────────────────────────────────────────────────────────────────
+
+describe('hexMap round-trip', () => {
+  const config = { difficulty: 'normal' as const, startingTribes: [], startingLocation: 'default' };
+
+  it('hexMap.cells survives a serialize/deserialize cycle as a Map', () => {
+    const state = createInitialState(config, 'Test Settlement', 42);
+    const json = serializeGameState(state);
+    const restored = deserializeGameState(json);
+
+    expect(restored.hexMap.cells).toBeInstanceOf(Map);
+  });
+
+  it('hexMap.cells has the expected cell count after round-trip (21×21 = 441)', () => {
+    const state = createInitialState(config, 'Test Settlement', 42);
+    const json = serializeGameState(state);
+    const restored = deserializeGameState(json);
+
+    expect(restored.hexMap.cells.size).toBe(state.hexMap.cells.size);
+    expect(restored.hexMap.cells.size).toBeGreaterThanOrEqual(441);
+  });
+
+  it('settlement hex cell terrain is preserved exactly', () => {
+    const state = createInitialState(config, 'Test Settlement', 42);
+    const sQ = state.hexMap.settlementQ;
+    const sR = state.hexMap.settlementR;
+    const key = `${sQ},${sR}`;
+    const originalCell = state.hexMap.cells.get(key);
+
+    const json = serializeGameState(state);
+    const restored = deserializeGameState(json);
+    const restoredCell = restored.hexMap.cells.get(key);
+
+    expect(restoredCell).toBeDefined();
+    expect(restoredCell!.terrain).toBe(originalCell!.terrain);
+    expect(restoredCell!.q).toBe(sQ);
+    expect(restoredCell!.r).toBe(sR);
+  });
+
+  it('hexMap.settlementQ and settlementR survive round-trip', () => {
+    const state = createInitialState(config, 'Test Settlement', 42);
+    const json = serializeGameState(state);
+    const restored = deserializeGameState(json);
+
+    expect(restored.hexMap.settlementQ).toBe(state.hexMap.settlementQ);
+    expect(restored.hexMap.settlementR).toBe(state.hexMap.settlementR);
+  });
+
+  it('fallback generates a hexMap when hexMap field is absent (pre-migration save)', () => {
+    // makeMinimalSaveJson omits hexMap entirely; deserializer should regenerate one.
+    const state = deserializeGameState(makeMinimalSaveJson());
+    expect(state.hexMap.cells).toBeInstanceOf(Map);
+    expect(state.hexMap.cells.size).toBeGreaterThan(0);
   });
 });

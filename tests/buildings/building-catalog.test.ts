@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { BUILDING_CATALOG } from '../../src/simulation/buildings/building-definitions';
+import { BUILDING_CATALOG, getBuildingDisplayName } from '../../src/simulation/buildings/building-definitions';
 import type { BuildingId } from '../../src/simulation/turn/game-state';
 
 // ─── Ownership metadata ────────────────────────────────────────────────────────
@@ -505,6 +505,39 @@ describe('BuildingCatalog — hospice upgrade chain', () => {
 
   it('grand_hospital (tier 4) has no next tier', () => {
     expect(findNextTier('grand_hospital')).toBeUndefined();
+  });
+});
+
+// ─── getBuildingDisplayName ───────────────────────────────────────────────────────────
+
+describe('getBuildingDisplayName', () => {
+  it('returns the default name for a building without style variants', () => {
+    // camp has hasStyleVariants: false
+    expect(getBuildingDisplayName('camp', null)).toBe('Camp');
+  });
+
+  it('returns the default name when style is null even with a style-variant building', () => {
+    // gathering_hall has hasStyleVariants: true, but no style selected
+    expect(getBuildingDisplayName('gathering_hall', null)).toBe('Gathering Hall');
+  });
+
+  it('returns the Imanian style name when style is \'imanian\'', () => {
+    // gathering_hall imanian style = 'Meeting House'
+    expect(getBuildingDisplayName('gathering_hall', 'imanian')).toBe('Meeting House');
+  });
+
+  it('returns the Sauromatian style name when style is \'sauromatian\'', () => {
+    // gathering_hall sauromatian style = 'Longfire'
+    expect(getBuildingDisplayName('gathering_hall', 'sauromatian')).toBe('Longfire');
+  });
+
+  it('returns the default name for all buildings without style variants (smoke test)', () => {
+    for (const [id, def] of Object.entries(BUILDING_CATALOG)) {
+      if (!def.hasStyleVariants) {
+        const name = getBuildingDisplayName(id as import('../../src/simulation/turn/game-state').BuildingId, null);
+        expect(name, `${id} should return def.name`).toBe(def.name);
+      }
+    }
   });
 });
 

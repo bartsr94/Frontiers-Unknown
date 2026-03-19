@@ -19,6 +19,7 @@ import type { GameEvent, EventChoice, EventCategory, EventConsequence } from './
 import type { Person } from '../population/person';
 import { DERIVED_SKILL_IDS, getPersonSkillScore } from '../population/person';
 import type { DerivedSkillId, SkillId } from '../population/person';
+import type { Faction, FactionType } from '../turn/game-state';
 
 // ─── Voice Archetype ──────────────────────────────────────────────────────────
 
@@ -638,4 +639,81 @@ export function generateAdvice(person: Person, event: GameEvent, seed: number): 
   }
 
   return `${opening} ${suffix}`;
+}
+
+// ─── Council Event Deck Boosts ────────────────────────────────────────────────
+
+/**
+ * Computes per-category event-deck weight boosts driven by the composition
+ * of the Expedition Council.
+ *
+ * A council stacked with a particular faction or cultural background steers
+ * the narrative toward that faction's concerns — wheel-devotee councillors
+ * surface more religious events; a merchant-heavy council draws more trade
+ * and economic crises.
+ *
+ * The result is merged with `computeTraitCategoryBoosts` in processDawn and
+ * passed as `weightBoosts` to `drawEvents()`. Individual boosts are capped at
+ * +0.30 so no single composition floods the deck with one category.
+ *
+ * @param councilMemberIds  IDs of the 7 (or fewer) seated council members.
+ * @param people            Current living population map.
+ * @param factions          Current active factions.
+ * @returns Partial map of EventCategory → additive weight multiplier.
+ */
+export function computeCouncilEventBoosts(
+  councilMemberIds: string[],
+  people: Map<string, Person>,
+  factions: Faction[],
+): Partial<Record<EventCategory, number>> {
+  const boosts: Partial<Record<EventCategory, number>> = {};
+
+  const addBoost = (cat: EventCategory, amount: number): void => {
+    boosts[cat] = Math.min(0.30, (boosts[cat] ?? 0) + amount);
+  };
+
+  const councilPeople = councilMemberIds
+    .map(id => people.get(id))
+    .filter((p): p is Person => p !== undefined);
+
+  if (councilPeople.length === 0) return boosts;
+
+  // Count how many council members belong to each faction type
+  const factionCounts = new Map<FactionType, number>();
+  for (const faction of factions) {
+    const count = councilPeople.filter(p => faction.memberIds.includes(p.id)).length;
+    if (count > 0) factionCounts.set(faction.type, count);
+  }
+
+  // Religious/cultural events dominated by Wheel-devoted councillors
+  if ((factionCounts.get('wheel_devotees') ?? 0) >= 3) {
+    addBoost('cultural', 0.20);
+  }
+
+  // Cultural & domestic events dominated by cultural-preservationist councillors
+  if ((factionCounts.get('cultural_preservationists') ?? 0) >= 3) {
+    addBoost('cultural', 0.20);
+    addBoost('domestic', 0.10);
+  }
+
+  // Economic events dominated by merchant-bloc councillors
+  if ((factionCounts.get('merchant_bloc') ?? 0) >= 3) {
+    addBoost('economic', 0.25);
+  }
+
+  // Domestic/community events with a strong elder presence
+  if ((factionCounts.get('community_elders') ?? 0) >= 2) {
+    addBoost('domestic', 0.15);
+  }
+
+  // Company/diplomatic events with a predominantly Imanian council
+  const imanianCount = councilPeople.filter(p => {
+    const frac = p.heritage.bloodline.find(b => b.group === 'imanian')?.fraction ?? 0;
+    return frac >= 0.5;
+  }).length;
+  if (imanianCount >= 4) {
+    addBoost('company', 0.15);
+  }
+
+  return boosts;
 }

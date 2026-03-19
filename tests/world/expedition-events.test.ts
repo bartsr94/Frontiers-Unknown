@@ -24,6 +24,10 @@ import {
   collectHexEntryEvents,
   processExpeditionTurn,
   processExpeditions,
+  generateExpeditionName,
+  getTribeTerritoryAtHex,
+  discoverTribesFromExpedition,
+  estimateExpeditionFood,
 } from '../../src/simulation/world/expeditions';
 import { ALL_EVENTS } from '../../src/simulation/events/event-filter';
 import type { Expedition, HexCell, HexMap } from '../../src/simulation/turn/game-state';
@@ -447,5 +451,200 @@ describe('EXPEDITION_EVENTS registry', () => {
     for (const ev of expeditionEvents) {
       expect(ev.choices.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// generateExpeditionName
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('generateExpeditionName', () => {
+  it('returns \'s Expedition for first expedition (priorCount=0)', () => {
+    expect(generateExpeditionName('Kara', 0)).toBe("Kara's Expedition");
+  });
+
+  it('returns Second Expedition for priorCount=1', () => {
+    expect(generateExpeditionName('Kara', 1)).toBe("Kara's Second Expedition");
+  });
+
+  it('returns Third Expedition for priorCount=2', () => {
+    expect(generateExpeditionName('Kara', 2)).toBe("Kara's Third Expedition");
+  });
+
+  it('returns Nth Expedition for priorCount=3', () => {
+    expect(generateExpeditionName('Kara', 3)).toBe("Kara's 4th Expedition");
+  });
+
+  it('returns correct ordinal for priorCount=9', () => {
+    expect(generateExpeditionName('Kara', 9)).toBe("Kara's 10th Expedition");
+  });
+
+  it('works with any leader first name', () => {
+    const name = generateExpeditionName('Tarven', 0);
+    expect(name).toContain('Tarven');
+    expect(name).toContain('Expedition');
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// getTribeTerritoryAtHex
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('getTribeTerritoryAtHex', () => {
+  function makeHexCell(contents: HexCell['contents']): HexCell {
+    return {
+      q: 0, r: 0,
+      terrain: 'plains',
+      visibility: 'visited',
+      contents,
+      firstVisitedTurn: 1,
+    };
+  }
+
+  it('returns tribeId when cell has tribe_territory content', () => {
+    const cell = makeHexCell([{ type: 'tribe_territory', discovered: true, tribeId: 'tribe_x' }]);
+    expect(getTribeTerritoryAtHex(cell)).toBe('tribe_x');
+  });
+
+  it('returns null when cell has no contents', () => {
+    const cell = makeHexCell([]);
+    expect(getTribeTerritoryAtHex(cell)).toBeNull();
+  });
+
+  it('returns null when cell has non-tribe content only', () => {
+    const cell = makeHexCell([{ type: 'ruins', discovered: false }]);
+    expect(getTribeTerritoryAtHex(cell)).toBeNull();
+  });
+
+  it('returns null when tribe_territory has no tribeId (falsy)', () => {
+    // tribeId is an empty string — treated as falsy
+    const cell = makeHexCell([{ type: 'tribe_territory', discovered: true, tribeId: '' }]);
+    expect(getTribeTerritoryAtHex(cell)).toBeNull();
+  });
+
+  it('returns the first tribeId when multiple tribe_territory contents exist', () => {
+    const cell = makeHexCell([
+      { type: 'tribe_territory', discovered: true, tribeId: 'tribe_first' },
+      { type: 'tribe_territory', discovered: true, tribeId: 'tribe_second' },
+    ]);
+    expect(getTribeTerritoryAtHex(cell)).toBe('tribe_first');
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// discoverTribesFromExpedition
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('discoverTribesFromExpedition', () => {
+  function makeMinimalHexMap(cells: Array<{ q: number; r: number; tribeId?: string }>): HexMap {
+    const map = new Map<string, HexCell>();
+    for (const { q, r, tribeId } of cells) {
+      map.set(hexKey(q, r), {
+        q, r,
+        terrain: 'plains',
+        visibility: 'visited',
+        contents: tribeId
+          ? [{ type: 'tribe_territory', discovered: true, tribeId }]
+          : [],
+        firstVisitedTurn: 1,
+      });
+    }
+    return { width: 21, height: 21, cells: map, settlementQ: SETTLEMENT_Q, settlementR: SETTLEMENT_R };
+  }
+
+  const baseExp = makeExpedition({ visitedHexes: [] } as Partial<Expedition>);
+
+  it('returns empty Set when expedition has no visited hexes', () => {
+    const hexMap = makeMinimalHexMap([]);
+    const result = discoverTribesFromExpedition(baseExp, hexMap);
+    expect(result.size).toBe(0);
+  });
+
+  it('returns Set with tribeId when visiting a tribe_territory hex', () => {
+    const hexMap = makeMinimalHexMap([{ q: 11, r: 10, tribeId: 'tribe_A' }]);
+    const exp = makeExpedition({ visitedHexes: [{ q: 11, r: 10, turn: 1 }] } as Partial<Expedition>);
+    const result = discoverTribesFromExpedition(exp, hexMap);
+    expect(result.has('tribe_A')).toBe(true);
+    expect(result.size).toBe(1);
+  });
+
+  it('deduplicates when the same tribe hex is visited twice', () => {
+    const hexMap = makeMinimalHexMap([{ q: 11, r: 10, tribeId: 'tribe_B' }]);
+    const exp = makeExpedition({
+      visitedHexes: [
+        { q: 11, r: 10, turn: 1 },
+        { q: 11, r: 10, turn: 2 },
+      ],
+    } as Partial<Expedition>);
+    const result = discoverTribesFromExpedition(exp, hexMap);
+    expect(result.size).toBe(1);
+    expect(result.has('tribe_B')).toBe(true);
+  });
+
+  it('collects multiple tribes from different hexes', () => {
+    const hexMap = makeMinimalHexMap([
+      { q: 11, r: 10, tribeId: 'tribe_C' },
+      { q: 12, r: 10, tribeId: 'tribe_D' },
+    ]);
+    const exp = makeExpedition({
+      visitedHexes: [
+        { q: 11, r: 10, turn: 1 },
+        { q: 12, r: 10, turn: 2 },
+      ],
+    } as Partial<Expedition>);
+    const result = discoverTribesFromExpedition(exp, hexMap);
+    expect(result.size).toBe(2);
+    expect(result.has('tribe_C')).toBe(true);
+    expect(result.has('tribe_D')).toBe(true);
+  });
+
+  it('ignores hexes that are not in the hexMap', () => {
+    const hexMap = makeMinimalHexMap([]);
+    const exp = makeExpedition({
+      visitedHexes: [{ q: 99, r: 0, turn: 1 }],
+    } as Partial<Expedition>);
+    const result = discoverTribesFromExpedition(exp, hexMap);
+    expect(result.size).toBe(0);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// estimateExpeditionFood
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('estimateExpeditionFood', () => {
+  // EXPEDITION_FOOD_PER_PERSON = 0.25
+  // foodPerTurn = Math.ceil(partySize * 0.25)
+  // seasonsOneWay = Math.ceil(dist / speed) where foot=1, boat=2
+  // result = Math.ceil(foodPerTurn * seasonsOneWay * 2 * 1.5)
+
+  it('returns 0 when origin and destination are the same hex', () => {
+    // dist=0 → seasonsOneWay=0 → result=0
+    expect(estimateExpeditionFood(4, 10, 10, 10, 10, false)).toBe(0);
+  });
+
+  it('estimates food for adjacent hex, party of 4, on foot', () => {
+    // dist=1, foot: seasonsOneWay=1, foodPerTurn=ceil(4*0.25)=1
+    // result=ceil(1*1*2*1.5)=3
+    expect(estimateExpeditionFood(4, 10, 10, 11, 10, false)).toBe(3);
+  });
+
+  it('estimates more food for longer distance (dist=2, foot)', () => {
+    // dist=2, foot: seasonsOneWay=2, foodPerTurn=1
+    // result=ceil(1*2*2*1.5)=6
+    expect(estimateExpeditionFood(4, 10, 10, 10, 12, false)).toBe(6);
+  });
+
+  it('estimates less food with a boat (dist=2, boat vs foot)', () => {
+    // foot: seasonsOneWay=2 → 6; boat: seasonsOneWay=ceil(2/2)=1 → ceil(1*1*2*1.5)=3
+    const foot = estimateExpeditionFood(4, 10, 10, 10, 12, false);
+    const boat = estimateExpeditionFood(4, 10, 10, 10, 12, true);
+    expect(boat).toBeLessThan(foot);
+  });
+
+  it('scales with larger party size', () => {
+    // partySize=8, dist=2, foot: foodPerTurn=ceil(8*0.25)=2, seasonsOneWay=2
+    // result=ceil(2*2*2*1.5)=12
+    expect(estimateExpeditionFood(8, 10, 10, 10, 12, false)).toBe(12);
   });
 });

@@ -24,6 +24,10 @@ import {
   TERRAIN_TRAVEL_SPEED_FOOT,
   TERRAIN_TRAVEL_SPEED_BOAT,
   BASE_FOOD_PER_PERSON_PER_SEASON,
+  offsetToAxial,
+  axialToOffset,
+  isInBounds,
+  OFFSET_COL_START,
 } from '../../src/simulation/world/hex-map';
 import type { GameConfig } from '../../src/simulation/turn/game-state';
 
@@ -386,5 +390,104 @@ describe('estimateTravelSeasons', () => {
     const boat  = estimateTravelSeasons(5, 5, 10, 10, m, true);
     // Boats are >= as fast (river/coast benefit)
     expect(boat).toBeLessThanOrEqual(foot);
+  });
+});
+
+// ─── offsetToAxial / axialToOffset ───────────────────────────────────────────
+
+describe('offsetToAxial', () => {
+  it('row 0, col 0 → q = 0, r = 0', () => {
+    expect(offsetToAxial(0, 0)).toEqual({ q: 0, r: 0 });
+  });
+
+  it('settlement offset round-trips through axialToOffset', () => {
+    const { col, row } = axialToOffset(SETTLEMENT_Q, SETTLEMENT_R);
+    const back = offsetToAxial(col, row);
+    expect(back).toEqual({ q: SETTLEMENT_Q, r: SETTLEMENT_R });
+  });
+
+  it('even row: col maps directly to q', () => {
+    // For even row (r & 1 === 0): q = col - floor((row - 0) / 2) = col - row/2
+    const { q } = offsetToAxial(5, 0);  // row=0 (even): q = 5 - floor(0/2) = 5
+    expect(q).toBe(5);
+  });
+
+  it('odd row: q is shifted by -floor((r-1)/2)', () => {
+    // For r=1 (odd): q = col - floor((1 - 1) / 2) = col - 0 = col
+    const { q } = offsetToAxial(5, 1);
+    expect(q).toBe(5);
+    // For r=3 (odd): q = col - floor((3 - 1) / 2) = col - 1
+    const { q: q2 } = offsetToAxial(5, 3);
+    expect(q2).toBe(4);
+  });
+});
+
+describe('axialToOffset', () => {
+  it('q=0, r=0 → col = 0, row = 0', () => {
+    expect(axialToOffset(0, 0)).toEqual({ col: 0, row: 0 });
+  });
+
+  it('settlement axial → offset is within grid width', () => {
+    const { col, row } = axialToOffset(SETTLEMENT_Q, SETTLEMENT_R);
+    expect(col).toBeGreaterThanOrEqual(0);
+    expect(row).toBe(SETTLEMENT_R);
+  });
+
+  it('round-trips with offsetToAxial for multiple points', () => {
+    const points = [
+      { q: 0, r: 0 }, { q: 5, r: 5 }, { q: 10, r: 10 }, { q: 3, r: 7 },
+    ];
+    for (const { q, r } of points) {
+      const { col, row } = axialToOffset(q, r);
+      expect(offsetToAxial(col, row)).toEqual({ q, r });
+    }
+  });
+});
+
+// ─── isInBounds ───────────────────────────────────────────────────────────────
+
+describe('isInBounds', () => {
+  it('settlement hex is in bounds', () => {
+    expect(isInBounds(SETTLEMENT_Q, SETTLEMENT_R)).toBe(true);
+  });
+
+  it('negative r is out of bounds', () => {
+    expect(isInBounds(SETTLEMENT_Q, -1)).toBe(false);
+  });
+
+  it('r >= map height is out of bounds', () => {
+    expect(isInBounds(SETTLEMENT_Q, HEX_MAP_HEIGHT)).toBe(false);
+  });
+
+  it('a hex far off the left edge is out of bounds', () => {
+    expect(isInBounds(-100, SETTLEMENT_R)).toBe(false);
+  });
+
+  it('a hex far off the right edge is out of bounds', () => {
+    expect(isInBounds(SETTLEMENT_Q + 100, SETTLEMENT_R)).toBe(false);
+  });
+
+  it('all cells returned by generateHexMap are in bounds', () => {
+    const m = makeMap();
+    for (const key of m.cells.keys()) {
+      const [qs, rs] = key.split(',');
+      const q = parseInt(qs!, 10);
+      const r = parseInt(rs!, 10);
+      expect(isInBounds(q, r)).toBe(true);
+    }
+  });
+});
+
+// ─── OFFSET_COL_START ─────────────────────────────────────────────────────────
+
+describe('OFFSET_COL_START', () => {
+  it('is a non-negative integer', () => {
+    expect(Number.isInteger(OFFSET_COL_START)).toBe(true);
+    expect(OFFSET_COL_START).toBeGreaterThanOrEqual(0);
+  });
+
+  it('settlement col = OFFSET_COL_START + floor(WIDTH/2)', () => {
+    const { col } = axialToOffset(SETTLEMENT_Q, SETTLEMENT_R);
+    expect(col).toBe(OFFSET_COL_START + Math.floor(HEX_MAP_WIDTH / 2));
   });
 });

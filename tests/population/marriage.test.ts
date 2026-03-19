@@ -113,7 +113,7 @@ describe("getLanguageCompatibility — 'none'", () => {
 
 // ─── Household formation via performMarriage ──────────────────────────────────
 
-import { canMarry, performMarriage, formConcubineRelationship } from '../../src/simulation/population/marriage';
+import { canMarry, performMarriage, formConcubineRelationship, canFormInformalUnion, getMarriageability } from '../../src/simulation/population/marriage';
 import type { GameState } from '../../src/simulation/turn/game-state';
 
 /** Builds a minimal person stub for marriage tests. */
@@ -369,5 +369,91 @@ describe('performMarriage — merge path (both parties have households)', () => 
     const change = result.opinionChanges.find(c => c.observerId === 'o1' && c.targetId === 'm1');
     expect(change).toBeDefined();
     expect(change!.delta).toBe(-10);
+  });
+});
+
+// ─── canFormInformalUnion ────────────────────────────────────────────────────
+
+describe('canFormInformalUnion', () => {
+  it('blocks when the man is underage (age < 16)', () => {
+    const man   = makePerson('m1', 'male',   'imanian', { age: 15 });
+    const woman = makePerson('w1', 'female', 'imanian');
+    const result = canFormInformalUnion(man, woman);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toBe('underage');
+  });
+
+  it('blocks when the woman is underage (age < 16)', () => {
+    const man   = makePerson('m1', 'male',   'imanian');
+    const woman = makePerson('w1', 'female', 'imanian', { age: 14 });
+    const result = canFormInformalUnion(man, woman);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toBe('underage');
+  });
+
+  it('blocks when the man holds a strongly negative opinion of the woman', () => {
+    const man   = makePerson('m1', 'male',   'imanian', {
+      relationships: new Map([['w1', -40]]),
+    });
+    const woman = makePerson('w1', 'female', 'imanian');
+    const result = canFormInformalUnion(man, woman);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toBe('unwilling_party');
+  });
+
+  it('blocks when the woman holds a strongly negative opinion of the man', () => {
+    const man   = makePerson('m1', 'male',   'imanian');
+    const woman = makePerson('w1', 'female', 'imanian', {
+      relationships: new Map([['m1', -40]]),
+    });
+    const result = canFormInformalUnion(man, woman);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toBe('unwilling_party');
+  });
+
+  it('allows union when both parties are adults with neutral opinions', () => {
+    const man   = makePerson('m1', 'male',   'imanian');
+    const woman = makePerson('w1', 'female', 'imanian');
+    const result = canFormInformalUnion(man, woman);
+    expect(result.allowed).toBe(true);
+  });
+});
+
+// ─── getMarriageability ──────────────────────────────────────────────────────
+
+describe('getMarriageability', () => {
+  it('woman age 16 with no spouses is eligible and has maxSpouses 1', () => {
+    const woman = makePerson('w1', 'female', 'imanian', { age: 16, spouseIds: [] });
+    const info = getMarriageability(woman, {} as GameState);
+    expect(info.isEligible).toBe(true);
+    expect(info.maxSpouses).toBe(1);
+    expect(info.blockedReason).toBeUndefined();
+  });
+
+  it('woman age 15 is ineligible with blockedReason underage', () => {
+    const woman = makePerson('w1', 'female', 'imanian', { age: 15, spouseIds: [] });
+    const info = getMarriageability(woman, {} as GameState);
+    expect(info.isEligible).toBe(false);
+    expect(info.blockedReason).toBe('underage');
+  });
+
+  it('woman with 1 spouse is ineligible with blockedReason woman_already_married', () => {
+    const woman = makePerson('w1', 'female', 'imanian', { age: 25, spouseIds: ['m1'] });
+    const info = getMarriageability(woman, {} as GameState);
+    expect(info.isEligible).toBe(false);
+    expect(info.blockedReason).toBe('woman_already_married');
+  });
+
+  it('Imanian man age 20 with no spouses is eligible', () => {
+    const man = makePerson('m1', 'male', 'imanian', { age: 20, spouseIds: [] });
+    const info = getMarriageability(man, {} as GameState);
+    expect(info.isEligible).toBe(true);
+  });
+
+  it('man age 15 is ineligible with blockedReason underage', () => {
+    const man = makePerson('m1', 'male', 'imanian', { age: 15, spouseIds: [] });
+    const info = getMarriageability(man, {} as GameState);
+    expect(info.isEligible).toBe(false);
+    expect(info.blockedReason).toBe('underage');
   });
 });

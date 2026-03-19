@@ -313,11 +313,17 @@ function applyConsequence(
     // ── Stubs — implemented when first used by a live event ─────────────────
 
     case 'kill_person':
-      console.warn('applyConsequence: kill_person is not yet implemented — consequence ignored', consequence);
-      return state; // TODO: move to graveyard, clean up relationships
+      // TODO: implement — move person to graveyard, clean up relationships & households.
+      if (process.env.NODE_ENV !== 'production') {
+        throw new Error('applyConsequence: kill_person is not yet implemented');
+      }
+      return state;
     case 'start_pregnancy':
-      console.warn('applyConsequence: start_pregnancy is not yet implemented — consequence ignored', consequence);
-      return state; // TODO: set pregnancyState on target person
+      // TODO: implement — set pregnancyState on the target person.
+      if (process.env.NODE_ENV !== 'production') {
+        throw new Error('applyConsequence: start_pregnancy is not yet implemented');
+      }
+      return state;
     case 'modify_opinion': {
       // Broadcast: shift every living person's opinion of the target by `value`.
       // target may be a slot reference or a literal person ID.
@@ -343,8 +349,11 @@ function applyConsequence(
       return { ...state, people: updatedPeople };
     }
     case 'trigger_event':
-      console.warn('applyConsequence: trigger_event is not yet implemented — consequence ignored', consequence);
-      return state; // TODO: push follow-up into pendingEvents via followUpEventId
+      // TODO: implement — push a follow-up event into pendingEvents via followUpEventId.
+      if (process.env.NODE_ENV !== 'production') {
+        throw new Error('applyConsequence: trigger_event is not yet implemented');
+      }
+      return state;
 
     // ── Phase 3+ ─────────────────────────────────────────────────────────────
 

@@ -25,6 +25,7 @@ import { filterEligibleEvents, drawEvents, ALL_EVENTS, drainDeferredEvents, getE
 import { applyEventChoice } from '../simulation/events/resolver';
 import type { ApplyChoiceResult } from '../simulation/events/resolver';
 import { createRNG } from '../utils/rng';
+import { clamp } from '../utils/math';
 import { canMarry, performMarriage, formConcubineRelationship } from '../simulation/population/marriage';
 import type { InformalUnionStyle } from '../simulation/population/marriage';
 import { applyMarriageOpinionFloor } from '../simulation/population/opinions';
@@ -196,26 +197,24 @@ const SAVE_KEY = 'palusteria_save';
  * Collects all activity log entries produced this dawn into a new log array,
  * applying the rolling 30-entry FIFO cap.
  */
+/**
+ * Stamps `turn` onto a batch of partial log entries produced by dawn helpers.
+ * All dawn sub-systems return entries without a `turn` field; this helper adds it
+ * in a single pass so callers avoid repeating the same `.map(e => ({ turn, ...e }))`.
+ */
+function stampEntries(
+  turn: number,
+  entries: Array<Omit<ActivityLogEntry, 'turn'>>,
+): ActivityLogEntry[] {
+  return entries.map(e => ({ turn, ...e }));
+}
+
 function buildActivityLog(
   existing: ActivityLogEntry[],
   turn: number,
   dawnResult: DawnResult,
 ): ActivityLogEntry[] {
-  const relEntries = dawnResult.newRelationshipEntries.map(e => ({
-    turn, type: e.type, personId: e.personId, targetId: e.targetId, description: e.description,
-  }));
-  const schemeEntries = dawnResult.newSchemeEntries.map(e => ({
-    turn, type: e.type, personId: e.personId, targetId: e.targetId, description: e.description,
-  }));
-  const factionEntries = dawnResult.newFactionEntries.map(e => ({
-    turn, type: e.type, description: e.description,
-  }));
-  const ambitionEntries = dawnResult.newAmbitionEntries.map(e => ({
-    turn, type: e.type, personId: e.personId, description: e.description,
-  }));
-  const autonomousMarriageEntries = (dawnResult.newAutonomousMarriageEntries ?? []).map(e => ({
-    turn, type: e.type as 'relationship_formed', personId: e.personId, description: e.description,
-  }));
+  // roleEntries and traitEntries need name lookups, so they are built explicitly.
   const roleEntries = dawnResult.idleRoleAssignments.map(({ personId, role }) => {
     const p = dawnResult.updatedPeople.get(personId);
     const name = p ? p.firstName : '(unknown)';
@@ -238,21 +237,19 @@ function buildActivityLog(
         description: `**${name}** gained the trait: ${tc.gained!.replace(/_/g, ' ')}.`,
       };
     });
-  const successionEntries = dawnResult.successionLogEntries.map(e => ({
-    turn, type: e.type, personId: e.personId, targetId: e.targetId, description: e.description,
-  }));
-  const apprenticeshipEntries = (dawnResult.newApprenticeshipEntries ?? []).map(e => ({
-    turn, type: e.type, personId: e.personId, targetId: e.targetId, description: e.description,
-  }));
-  const privateBuildEntries = (dawnResult.privateBuildLogEntries ?? []).map(e => ({
-    turn, type: e.type, personId: e.personId, description: e.description,
-  }));
+
   return [
     ...existing,
-    ...relEntries, ...schemeEntries, ...factionEntries, ...ambitionEntries,
-    ...autonomousMarriageEntries,
-    ...roleEntries, ...traitEntries, ...successionEntries, ...apprenticeshipEntries,
-    ...privateBuildEntries,
+    ...stampEntries(turn, dawnResult.newRelationshipEntries),
+    ...stampEntries(turn, dawnResult.newSchemeEntries),
+    ...stampEntries(turn, dawnResult.newFactionEntries),
+    ...stampEntries(turn, dawnResult.newAmbitionEntries),
+    ...stampEntries(turn, dawnResult.newAutonomousMarriageEntries ?? []),
+    ...roleEntries,
+    ...traitEntries,
+    ...stampEntries(turn, dawnResult.successionLogEntries),
+    ...stampEntries(turn, dawnResult.newApprenticeshipEntries ?? []),
+    ...stampEntries(turn, dawnResult.privateBuildLogEntries ?? []),
   ].slice(-30);
 }
 
@@ -842,7 +839,7 @@ export const useGameStore = create<GameStore>((set, get) => {
           quotaContributedGoods: 0,
           exportedGoodsThisYear: 0,
           standing: exportBonus > 0
-            ? Math.max(0, Math.min(100, updatedCompany.standing + exportBonus))
+            ? clamp(updatedCompany.standing + exportBonus, 0, 100)
             : updatedCompany.standing,
         };
         // Increment yearsActive each Spring transition.
@@ -853,7 +850,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       if (duskResult.winterReligiousStandingDelta !== 0) {
         updatedCompany = {
           ...updatedCompany,
-          standing: Math.max(0, Math.min(100, updatedCompany.standing + duskResult.winterReligiousStandingDelta)),
+          standing: clamp(updatedCompany.standing + duskResult.winterReligiousStandingDelta, 0, 100),
         };
       }
 
@@ -1100,10 +1097,11 @@ export const useGameStore = create<GameStore>((set, get) => {
       if (!tribe) return;
       const validation = validateTrade(offer, requested, gameState.settlement.resources, tribe, gameState.turnNumber);
       if (!validation.ok) return;
-      const result = executeTribeTradeLogic(gameState.settlement.resources, offer, requested, tribe, gameState.turnNumber);
+      const traderBargaining = Array.from(gameState.people.values()).find(p => p.role === 'trader')?.skills.bargaining;
+      const result = executeTribeTradeLogic(gameState.settlement.resources, offer, requested, tribe, gameState.turnNumber, traderBargaining);
       const updatedTribe = {
         ...tribe,
-        disposition: Math.max(0, Math.min(100, tribe.disposition + result.dispositionDelta)),
+        disposition: clamp(tribe.disposition + result.dispositionDelta, 0, 100),
         tradeHistoryCount: result.newTradeHistoryCount,
         lastTradeTurn: result.tradeTurn,
       };

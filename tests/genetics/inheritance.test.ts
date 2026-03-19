@@ -17,6 +17,9 @@ import type { Person } from '../../src/simulation/population/person';
 import {
   resolveInheritance,
   averageBloodlines,
+  blendTraitDistributions,
+  sampleContinuous,
+  sampleDiscrete,
 } from '../../src/simulation/genetics/inheritance';
 import { determineSex, resolveGenderRatio } from '../../src/simulation/genetics/gender-ratio';
 
@@ -385,5 +388,118 @@ describe('resolveInheritance — children resemble parents more than ethnic aver
     expect(meanChildSkinTone).toBeGreaterThan(parentMidpoint);   // 70% ethnic pull is present
     expect(meanChildSkinTone).toBeLessThan(0.45);                // parent pull is present (looser bound, see above)
     expect(meanChildSkinTone).toBeCloseTo(expectedFinalMean, 1); // within ±0.05 of predicted mean
+  });
+});
+
+// ─── blendTraitDistributions ─────────────────────────────────────────────────────────────────────
+
+describe('blendTraitDistributions', () => {
+  it('single Imanian bloodline entry produces Imanian skin tone mean', () => {
+    // Pure Imanian: skinTone mean = 0.2
+    const dist = blendTraitDistributions([{ group: 'imanian', fraction: 1.0 }]);
+    expect(dist.skinTone.mean).toBeCloseTo(0.2, 5);
+  });
+
+  it('empty bloodline falls back to Imanian distribution', () => {
+    const dist = blendTraitDistributions([]);
+    // Fallback is ETHNIC_DISTRIBUTIONS['imanian'] which has mean 0.2
+    expect(dist.skinTone.mean).toBeCloseTo(0.2, 5);
+  });
+
+  it('50/50 Imanian + Kiswani Riverfolk blend produces midpoint skin tone', () => {
+    // Imanian mean=0.2, Kiswani Riverfolk mean=0.65 → blended = 0.425
+    const dist = blendTraitDistributions([
+      { group: 'imanian', fraction: 0.5 },
+      { group: 'kiswani_riverfolk', fraction: 0.5 },
+    ]);
+    expect(dist.skinTone.mean).toBeCloseTo(0.425, 5);
+  });
+
+  it('dominant bloodline biases the blend toward its mean', () => {
+    // 75% Imanian (mean=0.20) + 25% Kiswani Riverfolk (mean=0.65) → ~0.3125
+    const dist = blendTraitDistributions([
+      { group: 'imanian', fraction: 0.75 },
+      { group: 'kiswani_riverfolk', fraction: 0.25 },
+    ]);
+    // Expected: 0.2 * 0.75 + 0.65 * 0.25 = 0.15 + 0.1625 = 0.3125
+    expect(dist.skinTone.mean).toBeCloseTo(0.3125, 5);
+  });
+
+  it('preserves discrete trait weight keys for a pure-bloodline distribution', () => {
+    const dist = blendTraitDistributions([{ group: 'imanian', fraction: 1.0 }]);
+    // Imanian hairColor weights include 'blonde'
+    expect(dist.hairColor.weights['blonde']).toBeGreaterThan(0);
+  });
+});
+
+// ─── sampleContinuous ────────────────────────────────────────────────────────────────────────
+
+describe('sampleContinuous', () => {
+  it('returns a value clamped to [0, 1]', () => {
+    const rng = createRNG(99);
+    const value = sampleContinuous(0.5, 0.05, 0.5, 0.5, rng);
+    expect(value).toBeGreaterThanOrEqual(0);
+    expect(value).toBeLessThanOrEqual(1);
+  });
+
+  it('is deterministic with the same RNG state', () => {
+    const v1 = sampleContinuous(0.3, 0.04, 0.2, 0.4, createRNG(7));
+    const v2 = sampleContinuous(0.3, 0.04, 0.2, 0.4, createRNG(7));
+    expect(v1).toBe(v2);
+  });
+
+  it('formula: finalMean = blendedMean*0.7 + parentAvg*0.3 (visible in large sample)', () => {
+    // blendedMean=0.5, variance=0.002 (tight), motherValue=0.0, fatherValue=0.0
+    // parentAvg=0.0; finalMean=0.5*0.7 + 0.0*0.3 = 0.35
+    // With tight variance sample should cluster around 0.35.
+    const rng = createRNG(12345);
+    let sum = 0;
+    for (let i = 0; i < 200; i++) {
+      sum += sampleContinuous(0.5, 0.002, 0.0, 0.0, rng);
+    }
+    expect(sum / 200).toBeCloseTo(0.35, 1);
+  });
+
+  it('parent values pull the mean toward the parent midpoint', () => {
+    // blendedMean=0.5, motherValue=0.9, fatherValue=0.9
+    // parentAvg=0.9; finalMean=0.5*0.7+0.9*0.3=0.35+0.27=0.62
+    const rng = createRNG(42);
+    let sum = 0;
+    for (let i = 0; i < 200; i++) {
+      sum += sampleContinuous(0.5, 0.002, 0.9, 0.9, rng);
+    }
+    expect(sum / 200).toBeGreaterThan(0.5); // biased above ethnic mean
+  });
+});
+
+// ─── sampleDiscrete ─────────────────────────────────────────────────────────────────────────
+
+describe('sampleDiscrete', () => {
+  // Use Imanian eye color distribution: blue/grey/green/hazel/brown
+  const imanianEyeDist = {
+    weights: { blue: 0.30, grey: 0.20, green: 0.20, hazel: 0.15, brown: 0.15 },
+  };
+
+  it('returns a value that is one of the valid eye color keys', () => {
+    const rng = createRNG(1);
+    const result = sampleDiscrete(imanianEyeDist, 'blue', 'grey', rng);
+    expect(['blue', 'grey', 'green', 'hazel', 'brown']).toContain(result);
+  });
+
+  it('is deterministic with the same RNG state', () => {
+    const r1 = sampleDiscrete(imanianEyeDist, 'blue', 'grey', createRNG(5));
+    const r2 = sampleDiscrete(imanianEyeDist, 'blue', 'grey', createRNG(5));
+    expect(r1).toBe(r2);
+  });
+
+  it('parent values are boosted: when both parents share a rare trait it appears more often', () => {
+    // Both parents have 'brown' (15% base), boosted by +0.15 each → ~45% after renorm.
+    // Run 200 samples and expect brown to appear more than 25% (above base chance).
+    const rng = createRNG(777);
+    let brownCount = 0;
+    for (let i = 0; i < 200; i++) {
+      if (sampleDiscrete(imanianEyeDist, 'brown', 'brown', rng) === 'brown') brownCount++;
+    }
+    expect(brownCount / 200).toBeGreaterThan(0.25);
   });
 });
