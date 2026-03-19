@@ -7,7 +7,7 @@
  */
 
 import type { Dispatch, SetStateAction } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../../stores/game-store';
 import { toRoman } from '../../utils/math';
 import SettingsOverlay from '../overlays/SettingsOverlay';
@@ -87,10 +87,28 @@ export default function LeftNav({ activeView, setActiveView }: Props) {
   const year   = gameState?.currentYear   ?? 1;
   const name   = gameState?.settlement.name ?? '';
 
-  // Auto-navigate to the Events tab when new events arrive.
+  // Always-current ref so we can read activeView inside effects without adding
+  // it to the deps array (which would cause unwanted re-runs).
+  const activeViewRef = useRef(activeView);
+  useEffect(() => { activeViewRef.current = activeView; });
+
+  // Track the view the player was on before events started so we can restore it.
+  const prevViewRef      = useRef<View>('settlers');
+  const inEventPhaseRef  = useRef(false);
+
+  // Auto-navigate to Events when events arrive; restore previous view once done.
   useEffect(() => {
     if (currentPhase === 'event' && pendingCount > 0) {
+      if (!inEventPhaseRef.current) {
+        // First frame entering the event phase — remember where we were.
+        prevViewRef.current     = activeViewRef.current;
+        inEventPhaseRef.current = true;
+      }
       setActiveView('events');
+    } else if (currentPhase === 'management' && inEventPhaseRef.current) {
+      // All events resolved — return to wherever the player was before.
+      inEventPhaseRef.current = false;
+      setActiveView(prevViewRef.current);
     }
   }, [currentPhase, pendingCount, setActiveView]);
 

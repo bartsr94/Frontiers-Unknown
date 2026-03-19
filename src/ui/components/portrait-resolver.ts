@@ -74,7 +74,7 @@ const PORTRAIT_REGISTRY: Record<PortraitCategory, SexCounts> = {
   },
   kiswani: {
     male:   { child: 0, young_adult: 0, adult: 0, senior: 0 },
-    female: { child: 0, young_adult: 1, adult: 1, senior: 1 },
+    female: { child: 0, young_adult: 2, adult: 2, senior: 5 },
   },
   hanjoda: {
     male:   { child: 0, young_adult: 0, adult: 0, senior: 0 },

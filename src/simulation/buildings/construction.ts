@@ -216,13 +216,17 @@ export function processConstruction(
     }
 
     // Average custom skill of assigned workers.
+    // Filter out workers who have died (no longer in the people map) so dead
+    // builders don't remain stuck on projects indefinitely.
     let totalCustom = 0;
     let workerCount = 0;
+    const liveWorkerIds: string[] = [];
     for (const workerId of project.assignedWorkerIds) {
       const person = people.get(workerId);
       if (person) {
         totalCustom += person.skills.custom;
         workerCount++;
+        liveWorkerIds.push(workerId);
       }
     }
     const avgCustom = workerCount > 0 ? totalCustom / workerCount : 25;
@@ -251,8 +255,8 @@ export function processConstruction(
         removedBuildingIds.push(def.replacesId);
       }
 
-      // Free all workers; carry forward any auto-builder prev-role entries.
-      for (const workerId of project.assignedWorkerIds) {
+      // Free only the live workers; dead ones need no role restoration.
+      for (const workerId of liveWorkerIds) {
         completedWorkerIds.push(workerId);
         if (project.autoBuilderPrevRoles?.[workerId] !== undefined) {
           completedWorkerPrevRoles[workerId] = project.autoBuilderPrevRoles[workerId];
@@ -260,7 +264,21 @@ export function processConstruction(
       }
       // Project does NOT go back to queue.
     } else {
-      updatedQueue.push({ ...project, progressPoints: newProgress });
+      // Persist the cleaned-up worker list so dead builders don't re-appear.
+      const cleanPrevRoles: Partial<Record<string, WorkRole>> | undefined =
+        project.autoBuilderPrevRoles && liveWorkerIds.length < project.assignedWorkerIds.length
+          ? Object.fromEntries(
+              Object.entries(project.autoBuilderPrevRoles).filter(([id]) =>
+                liveWorkerIds.includes(id),
+              ),
+            )
+          : project.autoBuilderPrevRoles;
+      updatedQueue.push({
+        ...project,
+        progressPoints: newProgress,
+        assignedWorkerIds: liveWorkerIds,
+        autoBuilderPrevRoles: cleanPrevRoles,
+      });
     }
   }
 

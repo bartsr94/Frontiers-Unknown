@@ -50,6 +50,7 @@ import type {
   BuildingStyle,
   ReligiousPolicy,
   ActivityLogEntry,
+  GraveyardEntry,
 } from '../simulation/turn/game-state';
 import type { Person, WorkRole } from '../simulation/population/person';
 import { SAUROMATIAN_CULTURE_IDS } from '../simulation/population/culture';
@@ -301,7 +302,10 @@ function applyDawnResultToState(state: GameState, dawnResult: DawnResult): GameS
     ...state,
     people,
     graveyard: [...state.graveyard, ...dawnResult.newGraveyardEntries],
-    councilMemberIds: state.councilMemberIds.filter(id => !deadIds.has(id)),
+    councilMemberIds: [
+      ...state.councilMemberIds.filter(id => !deadIds.has(id)),
+      ...(dawnResult.autoJoinedCouncilIds ?? []),
+    ],
     households: claimedHouseholds,
     settlement: {
       ...state.settlement,
@@ -465,6 +469,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         gameState.expeditions ?? [],
         gameState.hexMap,
         gameState.turnNumber,
+        rng,
       );
 
       // Restore roles for settlers who returned from completed expeditions.
@@ -517,9 +522,43 @@ export const useGameStore = create<GameStore>((set, get) => {
         if (p && p.role === 'away') restoredPeople.set(id, { ...p, role });
       }
 
+      // Handle lost expedition members — kill them and move to graveyard.
+      const lostMemberGraveyardEntries: GraveyardEntry[] = [];
+      const lostMemberIds = new Set<string>();
+      for (const lostId of expeditionResult.lostExpeditionIds) {
+        const lostExp = expeditionResult.expeditions.find(e => e.id === lostId);
+        if (!lostExp) continue;
+        for (const memberId of [lostExp.leaderId, ...lostExp.memberIds]) {
+          const p = restoredPeople.get(memberId);
+          if (!p) continue;
+          lostMemberGraveyardEntries.push({
+            id: p.id,
+            firstName: p.firstName,
+            familyName: p.familyName,
+            sex: p.sex,
+            birthYear: Math.round(postDawnState.currentYear - p.age),
+            deathYear: postDawnState.currentYear,
+            deathCause: 'expedition_lost',
+            parentIds: p.parentIds,
+            childrenIds: [...p.childrenIds],
+            heritage: p.heritage,
+            portraitVariant: p.portraitVariant ?? 1,
+            ageAtDeath: Math.floor(p.age),
+          });
+          lostMemberIds.add(memberId);
+          restoredPeople.delete(memberId);
+        }
+      }
+
       const stateAfterDrain: GameState = {
         ...postDawnState,
         people: restoredPeople,
+        graveyard: lostMemberGraveyardEntries.length > 0
+          ? [...postDawnState.graveyard, ...lostMemberGraveyardEntries]
+          : postDawnState.graveyard,
+        councilMemberIds: lostMemberIds.size > 0
+          ? postDawnState.councilMemberIds.filter(id => !lostMemberIds.has(id))
+          : postDawnState.councilMemberIds,
         deferredEvents: remainingDeferred,
         hexMap: expeditionResult.hexMap,
         expeditions: expeditionResult.expeditions,
@@ -670,8 +709,17 @@ export const useGameStore = create<GameStore>((set, get) => {
         })
         .filter((e): e is BoundEvent => e !== null);
 
+      // Inject expedition events (hex discoveries, encounters, morale, return report).
+      const expeditionBoundEvents: BoundEvent[] = (expeditionResult.pendingEventArgs ?? [])
+        .map(({ eventId, boundActors }) => {
+          const ev = getEventById(eventId);
+          if (!ev) return null;
+          return { ...ev, boundActors } as BoundEvent;
+        })
+        .filter((e): e is BoundEvent => e !== null);
+
       // Deferred events are prepended so they resolve before new draws.
-      const allPending: BoundEvent[] = [...deferredBoundEvents, ...schemeBoundEvents, ...factionBoundEvents, ...happinessBoundEvents, ...successionBoundEvents, ...childBirthBoundEvents, ...apprenticeshipBoundEvents, ...boundDrawn];
+      const allPending: BoundEvent[] = [...deferredBoundEvents, ...schemeBoundEvents, ...factionBoundEvents, ...happinessBoundEvents, ...successionBoundEvents, ...childBirthBoundEvents, ...apprenticeshipBoundEvents, ...expeditionBoundEvents, ...boundDrawn];
 
       // One-time creole emergence notification.
       const showCreoleNotification =

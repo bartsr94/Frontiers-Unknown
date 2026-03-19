@@ -139,6 +139,7 @@ interface HexGridProps {
   ty: number;
   scale: number;
   onHexClick?: (q: number, r: number) => void;
+  onExpeditionClick?: (expeditionId: string) => void;
 }
 
 export default function HexGrid({
@@ -150,6 +151,7 @@ export default function HexGrid({
   ty,
   scale,
   onHexClick,
+  onExpeditionClick,
 }: HexGridProps) {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -163,6 +165,16 @@ export default function HexGrid({
     for (const exp of expeditions) {
       if (exp.status === 'travelling' || exp.status === 'returning') {
         map.set(hexKey(exp.currentQ, exp.currentR), exp.name);
+      }
+    }
+    return map;
+  }, [expeditions]);
+
+  const expeditionIdPositions = useMemo<Map<string, string>>(() => {
+    const map = new Map<string, string>();
+    for (const exp of expeditions) {
+      if (exp.status === 'travelling' || exp.status === 'returning') {
+        map.set(hexKey(exp.currentQ, exp.currentR), exp.id);
       }
     }
     return map;
@@ -268,6 +280,11 @@ export default function HexGrid({
     if (!svgPt) return;
     const { q, r } = pixelToHex(svgPt.x - offsetX, svgPt.y - offsetY, HEX_SIZE);
     const k = hexKey(q, r);
+    const expId = expeditionIdPositions.get(k);
+    if (expId) {
+      onExpeditionClick?.(expId);
+      return;
+    }
     setSelectedKey(prev => (prev === k ? null : k));
     onHexClick?.(q, r);
   }

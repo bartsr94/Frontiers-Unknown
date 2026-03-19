@@ -18,7 +18,7 @@ import type { SeededRNG } from '../../utils/rng';
 import { getDerivedSkill } from '../population/person';
 import { getEffectiveOpinion } from './opinions';
 import { SAUROMATIAN_CULTURE_IDS } from '../population/culture';
-import { ROLE_TO_BUILDING } from '../economy/private-economy';
+import { getNextHouseholdProductionTarget } from '../economy/private-economy';
 import { BUILDING_CATALOG } from '../buildings/building-definitions';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -206,12 +206,20 @@ export function evaluateAmbition(
 
     case 'seek_production_building': {
       if (!person.householdId) return 'failed';
-      const desired = ROLE_TO_BUILDING[person.role];
-      if (!desired) return 'failed'; // person changed to a non-specialist role
-      const hasIt = state.settlement.buildings.some(
-        b => b.defId === desired && b.ownerHouseholdId === person.householdId,
+      const household = state.households.get(person.householdId);
+      if (!household) return 'failed';
+      // Failed if this person's role no longer has any buildable target
+      // (e.g. they changed roles). Fulfilled when there's nothing left to build.
+      const nextTarget = getNextHouseholdProductionTarget(
+        person, household, state.settlement.buildings,
       );
-      return hasIt ? 'fulfilled' : 'ongoing';
+      // No next target at all = role has no chain mapping → ambition stale
+      const hasSomeChain =
+        (person.role === 'farmer' || person.role === 'herder' ||
+         person.role === 'blacksmith' || person.role === 'tailor' ||
+         person.role === 'brewer' || person.role === 'miller');
+      if (!hasSomeChain) return 'failed';
+      return nextTarget ? 'ongoing' : 'fulfilled';
     }
   }
 }
@@ -439,17 +447,17 @@ export function determineAmbitionType(
   }
 
   // 12. seek_production_building — specialist worker whose household is already sheltered
-  // and lacks the matching production building. Shelter needs take priority.
-  {
-    const desiredBuilding = ROLE_TO_BUILDING[person.role];
-    if (desiredBuilding && person.householdId) {
-      const hhForProd = state.households.get(person.householdId);
-      // Only seek production buildings once the household has its own dwelling.
-      if (!hhForProd?.dwellingBuildingId) return null;
-      const hasBuilding = state.settlement.buildings.some(
-        b => b.defId === desiredBuilding && b.ownerHouseholdId === person.householdId,
+  // and has room to grow by adding or upgrading a production building.
+  // Uses chain-aware logic so herders build cattle_pen → stock_farm and farmers
+  // build fields → grain_silo / orchard → grand_orchard.
+  if (person.householdId) {
+    const hhForProd = state.households.get(person.householdId);
+    // Only seek production buildings once the household has its own dwelling.
+    if (hhForProd?.dwellingBuildingId) {
+      const nextProdTarget = getNextHouseholdProductionTarget(
+        person, hhForProd, state.settlement.buildings,
       );
-      if (!hasBuilding) {
+      if (nextProdTarget) {
         return { type: 'seek_production_building', targetPersonId: null };
       }
     }

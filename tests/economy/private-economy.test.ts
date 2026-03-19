@@ -756,22 +756,31 @@ describe('processPrivateBuilding', () => {
   });
 
   it('seek_production_building: no project when all specialist members already have their buildings', () => {
+    // Farmer with plants=25 can reach: fields (agri T1, threshold 0) + orchard (orchard T1, threshold 0).
+    // T2 of both chains requires plants≥26 — just out of reach. Owning T1 of both exhausts all chains.
+    // Slot 0 = wattle_hut (dwelling), slot 1 = fields, slot 2 = orchard → chains return null → no project.
+    const existingWattle = {
+      instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
     const existingFields = {
       instanceId: 'fields_1', defId: 'fields', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    const existingOrchard = {
+      instanceId: 'orchard_1', defId: 'orchard', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
     } as GameState['settlement']['buildings'][number];
     const head = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_production_building'), 'farmer');
     const hh = makeHousehold('h1', {
       headId: 'p1',
       memberIds: ['p1'],
       householdGold: 10,
-      buildingSlots: ['fields_1', ...Array(8).fill(null)],
+      buildingSlots: ['wattle_hut_0', 'fields_1', 'orchard_1', ...Array(6).fill(null)],
     });
     const state = makeState(
       new Map([['h1', hh]]),
       new Map([['p1', head]]),
       { lumber: 20 },
       {},
-      [existingFields],
+      [existingWattle, existingFields, existingOrchard],
     );
     expect(processPrivateBuilding(state).newProjects).toHaveLength(0);
   });
@@ -975,5 +984,185 @@ describe('processPrivateBuilding', () => {
     // wattle_hut costs 1 gold each
     expect(result.updatedHouseholds.get('h1')!.householdGold).toBe(3);
     expect(result.updatedHouseholds.get('h2')!.householdGold).toBe(5);
+  });
+});
+
+// ─── replaceDeadHouseholdBuilders ─────────────────────────────────────────────
+
+import { replaceDeadHouseholdBuilders } from '../../src/simulation/economy/private-economy';
+import type { ConstructionProject } from '../../src/simulation/turn/game-state';
+
+describe('replaceDeadHouseholdBuilders', () => {
+  function makeProject(
+    id: string,
+    ownerHouseholdId: string | null,
+    assignedWorkerIds: string[],
+    autoBuilderPrevRoles?: Partial<Record<string, string>>,
+  ): ConstructionProject {
+    return {
+      id,
+      defId: 'wattle_hut',
+      style: null,
+      progressPoints: 50,
+      totalPoints: 100,
+      assignedWorkerIds,
+      startedTurn: 1,
+      resourcesSpent: {},
+      ownerHouseholdId,
+      ...(autoBuilderPrevRoles ? { autoBuilderPrevRoles } : {}),
+    } as unknown as ConstructionProject;
+  }
+
+  function makeHH(
+    id: string,
+    memberIds: string[],
+    headId: string | null = memberIds[0] ?? null,
+  ): Household {
+    return {
+      id,
+      name: `Household ${id}`,
+      isAutoNamed: true,
+      tradition: 'imanian',
+      headId,
+      seniorWifeId: null,
+      memberIds,
+      ashkaMelathiBonds: [],
+      foundedTurn: 0,
+      dwellingBuildingId: null,
+      productionBuildingIds: [],
+      buildingSlots: Array(9).fill(null),
+      householdGold: 0,
+    };
+  }
+
+  function makeAdult(id: string, role: Person['role'] = 'farmer'): Person {
+    return {
+      id,
+      firstName: id,
+      familyName: 'Test',
+      age: 25,
+      sex: 'male' as const,
+      role,
+      householdId: null,
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+    } as unknown as Person;
+  }
+
+  it('assigns a replacement builder from the owning household when the original died', () => {
+    const replacement = makeAdult('r1', 'farmer');
+    const hh = makeHH('hh1', ['r1']);
+
+    // Before: project had 'dead_builder'; after processConstruction stripped them there are 0 workers
+    const prev = makeProject('proj1', 'hh1', ['dead_builder']);
+    const after = makeProject('proj1', 'hh1', []); // dead builder already stripped
+
+    const { updatedQueue, updatedPeople } = replaceDeadHouseholdBuilders(
+      [after],
+      [prev],
+      new Map([['r1', replacement]]),
+      new Map([['hh1', hh]]),
+      10,
+    );
+
+    expect(updatedQueue[0]!.assignedWorkerIds).toEqual(['r1']);
+    expect(updatedQueue[0]!.autoBuilderPrevRoles).toMatchObject({ r1: 'farmer' });
+    expect(updatedPeople.get('r1')!.role).toBe('builder');
+    expect(updatedPeople.get('r1')!.roleAssignedTurn).toBe(10);
+  });
+
+  it('does NOT auto-replace a player-built project (no ownerHouseholdId)', () => {
+    const replacement = makeAdult('r1');
+    const hh = makeHH('hh1', ['r1']);
+
+    const prev = makeProject('proj1', null, ['dead_builder']); // ownerHouseholdId = null
+    const after = makeProject('proj1', null, []);
+
+    const { updatedQueue, updatedPeople } = replaceDeadHouseholdBuilders(
+      [after],
+      [prev],
+      new Map([['r1', replacement]]),
+      new Map([['hh1', hh]]),
+      10,
+    );
+
+    expect(updatedQueue[0]!.assignedWorkerIds).toHaveLength(0);
+    expect(updatedPeople.size).toBe(0);
+  });
+
+  it('does NOT auto-replace a project that never had any builders', () => {
+    const replacement = makeAdult('r1');
+    const hh = makeHH('hh1', ['r1']);
+
+    // Both prev and after have 0 workers — project was never staffed
+    const prev = makeProject('proj1', 'hh1', []);
+    const after = makeProject('proj1', 'hh1', []);
+
+    const { updatedQueue, updatedPeople } = replaceDeadHouseholdBuilders(
+      [after],
+      [prev],
+      new Map([['r1', replacement]]),
+      new Map([['hh1', hh]]),
+      10,
+    );
+
+    expect(updatedQueue[0]!.assignedWorkerIds).toHaveLength(0);
+    expect(updatedPeople.size).toBe(0);
+  });
+
+  it('does not replace when the household has no eligible members (all under 16 or protected)', () => {
+    const child = { ...makeAdult('c1'), age: 10 } as unknown as Person;
+    const hh = makeHH('hh1', ['c1']);
+
+    const prev = makeProject('proj1', 'hh1', ['dead_one']);
+    const after = makeProject('proj1', 'hh1', []);
+
+    const { updatedQueue, updatedPeople } = replaceDeadHouseholdBuilders(
+      [after],
+      [prev],
+      new Map([['c1', child]]),
+      new Map([['hh1', hh]]),
+      10,
+    );
+
+    expect(updatedQueue[0]!.assignedWorkerIds).toHaveLength(0);
+    expect(updatedPeople.size).toBe(0);
+  });
+
+  it('prefers an unassigned non-leader over the leader as replacement', () => {
+    const leader = makeAdult('leader1', 'guard');
+    const member = makeAdult('member1', 'unassigned');
+    const hh = makeHH('hh1', ['leader1', 'member1'], 'leader1');
+
+    const prev = makeProject('proj1', 'hh1', ['dead_one']);
+    const after = makeProject('proj1', 'hh1', []);
+
+    const { updatedQueue } = replaceDeadHouseholdBuilders(
+      [after],
+      [prev],
+      new Map([['leader1', leader], ['member1', member]]),
+      new Map([['hh1', hh]]),
+      10,
+    );
+
+    expect(updatedQueue[0]!.assignedWorkerIds).toEqual(['member1']);
+  });
+
+  it('leaves a project with live workers untouched', () => {
+    const worker = makeAdult('w1', 'farmer');
+    const hh = makeHH('hh1', ['w1', 'spare1']);
+
+    const prev = makeProject('proj1', 'hh1', ['w1']);
+    const after = makeProject('proj1', 'hh1', ['w1']); // still has w1
+
+    const { updatedQueue, updatedPeople } = replaceDeadHouseholdBuilders(
+      [after],
+      [prev],
+      new Map([['w1', worker]]),
+      new Map([['hh1', hh]]),
+      10,
+    );
+
+    expect(updatedQueue[0]!.assignedWorkerIds).toEqual(['w1']);
+    expect(updatedPeople.size).toBe(0);
   });
 });

@@ -7,7 +7,8 @@
  * `src/simulation/events/definitions/`.
  */
 
-import type { SkillId, DerivedSkillId, TraitId, CultureId, ReligionId, SocialStatus, WorkRole, HouseholdRole, AmbitionId } from '../population/person';
+import type { SkillId, DerivedSkillId, CultureId, ReligionId, SocialStatus, WorkRole, HouseholdRole, AmbitionId } from '../population/person';
+import type { TraitId } from '../personality/traits';
 
 // ─── Consequence Types ───────────────────────────────────────────────────────
 
@@ -107,7 +108,35 @@ export type ConsequenceType =
    * Silently skipped if `canMarry` returns false (e.g., opinion gate not met,
    * already married, too closely related).
    */
-  | 'perform_marriage';
+  | 'perform_marriage'
+  /**
+   * Adds the target person to the Expedition Council (up to 7 seats).
+   * `target` = personId or slot token (e.g. `'{petitioner}'`).
+   * Silently skipped if the council is already full or the person is already a member.
+   */
+  | 'add_to_council'
+  /**
+   * Adjusts the carrying provisions of the active expedition this event belongs to.
+   * `target` = `'food' | 'goods' | 'gold' | 'medicine'`.
+   * `value` = signed integer delta (negative = consumed; positive = found/foraged).
+   * The expedition is identified via `boundActors['_expeditionId']`.
+   * Result is clamped to ≥ 0.
+   */
+  | 'modify_expedition_resource'
+  /**
+   * Removes a party member from the expedition and restores them to the settlement
+   * with role `'gather_food'`. They are not killed — they simply return early.
+   * `target` = slot token for the departing person (e.g. `'{member}'`).
+   * The expedition is identified via `boundActors['_expeditionId']`.
+   */
+  | 'expedition_member_returns_early'
+  /**
+   * Marks a tribe as having been contacted (and optionally opened for diplomacy).
+   * `target` = tribe ID or slot token resolving to a tribe ID.
+   * `params.level` = `'contact'` (sets contactEstablished) | `'diplomacy'` (also sets diplomacyOpened).
+   * `params.tribeId` (optional) = explicit tribe ID if not derivable from `target`.
+   */
+  | 'establish_tribe_relations';
 
 // ─── Event Category ──────────────────────────────────────────────────────────
 

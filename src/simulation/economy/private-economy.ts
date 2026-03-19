@@ -4,16 +4,19 @@
  * – distributeHouseholdWages: Spring payroll, company-funded (years 1–10) or
  *   self-funded (year 11+) with pro-rata shortfall handling.
  * – getSurplus: computes per-resource surplus above communal reserve floors.
- * – ROLE_TO_BUILDING: maps specialist roles to their matching household building.
+ * – ROLE_TO_BUILDING: maps single-building specialist roles to their building.
+ * – ROLE_TO_PRODUCTION_CHAINS: maps chain-climbing roles to their upgrade chains.
+ * – getNextHouseholdProductionTarget: chain-aware desired building resolver.
  *
  * Pure logic — no React, no DOM, no store imports, no random state.
  */
 
-import type { Person, WorkRole } from '../population/person';
+import type { Person, WorkRole, PersonSkills } from '../population/person';
 import type {
   ResourceStock,
   BuildingId,
   Household,
+  BuiltBuilding,
   ConstructionProject,
   ActivityLogEntry,
   GameState,
@@ -23,9 +26,9 @@ import { BUILDING_CATALOG } from '../buildings/building-definitions';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /**
- * Maps specialist WorkRoles to the household building that supports them.
- * Used to determine whether a `seek_production_building` ambition is fulfilled
- * and which building to target in the private build engine.
+ * Maps single-building specialist roles to their required household building.
+ * These roles don't participate in upgrade chains — the target is always the
+ * same building regardless of skill level.
  */
 export const ROLE_TO_BUILDING: Partial<Record<WorkRole, BuildingId>> = {
   farmer:     'fields',
@@ -33,8 +36,39 @@ export const ROLE_TO_BUILDING: Partial<Record<WorkRole, BuildingId>> = {
   brewer:     'brewery',
   tailor:     'tannery',
   miller:     'mill',
+  // herder is also handled by ROLE_TO_PRODUCTION_CHAINS; stable is the single-building fallback.
   herder:     'stable',
 } as const;
+
+/**
+ * Minimum skill value required to aspire to each chain tier.
+ *
+ * T1 is always wanted (0 threshold). T2 requires Good skill (26+), T3 Very Good
+ * (46+), T4 Excellent (63+). A household can never skip a tier.
+ */
+const CHAIN_TIER_SKILL_THRESHOLDS: Readonly<Record<number, number>> = {
+  1: 0,
+  2: 26,
+  3: 46,
+  4: 63,
+};
+
+/**
+ * Maps roles that follow multi-tier household upgrade chains to the chains
+ * (and the skill that gates higher tiers) they should aspire to climb.
+ *
+ * Each array entry is one chain: a household keeps building until they have
+ * the highest tier their skill level qualifies them for.
+ */
+export const ROLE_TO_PRODUCTION_CHAINS: Partial<Record<WorkRole, ReadonlyArray<{ chainId: string; skill: keyof PersonSkills }>>> = {
+  farmer: [
+    { chainId: 'agriculture', skill: 'plants' },
+    { chainId: 'orchard',     skill: 'plants' },
+  ],
+  herder: [
+    { chainId: 'pastoralism', skill: 'animals' },
+  ],
+};
 
 /** Work roles that are exempt from the payroll (not "employed adults"). */
 const EXEMPT_PAYROLL_ROLES = new Set<WorkRole>([
@@ -189,6 +223,84 @@ export function getSurplus(
   return result;
 }
 
+// ─── Chain-aware production target resolver ───────────────────────────────────
+
+/**
+ * Returns the next household production building this person should aspire to
+ * build, taking into account upgrade chains and skill thresholds.
+ *
+ * For chain-based roles (farmer, herder):
+ *   Walks each chain for the role in order; finds the highest tier the household
+ *   already owns; returns the next tier IFF the person's relevant skill meets
+ *   the threshold. Chains are tried in declaration order — whichever chain has
+ *   an actionable next step first wins.
+ *
+ * For single-building roles (blacksmith, tailor, brewer, miller):
+ *   Falls back to ROLE_TO_BUILDING. Returns null if already owned.
+ *
+ * For herder: also checks stable (ROLE_TO_BUILDING fallback) before the
+ *   pastoralism chain — the stable is always slot 0 of herder household economy.
+ *
+ * Returns null when:
+ *   – no building is desired (role has no mapping),
+ *   – every chain tier is already owned,
+ *   – skill too low for the next tier in every chain.
+ */
+export function getNextHouseholdProductionTarget(
+  person: Person,
+  household: Household,
+  allBuildings: BuiltBuilding[],
+): BuildingId | null {
+  // Build a set of defIds this household already owns in its production slots.
+  const ownedDefIds = new Set<BuildingId>(
+    household.buildingSlots
+      .slice(1)                                // skip slot 0 = dwelling
+      .filter((s): s is string => s !== null)
+      .flatMap(slotId => {
+        const b = allBuildings.find(b => b.instanceId === slotId);
+        return b ? [b.defId as BuildingId] : [];
+      }),
+  );
+
+  // ── Chain-based roles ────────────────────────────────────────────────────
+  const chains = ROLE_TO_PRODUCTION_CHAINS[person.role];
+  if (chains) {
+    for (const { chainId, skill } of chains) {
+      // All household buildings in this chain, lowest tier first.
+      const chainBuildings = Object.values(BUILDING_CATALOG)
+        .filter(d => d.upgradeChainId === chainId && d.ownership === 'household')
+        .sort((a, b) => (a.tierInChain ?? 0) - (b.tierInChain ?? 0));
+
+      // Find the highest tier already owned.
+      let highestOwnedTier = 0;
+      for (const def of chainBuildings) {
+        if (ownedDefIds.has(def.id as BuildingId) && def.tierInChain !== undefined) {
+          highestOwnedTier = Math.max(highestOwnedTier, def.tierInChain);
+        }
+      }
+
+      // Find the next unowned tier that person's skill unlocks.
+      for (const def of chainBuildings) {
+        const tier = def.tierInChain ?? 0;
+        if (tier <= highestOwnedTier) continue;          // already have this or lower
+        const threshold = CHAIN_TIER_SKILL_THRESHOLDS[tier] ?? 99;
+        if (person.skills[skill] >= threshold) {
+          return def.id as BuildingId;
+        }
+        break; // Can't skip tiers; stop scanning this chain.
+      }
+    }
+    // All chains exhausted or skill-gated — nothing to build right now.
+    // For herder: still fall through to check stable via ROLE_TO_BUILDING.
+    if (person.role === 'farmer') return null;
+  }
+
+  // ── Single-building fallback (blacksmith, tailor, brewer, miller, herder-stable) ──
+  const singleTarget = ROLE_TO_BUILDING[person.role];
+  if (!singleTarget) return null;
+  return ownedDefIds.has(singleTarget) ? null : singleTarget;
+}
+
 // ─── Private Build Engine ─────────────────────────────────────────────────────
 
 /**
@@ -321,41 +433,53 @@ export function processPrivateBuilding(
       // regardless of whether the leader currently holds a housing ambition.
       desiredBuildId = 'wattle_hut';
     } else {
-      // ── Path B: Household already has a dwelling — check ambition for upgrades ──
-      const ambition = leader.ambition;
-      if (!ambition) continue;
+      // ── Path B: Household already has a dwelling ──────────────────────────
 
-      if (ambition.type === 'seek_better_housing') {
-        const currentBuilding = allBuildings.find(b => b.instanceId === currentDwellingId) ?? null;
-        const currentTier = currentBuilding
-          ? DWELLING_TIER_ORDER.indexOf(currentBuilding.defId as BuildingId)
-          : -1;
-        const nextTierIndex = currentTier + 1;
-        if (nextTierIndex < DWELLING_TIER_ORDER.length) {
-          desiredBuildId = DWELLING_TIER_ORDER[nextTierIndex]!;
-        }
-      } else if (ambition.type === 'seek_production_building') {
-        // seek_production_building: first member with an unmet specialist role
-        for (const memberId of household.memberIds) {
-          const member = state.people.get(memberId);
-          if (!member) continue;
-          const wanted = ROLE_TO_BUILDING[member.role];
-          if (!wanted) continue;
-          const alreadyOwned = household.buildingSlots.some(slotId => {
-            if (!slotId) return false;
-            const b = allBuildings.find(bl => bl.instanceId === slotId);
-            return b?.defId === wanted;
-          });
-          if (!alreadyOwned) {
-            desiredBuildId = wanted;
-            break;
+      // Emergency overcrowding bypass: if the household is at ≥75% of dwelling
+      // capacity, commission the next dwelling tier without requiring an ambition.
+      // This prevents wealthy households from stagnating in a Wattle Hut.
+      const currentBuilding = allBuildings.find(b => b.instanceId === currentDwellingId) ?? null;
+      if (currentBuilding && currentBuilding.defId !== 'compound') {
+        const dwellDef = BUILDING_CATALOG[currentBuilding.defId as BuildingId];
+        const overcrowdRatio = household.memberIds.length / (dwellDef.shelterCapacity || 1);
+        if (overcrowdRatio >= 0.75) {
+          const currentTier = DWELLING_TIER_ORDER.indexOf(currentBuilding.defId as BuildingId);
+          const nextTierIndex = currentTier + 1;
+          if (nextTierIndex < DWELLING_TIER_ORDER.length) {
+            desiredBuildId = DWELLING_TIER_ORDER[nextTierIndex]!;
           }
         }
       }
-      // Any other ambition type → no building action this turn.
-    }
 
-    if (!desiredBuildId) continue;
+      if (!desiredBuildId) {
+        // Normal path: require an active ambition from the household leader.
+        const ambition = leader.ambition;
+        if (!ambition) continue;
+
+        if (ambition.type === 'seek_better_housing') {
+          const tier = currentBuilding
+            ? DWELLING_TIER_ORDER.indexOf(currentBuilding.defId as BuildingId)
+            : -1;
+          const nextTierIndex = tier + 1;
+          if (nextTierIndex < DWELLING_TIER_ORDER.length) {
+            desiredBuildId = DWELLING_TIER_ORDER[nextTierIndex]!;
+          }
+        } else if (ambition.type === 'seek_production_building') {
+          // Chain-aware: find the next production building any member needs.
+          for (const memberId of household.memberIds) {
+            const member = state.people.get(memberId);
+            if (!member) continue;
+            const wanted = getNextHouseholdProductionTarget(member, household, allBuildings);
+            if (wanted) {
+              desiredBuildId = wanted;
+              break;
+            }
+          }
+        }
+        // Any other ambition type → no building action this turn.
+        if (!desiredBuildId) continue;
+      }
+    }
 
     // ── Affordability checks ─────────────────────────────────────────────────
     const def = BUILDING_CATALOG[desiredBuildId];
@@ -419,4 +543,64 @@ export function processPrivateBuilding(
   }
 
   return { updatedHouseholds, updatedResources, newProjects, logEntries, autoBuilderAssignments };
+}
+
+/**
+ * After processConstruction has stripped dead builders from household-owned projects,
+ * check if any such project went from having builders to having none (all died).
+ * For each orphaned project, auto-assign a replacement from the owning household.
+ *
+ * @param updatedQueue  The queue returned by processConstruction (dead IDs already stripped).
+ * @param prevQueue     The queue as it stood before processConstruction ran (to detect losses).
+ * @param people        The living people map (dead people already removed).
+ * @param households    The current household map.
+ * @param turnNumber    Current turn number (stamped on new role assignments).
+ * @returns Updated queue with replacements applied, and a partial people map
+ *          containing only people whose role changed to 'builder'.
+ */
+export function replaceDeadHouseholdBuilders(
+  updatedQueue: ConstructionProject[],
+  prevQueue: ConstructionProject[],
+  people: Map<string, Person>,
+  households: Map<string, Household>,
+  turnNumber: number,
+): { updatedQueue: ConstructionProject[]; updatedPeople: Map<string, Person> } {
+  const prevQueueById = new Map(prevQueue.map(p => [p.id, p]));
+  const updatedPeople = new Map<string, Person>();
+
+  const resultQueue = updatedQueue.map(project => {
+    if (!project.ownerHouseholdId) return project;
+    if (project.assignedWorkerIds.length > 0) return project;
+    const prev = prevQueueById.get(project.id);
+    // Only auto-replace if there were builders before (they died) — don't
+    // auto-assign on projects that were always worker-less.
+    if (!prev || prev.assignedWorkerIds.length === 0) return project;
+
+    const household = households.get(project.ownerHouseholdId);
+    if (!household) return project;
+    const leaderId = household.headId ?? household.seniorWifeId;
+    if (!leaderId) return project;
+
+    const replacement = pickHouseholdBuilder(household, people, leaderId);
+    if (!replacement) return project;
+
+    const replacePerson = people.get(replacement.personId);
+    if (!replacePerson) return project;
+    updatedPeople.set(replacement.personId, {
+      ...replacePerson,
+      role: 'builder',
+      roleAssignedTurn: turnNumber,
+    });
+
+    return {
+      ...project,
+      assignedWorkerIds: [replacement.personId],
+      autoBuilderPrevRoles: {
+        ...(project.autoBuilderPrevRoles ?? {}),
+        [replacement.personId]: replacement.prevRole,
+      },
+    };
+  });
+
+  return { updatedQueue: resultQueue, updatedPeople };
 }

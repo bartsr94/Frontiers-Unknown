@@ -14,6 +14,7 @@
 
 import type { HexMap, HexCell, TerrainType, HexContent, HexContentType, GameConfig } from '../turn/game-state';
 import type { SeededRNG } from '../../utils/rng';
+import { STATIC_TERRAIN_MAP } from '../../data/terrain-map';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -245,131 +246,6 @@ const TERRAIN_CONTENT_CHANCES: Partial<Record<TerrainType, Array<[HexContentType
 const STARTING_SCOUTED_COUNT = 3;
 
 /**
- * Fills a blob of terrain using a simple flood-fill with decay probability.
- * Each step has a `decayChance` of not propagating, creating organic blob shapes.
- */
-function growTerrainBlob(
-  cells: Map<string, TerrainType>,
-  startQ: number,
-  startR: number,
-  terrain: TerrainType,
-  radius: number,
-  decayChance: number,
-  rng: SeededRNG,
-): void {
-  const frontier: Array<{ q: number; r: number; dist: number }> = [{ q: startQ, r: startR, dist: 0 }];
-  const visited = new Set<string>([hexKey(startQ, startR)]);
-
-  while (frontier.length > 0) {
-    const current = frontier.shift()!;
-    cells.set(hexKey(current.q, current.r), terrain);
-
-    if (current.dist >= radius) continue;
-
-    for (const nb of getNeighbours(current.q, current.r)) {
-      if (!isInBounds(nb.q, nb.r)) continue;
-      const k = hexKey(nb.q, nb.r);
-      if (visited.has(k)) continue;
-      visited.add(k);
-      // Probability of continuing the blob decreases with distance.
-      const survivorChance = 1 - decayChance * (current.dist / radius);
-      if (rng.next() <= survivorChance) {
-        frontier.push({ q: nb.q, r: nb.r, dist: current.dist + 1 });
-      }
-    }
-  }
-}
-
-/**
- * Picks a random hex on the given edge of the rectangular grid.
- * Returns axial (q, r) coordinates.
- */
-function randomEdgeHex(
-  edge: 0 | 1 | 2 | 3,
-  rng: SeededRNG,
-): { q: number; r: number } {
-  const colEnd = OFFSET_COL_START + HEX_MAP_WIDTH - 1;
-  if (edge === 0) {
-    // Top edge: row = 0, random col
-    const col = rng.nextInt(OFFSET_COL_START + 1, colEnd - 1);
-    return offsetToAxial(col, 0);
-  } else if (edge === 1) {
-    // Right edge: col = max, random row
-    const row = rng.nextInt(1, HEX_MAP_HEIGHT - 2);
-    return offsetToAxial(colEnd, row);
-  } else if (edge === 2) {
-    // Bottom edge: row = max, random col
-    const row = HEX_MAP_HEIGHT - 1;
-    const col = rng.nextInt(OFFSET_COL_START + 1, colEnd - 1);
-    return offsetToAxial(col, row);
-  } else {
-    // Left edge: col = min, random row
-    const row = rng.nextInt(1, HEX_MAP_HEIGHT - 2);
-    return offsetToAxial(OFFSET_COL_START, row);
-  }
-}
-
-/**
- * Carves a river corridor across the map using a biased random walk.
- * The river avoids the settlement hex but may pass adjacent to it.
- */
-function carveRiver(
-  cells: Map<string, TerrainType>,
-  rng: SeededRNG,
-): void {
-  // Rivers start from a random map edge.
-  const edgeSide = rng.nextInt(0, 3) as 0 | 1 | 2 | 3;
-  let { q, r } = randomEdgeHex(edgeSide, rng);
-
-  // Walk toward the opposite edge, or meander off another edge.
-  const oppositeSide = ((edgeSide + 2) % 4) as 0 | 1 | 2 | 3;
-  const target = randomEdgeHex(oppositeSide, rng);
-  const targetQ = target.q;
-  const targetR = target.r;
-
-  const visited = new Set<string>();
-  let steps = 0;
-  const maxSteps = HEX_MAP_WIDTH * HEX_MAP_HEIGHT;
-
-  while (steps < maxSteps) {
-    const k = hexKey(q, r);
-    if (!visited.has(k)) {
-      visited.add(k);
-      // Never overwrite settlement hex with river during generation
-      // (settlement is placed on river manually during initialisation).
-      if (!(q === SETTLEMENT_Q && r === SETTLEMENT_R)) {
-        cells.set(k, 'river');
-      }
-    }
-
-    if (q === targetQ && r === targetR) break;
-
-    // Pick neighbour that moves toward target, with 30% random drift.
-    const nbs = getNeighbours(q, r).filter(n => isInBounds(n.q, n.r));
-    if (nbs.length === 0) break;
-
-    const unvisited = nbs.filter(n => !visited.has(hexKey(n.q, n.r)));
-    const candidates = unvisited.length > 0 ? unvisited : nbs;
-
-    if (rng.next() < 0.7) {
-      // Bias toward target.
-      candidates.sort((a, b) =>
-        axialDistance(a.q, a.r, targetQ, targetR) - axialDistance(b.q, b.r, targetQ, targetR)
-      );
-      const best = candidates[0]!;
-      q = best.q;
-      r = best.r;
-    } else {
-      // Random drift.
-      const picked = rng.pick(candidates);
-      q = picked.q;
-      r = picked.r;
-    }
-    steps++;
-  }
-}
-
-/**
  * Decides whether to seed content in a hex based on terrain probabilities.
  * Returns the content object or null.
  */
@@ -400,45 +276,31 @@ function maybeSeedContent(
  * so the resulting map has no parallelogram gaps.
  *
  * Generation steps:
- * 1. Fill entire grid with plains as a base.
- * 2. Grow 6–10 terrain blobs (forest, hills, mountains, jungle, wetlands, desert).
- * 3. Carve 1–3 river corridors.
- * 4. Place settlement at (SETTLEMENT_Q, SETTLEMENT_R) on river terrain.
- * 5. Enforce safe ring-1 around settlement (no mountains, jungle, or desert).
- * 6. Seed content in eligible hexes.
- * 7. Place 2–5 tribe territories on appropriate terrain.
- * 8. Set starting visibility: settlement = 'visited'; 3 ring-1 hexes = 'scouted'; rest = 'fog'.
+ * 1. Load terrain from STATIC_TERRAIN_MAP (the handcrafted Ashmark geography).
+ * 2. (formerly blobs + rivers — now baked into the static map)
+ * 3. Ensure settlement hex is 'river' (safety override).
+ * 4. Enforce safe ring-1 around settlement (no mountains, jungle, or desert).
+ * 5. Seed content in eligible hexes.
+ * 6. Place tribe territories on appropriate terrain.
+ * 7. Set starting visibility: settlement = 'visited'; 3 ring-1 hexes = 'scouted'; rest = 'fog'.
  */
 export function generateHexMap(config: GameConfig, rng: SeededRNG): HexMap {
   const width = HEX_MAP_WIDTH;
   const height = HEX_MAP_HEIGHT;
 
-  // Step 1 — Base terrain layer (offset-rectangular iteration).
+  // Step 1 — Static terrain layer from the handcrafted Ashmark map.
+  // STATIC_TERRAIN_MAP[row][colIndex] where colIndex = offset_col − OFFSET_COL_START.
   const terrainLayer = new Map<string, TerrainType>();
-  forEachGameHex((q, r) => {
-    terrainLayer.set(hexKey(q, r), 'plains');
-  });
-
-  // Step 2 — Terrain blobs.
-  const blobCount = rng.nextInt(6, 10);
-  const blobTerrains: TerrainType[] = ['forest', 'forest', 'hills', 'mountains', 'jungle', 'wetlands', 'desert'];
-  for (let i = 0; i < blobCount; i++) {
-    const terrain = rng.pick(blobTerrains);
-    // Pick a random hex within the game grid for the blob origin.
-    const row = rng.nextInt(0, height - 1);
-    const col = rng.nextInt(OFFSET_COL_START, OFFSET_COL_START + width - 1);
-    const { q: bq, r: br } = offsetToAxial(col, row);
-    const radius = rng.nextInt(2, 4);
-    growTerrainBlob(terrainLayer, bq, br, terrain, radius, 0.5, rng);
+  for (let row = 0; row < HEX_MAP_HEIGHT; row++) {
+    for (let ci = 0; ci < HEX_MAP_WIDTH; ci++) {
+      const col = OFFSET_COL_START + ci;
+      const { q, r } = offsetToAxial(col, row);
+      const terrain: TerrainType = STATIC_TERRAIN_MAP[row]?.[ci] ?? 'plains';
+      terrainLayer.set(hexKey(q, r), terrain);
+    }
   }
 
-  // Step 3 — River corridors.
-  const riverCount = rng.nextInt(1, 3);
-  for (let i = 0; i < riverCount; i++) {
-    carveRiver(terrainLayer, rng);
-  }
-
-  // Step 4 — Settlement always on river.
+  // Step 3 — Settlement always on river.
   terrainLayer.set(hexKey(SETTLEMENT_Q, SETTLEMENT_R), 'river');
 
   // Step 5 — Safe ring-1 around settlement.

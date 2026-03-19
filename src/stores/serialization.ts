@@ -221,7 +221,13 @@ export function deserializeGameState(json: string): GameState {
       const rawHexMap = (s as unknown as Partial<SerialGameState>).hexMap;
       if (!rawHexMap) {
         // Old save — regenerate from seed so nothing breaks.
-        return generateHexMap(s.config, createRNG(s.seed));
+        const cfg = (s as unknown as Partial<GameState>).config ?? {
+          difficulty: 'normal' as const,
+          startingTribes: [] as string[],
+          startingLocation: 'riverside_clearing',
+          includeSauromatianWomen: false,
+        };
+        return generateHexMap(cfg, createRNG(s.seed));
       }
       return {
         ...rawHexMap,

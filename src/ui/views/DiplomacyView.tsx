@@ -11,7 +11,9 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useGameStore } from '../../stores/game-store';
-import type { ExternalTribe, TribeTrait, TribeDesire, TribeOffering } from '../../simulation/turn/game-state';
+import type { ExternalTribe, TribeTrait, TribeDesire, TribeOffering, Expedition } from '../../simulation/turn/game-state';
+import type { Person } from '../../simulation/population/person';
+import type {} from '../../simulation/population/person';
 import DispositionBar from '../components/DispositionBar';
 import HexGrid from '../components/HexGrid';
 import ExpeditionDispatchOverlay from '../overlays/ExpeditionDispatchOverlay';
@@ -222,13 +224,178 @@ function TribeInfoCard({ tribe, onClose }: CardProps) {
   );
 }
 
+// ─── Expedition Status Panel ──────────────────────────────────────────────────
+
+interface ExpeditionPanelProps {
+  expedition: Expedition;
+  people: Map<string, Person>;
+  currentTurn: number;
+  canRecall: boolean;
+  onClose: () => void;
+  onRecall: () => void;
+}
+
+function ExpeditionStatusPanel({ expedition, people, currentTurn, canRecall, onClose, onRecall }: ExpeditionPanelProps) {
+  const leader  = people.get(expedition.leaderId);
+  const members = expedition.memberIds
+    .filter(id => id !== expedition.leaderId)
+    .map(id => people.get(id))
+    .filter((p): p is Person => p !== undefined);
+
+  const statusLabel: Record<string, string> = {
+    travelling: 'En Route',
+    returning:  'Returning',
+    completed:  'Completed',
+    lost:       'Lost',
+  };
+  const statusColor: Record<string, string> = {
+    travelling: 'text-amber-400',
+    returning:  'text-sky-400',
+    completed:  'text-emerald-400',
+    lost:       'text-red-400',
+  };
+
+  const turnsOut     = currentTurn - expedition.dispatchedTurn;
+  const hexesVisited = expedition.visitedHexes.length;
+  const recentJournal = [...expedition.journal].reverse().slice(0, 5);
+  const canIssueRecall = canRecall && expedition.status === 'travelling';
+
+  function ResourceBar({ current, initial }: { current: number; initial: number }) {
+    const pct   = initial > 0 ? Math.round((current / initial) * 100) : 0;
+    const color = pct > 50 ? 'bg-emerald-500' : pct > 25 ? 'bg-amber-500' : 'bg-red-600';
+    return (
+      <div className="flex items-center gap-1.5">
+        <div className="w-14 h-1.5 bg-stone-700 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+        </div>
+        <span className="text-[11px] text-stone-300">{current} / {initial}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="absolute top-3 right-3 w-56 bg-stone-900/95 border border-stone-600 rounded shadow-2xl overflow-hidden flex flex-col max-h-[calc(100%-24px)]">
+
+      {/* Header */}
+      <div className="flex items-start justify-between px-3 pt-3 pb-2 border-b border-stone-700 shrink-0">
+        <div className="min-w-0 pr-2">
+          <h3 className="text-amber-200 font-semibold text-sm leading-tight truncate">{expedition.name}</h3>
+          <p className={`text-[11px] mt-0.5 ${statusColor[expedition.status] ?? 'text-stone-400'}`}>
+            {statusLabel[expedition.status]} · {turnsOut}t · {hexesVisited} hex{hexesVisited !== 1 ? 'es' : ''}
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="shrink-0 text-stone-500 hover:text-stone-300 leading-none text-base mt-0.5"
+          aria-label="Close"
+        >✕</button>
+      </div>
+
+      {/* Scrollable body */}
+      <div className="overflow-y-auto divide-y divide-stone-700/50">
+
+        {/* Leader & Party */}
+        <div className="px-3 py-2 space-y-1">
+          <p className="text-stone-500 uppercase tracking-wide text-[10px]">Leader</p>
+          <p className="text-stone-200 text-xs">{leader?.name ?? '—'}</p>
+          {members.length > 0 && (
+            <>
+              <p className="text-stone-500 uppercase tracking-wide text-[10px] pt-1">Party</p>
+              <p className="text-stone-300 text-[11px] leading-snug">
+                {members.map(m => m.firstName || '?').join(', ')}
+              </p>
+            </>
+          )}
+          {expedition.hasBoat && (
+            <p className="text-sky-400 text-[11px] pt-0.5">⚓ By Boat</p>
+          )}
+        </div>
+
+        {/* Position */}
+        <div className="px-3 py-2 space-y-1">
+          <p className="text-stone-500 uppercase tracking-wide text-[10px]">Position</p>
+          <p className="text-stone-300 text-[11px]">Q{expedition.currentQ}, R{expedition.currentR}</p>
+          <p className="text-stone-500 text-[11px]">→ Dest Q{expedition.destinationQ}, R{expedition.destinationR}</p>
+        </div>
+
+        {/* Supplies */}
+        <div className="px-3 py-2 space-y-1.5">
+          <p className="text-stone-500 uppercase tracking-wide text-[10px]">Supplies</p>
+          <div className="space-y-1">
+            <div className="flex justify-between items-center">
+              <span className="text-stone-400 text-[11px] w-16">Food</span>
+              <ResourceBar current={expedition.foodRemaining} initial={expedition.provisions.food} />
+            </div>
+            {expedition.provisions.medicine > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-stone-400 text-[11px] w-16">Medicine</span>
+                <ResourceBar current={expedition.medicineRemaining} initial={expedition.provisions.medicine} />
+              </div>
+            )}
+            {expedition.provisions.goods > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-stone-400 text-[11px] w-16">Goods</span>
+                <ResourceBar current={expedition.goodsRemaining} initial={expedition.provisions.goods} />
+              </div>
+            )}
+            {expedition.provisions.gold > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-stone-400 text-[11px] w-16">Gold</span>
+                <ResourceBar current={expedition.goldRemaining} initial={expedition.provisions.gold} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Journal */}
+        {recentJournal.length > 0 && (
+          <div className="px-3 py-2 space-y-1">
+            <p className="text-stone-500 uppercase tracking-wide text-[10px]">Journal</p>
+            <div className="space-y-1.5">
+              {recentJournal.map((entry, i) => (
+                <div key={i}>
+                  <span className="text-stone-600 text-[10px]">T{entry.turn} </span>
+                  <span className="text-stone-300 text-[11px] leading-snug">{entry.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Recall */}
+        <div className="px-3 py-2">
+          <button
+            onClick={onRecall}
+            disabled={!canIssueRecall}
+            title={
+              !canRecall ? 'Only available during management phase'
+              : expedition.status !== 'travelling' ? 'Already returning or resolved'
+              : 'Order the expedition to turn back'
+            }
+            className={`w-full px-2 py-1.5 rounded text-xs font-semibold transition-colors ${
+              canIssueRecall
+                ? 'bg-sky-800 hover:bg-sky-700 text-sky-100'
+                : 'bg-stone-800 text-stone-600 cursor-not-allowed'
+            }`}
+          >
+            ↩ Recall Expedition
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 // ─── Main View ────────────────────────────────────────────────────────────────
 
 export default function DiplomacyView() {
-  const gameState   = useGameStore(s => s.gameState);
-  const currentPhase = useGameStore(s => s.currentPhase);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [showDispatch, setShowDispatch]         = useState(false);
+  const gameState        = useGameStore(s => s.gameState);
+  const currentPhase     = useGameStore(s => s.currentPhase);
+  const recallExpedition = useGameStore(s => s.recallExpedition);
+  const [selectedId, setSelectedId]                       = useState<string | null>(null);
+  const [selectedExpeditionId, setSelectedExpeditionId]   = useState<string | null>(null);
+  const [showDispatch, setShowDispatch]                   = useState(false);
   const [dispatchTargetQ, setDispatchTargetQ] = useState<number | undefined>(undefined);
   const [dispatchTargetR, setDispatchTargetR] = useState<number | undefined>(undefined);
   const containerWidthRef  = useRef(0);
@@ -347,12 +514,18 @@ export default function DiplomacyView() {
   const canDispatch = currentPhase === 'management';
 
   function handleHexClick(q: number, r: number) {
+    setSelectedExpeditionId(null);
     setDispatchTargetQ(q);
     setDispatchTargetR(r);
     setShowDispatch(true);
   }
 
-  const selectedTribe = contacts.find(t => t.id === selectedId) ?? null;
+  function handleExpeditionClick(expeditionId: string) {
+    setSelectedExpeditionId(prev => prev === expeditionId ? null : expeditionId);
+  }
+
+  const selectedTribe      = contacts.find(t => t.id === selectedId) ?? null;
+  const selectedExpedition = expeditions.find(e => e.id === selectedExpeditionId) ?? null;
 
   function handleRowClick(id: string) {
     setSelectedId(prev => (prev === id ? null : id));
@@ -464,6 +637,7 @@ export default function DiplomacyView() {
             ty={ty}
             scale={scale}
             onHexClick={canDispatch ? handleHexClick : undefined}
+            onExpeditionClick={handleExpeditionClick}
           />
         )}
 
@@ -472,6 +646,21 @@ export default function DiplomacyView() {
           <TribeInfoCard
             tribe={selectedTribe}
             onClose={() => setSelectedId(null)}
+          />
+        )}
+
+        {/* Expedition status panel — pinned top-right */}
+        {selectedExpedition && (
+          <ExpeditionStatusPanel
+            expedition={selectedExpedition}
+            people={gameState.people}
+            currentTurn={gameState.turnNumber}
+            canRecall={canDispatch}
+            onClose={() => setSelectedExpeditionId(null)}
+            onRecall={() => {
+              recallExpedition(selectedExpedition.id);
+              setSelectedExpeditionId(null);
+            }}
           />
         )}
       </div>

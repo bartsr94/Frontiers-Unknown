@@ -59,7 +59,7 @@ import {
   applyQuotaResult,
   computeAnnualDelivery,
 } from '../economy/company';
-import { distributeHouseholdWages, processPrivateBuilding } from '../economy/private-economy';
+import { distributeHouseholdWages, processPrivateBuilding, replaceDeadHouseholdBuilders } from '../economy/private-economy';
 import type { WageResult } from '../economy/private-economy';
 import { applyOpinionDrift, applyCourtshipOpinionDrift, applySharedRoleOpinionDrift, decayOpinions, decayOpinionModifiers, initializeBaselineOpinions, initializeFamilyOpinions, adjustOpinion } from '../population/opinions';
 import { processNamedRelationships } from '../population/named-relationships';
@@ -72,6 +72,7 @@ import {
   clearAmbition,
   getAmbitionLabel,
   determineAmbitionType,
+  AMBITION_FIRING_THRESHOLD,
 } from '../population/ambitions';
 import { processIdentityPressure } from '../culture/identity-pressure';
 import type { IdentityPressureResult } from '../culture/identity-pressure';
@@ -238,6 +239,12 @@ export interface DawnResult {
    * Activity log entries for ambition formation and resolution.
    */
   newAmbitionEntries: Array<{ type: 'ambition_formed' | 'ambition_cleared'; personId: string; description: string }>;
+  /**
+   * IDs of persons who were auto-added to the council this dawn because their
+   * `seek_council` ambition was at firing threshold and a seat was available.
+   * The store appends these to GameState.councilMemberIds.
+   */
+  autoJoinedCouncilIds: string[];
   /** Activity log entries for autonomous marriages that fired this dawn. */
   newAutonomousMarriageEntries: Array<{ type: 'relationship_formed'; personId: string; description: string }>;
   /** Settlement morale mean (persons aged ≥ 14) computed this dawn. */
@@ -752,13 +759,36 @@ function processAmbitionSystems(
   state: GameState,
   rng: SeededRNG,
   turnNumber: number,
-): Array<{ type: 'ambition_formed' | 'ambition_cleared'; personId: string; description: string }> {
+): { entries: Array<{ type: 'ambition_formed' | 'ambition_cleared'; personId: string; description: string }>; autoJoinedCouncilIds: string[] } {
   const entries: Array<{ type: 'ambition_formed' | 'ambition_cleared'; personId: string; description: string }> = [];
+  const autoJoinedCouncilIds: string[] = [];
+  // Tracks effective council size as people are auto-joined this same dawn pass.
+  let currentCouncilSize = state.councilMemberIds.length;
 
   for (const [id, person] of updatedPeople) {
     let p = tickAmbitionIntensity(person);
 
     if (p.ambition) {
+      // Auto-fulfill seek_council when a seat is available and ambition is mature.
+      if (
+        p.ambition.type === 'seek_council' &&
+        !state.councilMemberIds.includes(id) &&
+        !autoJoinedCouncilIds.includes(id) &&
+        currentCouncilSize < 7 &&
+        p.ambition.intensity >= AMBITION_FIRING_THRESHOLD
+      ) {
+        autoJoinedCouncilIds.push(id);
+        currentCouncilSize++;
+        entries.push({
+          type: 'ambition_cleared',
+          personId: id,
+          description: `**${p.firstName}** joined the council — their ambition to earn a seat has been fulfilled.`,
+        });
+        p = clearAmbition(p);
+        if (p !== person) updatedPeople.set(id, p);
+        continue;
+      }
+
       const outcome = evaluateAmbition(p, { ...state, people: updatedPeople });
       if (outcome !== 'ongoing') {
         // For target-based relationship ambitions that failed because the target
@@ -806,7 +836,7 @@ function processAmbitionSystems(
     if (p !== person) updatedPeople.set(id, p);
   }
 
-  return entries;
+  return { entries, autoJoinedCouncilIds };
 }
 
 // ─── Idle Role-Seeking ────────────────────────────────────────────────────────
@@ -894,39 +924,185 @@ function resolveAutonomousMarriages(
   return entries;
 }
 
+// ─── Household Specialization Helpers ────────────────────────────────────────
+
+/**
+ * Maps household-owned production-building defIds to the WorkRole they imply.
+ * Used by inferHouseholdSpecialty to read a family's "trade" from its buildings.
+ */
+const HOUSEHOLD_BUILDING_TO_ROLE: Partial<Record<BuildingId, WorkRole>> = {
+  // Agriculture chain
+  fields:            'farmer',
+  barns_storehouses: 'farmer',
+  farmstead:         'farmer',
+  grain_silo:        'farmer',
+  // Orchard chain (also served by farmers)
+  orchard:           'farmer',
+  berry_grove:       'farmer',
+  beekeeper:         'farmer',
+  grand_orchard:     'farmer',
+  // Pastoralism chain
+  cattle_pen:        'herder',
+  meadow:            'herder',
+  cattle_ranch:      'herder',
+  stock_farm:        'herder',
+  stable:            'herder',
+  // One-building specialists
+  smithy:            'blacksmith',
+  tannery:           'tailor',
+  brewery:           'brewer',
+  mill:              'miller',
+};
+
+/**
+ * Which skill should be used when assessing a person's aptitude for a given
+ * specialization role, so the family-preference gate ("don't force someone who
+ * is dramatically better at something else") works correctly.
+ */
+const ROLE_TO_KEY_SKILL: Partial<Record<WorkRole, SkillId>> = {
+  farmer:        'plants',
+  gather_food:   'plants',
+  herder:        'animals',
+  hunter:        'combat',
+  guard:         'combat',
+  blacksmith:    'custom',
+  tailor:        'custom',
+  brewer:        'custom',
+  miller:        'custom',
+  gather_lumber: 'custom',
+  gather_stone:  'custom',
+  trader:        'bargaining',
+  craftsman:     'custom',
+};
+
+/**
+ * Returns the dominant production role for a household, inferred from:
+ *   1. Production buildings the household owns (building slots 1+) — strongest signal.
+ *      Used for farmer/herder/specialist families who have already invested in infrastructure.
+ *   2. Majority role among adult members — fallback for communal-role families
+ *      (hunters, lumberjacks, quarriers) who don't own private buildings for that trade.
+ *
+ * Returns null when no clear specialty can be determined.
+ */
+function inferHouseholdSpecialty(
+  household: Household,
+  people: Map<string, Person>,
+  buildings: BuiltBuilding[],
+): WorkRole | null {
+  // ── Signal 1: owned household production buildings ────────────────────────
+  const roleCounts = new Map<WorkRole, number>();
+  for (const slotId of household.buildingSlots.slice(1)) { // slot 0 = dwelling
+    if (!slotId) continue;
+    const b = buildings.find(bl => bl.instanceId === slotId);
+    if (!b) continue;
+    const role = HOUSEHOLD_BUILDING_TO_ROLE[b.defId as BuildingId];
+    if (role) roleCounts.set(role, (roleCounts.get(role) ?? 0) + 1);
+  }
+  if (roleCounts.size > 0) {
+    let best: WorkRole | null = null;
+    let bestCount = 0;
+    for (const [role, count] of roleCounts) {
+      if (count > bestCount) { bestCount = count; best = role; }
+    }
+    return best;
+  }
+
+  // ── Signal 2: majority role among adult members ───────────────────────────
+  // Only counted for roles where communal buildings exist (hunters, lumberjacks, quarriers).
+  const COUNTABLE: ReadonlySet<WorkRole> = new Set([
+    'farmer', 'herder', 'hunter',
+    'blacksmith', 'tailor', 'brewer', 'miller',
+    'gather_food', 'gather_lumber', 'gather_stone',
+    'guard', 'trader', 'craftsman',
+  ]);
+  const memberRoleCounts = new Map<WorkRole, number>();
+  for (const memberId of household.memberIds) {
+    const m = people.get(memberId);
+    if (!m || m.age < 16) continue;
+    if (COUNTABLE.has(m.role)) {
+      memberRoleCounts.set(m.role, (memberRoleCounts.get(m.role) ?? 0) + 1);
+    }
+  }
+  let best: WorkRole | null = null;
+  let bestCount = 0;
+  for (const [role, count] of memberRoleCounts) {
+    if (count > bestCount) { bestCount = count; best = role; }
+  }
+  // Require at least two members sharing the role to avoid noise in small households.
+  return bestCount >= 2 ? best : null;
+}
+
 /**
  * Auto-assigns roles to persons who have been 'unassigned' for ≥ 4 turns.
  *
- * Priority order based on highest base skill:
- *   plants     → 'farmer' (if 'fields' is built) else 'gather_food'
+ * Family specialization (new): if the person's household has an established trade
+ * (inferred from owned production buildings or majority member roles), and the
+ * person has at least minimal aptitude for it (skill ≥ 15) and isn't dramatically
+ * better suited to another trade (best skill vs family skill ≤ 20 gap), they adopt
+ * the family trade regardless of which skill is technically highest.
+ *
+ * Skill-based fallback (existing, runs when no specialty applies):
+ *   plants     → 'farmer' (if 'fields' built) else 'gather_food'
+ *   animals    → 'herder'
  *   combat     → 'guard'
- *   bargaining → 'trader' (if 'trading_post' is built)
- *   custom     → 'craftsman' (if 'workshop' is built) else 'gather_lumber'
+ *   bargaining → 'trader' (if 'trading_post' built), else continue
+ *   custom     → 'craftsman' (if 'workshop' built) else 'gather_lumber'
  *   fallback   → 'gather_food'
  *
  * Protected roles (never auto-reassigned): builder, away, keth_thara.
- * Thralls are also excluded (they have no autonomous agency).
+ * Thralls are also excluded (no autonomous agency).
  *
  * Returns an array of { personId, role } deltas — only changed persons.
  */
 function resolveIdleRoleSeeking(
   people: Map<string, Person>,
   buildings: BuiltBuilding[],
+  households: Map<string, Household>,
   currentTurn: number,
 ): Array<{ personId: string; role: WorkRole }> {
-  const hasFields        = hasBuilding(buildings, 'fields');
-  const hasTradingPost   = hasBuilding(buildings, 'trading_post');
-  const hasWorkshop      = hasBuilding(buildings, 'workshop');
+  const hasFields       = hasBuilding(buildings, 'fields');
+  const hasTradingPost  = hasBuilding(buildings, 'trading_post');
+  const hasWorkshop     = hasBuilding(buildings, 'workshop');
 
   const results: Array<{ personId: string; role: WorkRole }> = [];
 
   for (const [id, person] of people) {
     if (person.role !== 'unassigned') continue;
-    if (person.age < 8) continue;   // children are managed by the age-sync step
+    if (person.age < 8) continue;   // children managed by age-sync step
     if (person.socialStatus === 'thrall') continue;
     if (currentTurn - (person.roleAssignedTurn ?? 0) < 4) continue;
 
     const s = person.skills;
+    const bestSkill = Math.max(s.plants, s.combat, s.bargaining, s.custom, s.animals, s.leadership);
+
+    // ── Family specialization preference (adults only) ────────────────────
+    if (person.age >= 16 && person.householdId) {
+      const household = households.get(person.householdId);
+      if (household) {
+        const specialty = inferHouseholdSpecialty(household, people, buildings);
+        if (specialty) {
+          const keySkill = ROLE_TO_KEY_SKILL[specialty];
+          if (keySkill) {
+            const specialtySkillVal = s[keySkill];
+            // Accept the family trade when:
+            //   – person has at least minimal aptitude (not totally unskilled)
+            //   – their best skill doesn't exceed the family skill by >20 pts
+            //     (if they're a natural scholar/trader in a farmer family, let them diverge)
+            if (specialtySkillVal >= 15 && bestSkill - specialtySkillVal <= 20) {
+              // Apply building guards — same as skill-based fallback below.
+              let familyRole: WorkRole = specialty;
+              if (specialty === 'farmer'    && !hasFields)      familyRole = 'gather_food';
+              if (specialty === 'trader'    && !hasTradingPost) familyRole = 'gather_food';
+              if (specialty === 'craftsman' && !hasWorkshop)    familyRole = 'gather_lumber';
+              results.push({ personId: id, role: familyRole });
+              continue;
+            }
+          }
+        }
+      }
+    }
+
+    // ── Skill-based fallback ──────────────────────────────────────────────
     const skills: Array<[SkillId, number]> = [
       ['plants',     s.plants],
       ['combat',     s.combat],
@@ -935,7 +1111,6 @@ function resolveIdleRoleSeeking(
       ['animals',    s.animals],
       ['leadership', s.leadership],
     ];
-    // Sort descending by skill value.
     skills.sort((a, b) => b[1] - a[1]);
 
     let assignedRole: WorkRole = 'gather_food'; // fallback
@@ -943,6 +1118,10 @@ function resolveIdleRoleSeeking(
     for (const [skillId] of skills) {
       if (skillId === 'plants') {
         assignedRole = hasFields ? 'farmer' : 'gather_food';
+        break;
+      }
+      if (skillId === 'animals') {
+        assignedRole = 'herder';
         break;
       }
       if (skillId === 'combat') {
@@ -957,6 +1136,7 @@ function resolveIdleRoleSeeking(
         assignedRole = hasWorkshop ? 'craftsman' : 'gather_lumber';
         break;
       }
+      // leadership: no direct role mapping — fall through
     }
 
     results.push({ personId: id, role: assignedRole });
@@ -1059,6 +1239,21 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
       updatedPeople.set(workerId, { ...w, role: restoredRole });
     }
   }
+
+  // 4.6. For household-owned projects whose builder(s) died this dawn, assign
+  //      a replacement from the household so progress can continue.
+  const replacementResult = replaceDeadHouseholdBuilders(
+    constructionResult.updatedQueue,
+    state.settlement.constructionQueue ?? [],
+    updatedPeople,
+    demoHouseholds,
+    state.turnNumber,
+  );
+  for (const [id, person] of replacementResult.updatedPeople) {
+    updatedPeople.set(id, person);
+  }
+  const finalConstructionQueue = replacementResult.updatedQueue;
+
   let currentBuildings = [...(state.settlement.buildings ?? [])];
   for (const removedId of constructionResult.removedBuildingIds) {
     currentBuildings = currentBuildings.filter(b => b.defId !== removedId);
@@ -1080,7 +1275,7 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
   // 5–6. Production and consumption.
   const production = calculateProduction(
     updatedPeople,
-    { ...state.settlement, buildings: currentBuildings, constructionQueue: constructionResult.updatedQueue },
+    { ...state.settlement, buildings: currentBuildings, constructionQueue: finalConstructionQueue },
     state.currentSeason,
     overcrowdingRatio,
     happinessMultipliers,
@@ -1147,7 +1342,9 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
 
   // 8.8–8.9. Social systems: opinions and ambitions.
   processOpinionSystems(updatedPeople, state.turnNumber, state.settlement.courtshipNorms ?? 'mixed');
-  const ambitionEntries = processAmbitionSystems(updatedPeople, state, rng, state.turnNumber);
+  const ambitionResult = processAmbitionSystems(updatedPeople, state, rng, state.turnNumber);
+  const ambitionEntries = ambitionResult.entries;
+  const autoJoinedCouncilIds = ambitionResult.autoJoinedCouncilIds;
 
   // 8.91. Autonomous marriages — persons whose seek_spouse ambition is fully maxed out
   //        marry their target directly, without requiring an event card to fire.
@@ -1187,6 +1384,7 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
   const idleRoleAssignments = resolveIdleRoleSeeking(
     updatedPeople,
     currentBuildings,
+    updatedHouseholds,
     state.turnNumber,
   );
   for (const { personId, role } of idleRoleAssignments) {
@@ -1335,7 +1533,7 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     updatedReligions,
     completedBuildings: constructionResult.completedBuildings,
     removedBuildingIds: constructionResult.removedBuildingIds,
-    updatedConstructionQueue: constructionResult.updatedQueue,
+    updatedConstructionQueue: finalConstructionQueue,
     overcrowdingRatio,
     spoilageThisTurn: calculateSpoilage(
       state.settlement.resources,
@@ -1363,6 +1561,7 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     pendingFactionEvents: factionResult.pendingFactionEvents,
     newFactionEntries: factionResult.logEntries,
     newAmbitionEntries: ambitionEntries,
+    autoJoinedCouncilIds,
     newAutonomousMarriageEntries: autonomousMarriageEntries,
     settlementMorale,
     desertionCandidateIds,

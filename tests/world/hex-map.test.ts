@@ -147,8 +147,8 @@ describe('getNeighbours', () => {
 });
 
 describe('getBoundedNeighbours', () => {
-  it('corner hex (0,0) has only 2 bounded neighbours on 15×15', () => {
-    const ns = getBoundedNeighbours(0, 0);
+  it('corner hex (5,0) has only 2 bounded neighbours on 21×21', () => {
+    const ns = getBoundedNeighbours(5, 0);
     expect(ns.length).toBe(2);
   });
 
@@ -157,7 +157,7 @@ describe('getBoundedNeighbours', () => {
   });
 
   it('all results stay within bounds', () => {
-    for (const n of getBoundedNeighbours(0, 0)) {
+    for (const n of getBoundedNeighbours(5, 0)) {
       expect(n.q).toBeGreaterThanOrEqual(0);
       expect(n.r).toBeGreaterThanOrEqual(0);
     }
@@ -262,13 +262,14 @@ describe('generateHexMap', () => {
     expect(identical).toBe(true);
   });
 
-  it('different seeds produce different maps', () => {
+  it('different seeds produce different maps (content seeding varies)', () => {
     const m1 = generateHexMap(makeConfig(), createRNG(1));
     const m2 = generateHexMap(makeConfig(), createRNG(12345));
+    // Terrain is static; contents (seeded by RNG) will differ across seeds.
     let differs = false;
     for (const [key, cell1] of m1.cells) {
       const cell2 = m2.cells.get(key);
-      if (cell2 && cell2.terrain !== cell1.terrain) { differs = true; break; }
+      if (cell2 && cell2.contents.length !== cell1.contents.length) { differs = true; break; }
     }
     expect(differs).toBe(true);
   });

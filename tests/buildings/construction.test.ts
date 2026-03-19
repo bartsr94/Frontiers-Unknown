@@ -238,6 +238,82 @@ describe('processConstruction', () => {
     expect(result.completedBuildings).toHaveLength(1);
     expect(result.removedBuildingIds).toContain('camp');
   });
+
+  // ── Dead-builder regression tests ─────────────────────────────────────────
+
+  it('strips dead workers from assignedWorkerIds in the updated queue', () => {
+    const settlement = makeSettlement();
+    const { project } = startConstruction(settlement, 'longhouse', null, 1);
+    // Two workers — one will "die" (not in the people map)
+    const people = makePeople(1);
+    const [liverId] = people.keys();
+    const projectWithTwo = assignBuilder(assignBuilder(project, liverId!), 'dead_person');
+
+    const rng = createRNG(1);
+    const result = processConstruction([projectWithTwo], people, 2, rng);
+    expect(result.updatedQueue).toHaveLength(1);
+    expect(result.updatedQueue[0]!.assignedWorkerIds).toContain(liverId);
+    expect(result.updatedQueue[0]!.assignedWorkerIds).not.toContain('dead_person');
+  });
+
+  it('only live workers contribute to progress — dead workers add no points', () => {
+    const settlement = makeSettlement();
+    const { project } = startConstruction(settlement, 'longhouse', null, 1);
+    const people = makePeople(1);
+    const [liverId] = people.keys();
+    // dead_person is NOT in the people map
+    const projectWithTwo = assignBuilder(assignBuilder(project, liverId!), 'dead_person');
+    const projectWithOne  = assignBuilder(project, liverId!);
+
+    const rng1 = createRNG(1);
+    const rng2 = createRNG(1);
+    const withDead = processConstruction([projectWithTwo], people, 2, rng1);
+    const withoutDead = processConstruction([projectWithOne], people, 2, rng2);
+
+    // Progress should be identical — the ghost worker contributes nothing
+    expect(withDead.updatedQueue[0]!.progressPoints)
+      .toBe(withoutDead.updatedQueue[0]!.progressPoints);
+  });
+
+  it('prunes dead workers from autoBuilderPrevRoles in the updated queue', () => {
+    const settlement = makeSettlement();
+    const { project } = startConstruction(settlement, 'longhouse', null, 1);
+    const people = makePeople(1);
+    const [liverId] = people.keys();
+    const projectWithRoles = {
+      ...assignBuilder(assignBuilder(project, liverId!), 'dead_person'),
+      autoBuilderPrevRoles: {
+        [liverId!]: 'farmer' as const,
+        dead_person: 'trader' as const,
+      },
+    };
+
+    const rng = createRNG(1);
+    const result = processConstruction([projectWithRoles], people, 2, rng);
+    expect(result.updatedQueue[0]!.autoBuilderPrevRoles).toHaveProperty(liverId!);
+    expect(result.updatedQueue[0]!.autoBuilderPrevRoles).not.toHaveProperty('dead_person');
+  });
+
+  it('frees only live workers when a project completes with a mix of live and dead builders', () => {
+    const settlement = makeSettlement();
+    const { project } = startConstruction(settlement, 'granary', null, 1);
+    // Need ≥100 points; force completion with one live worker
+    const people = makePeople(1);
+    const [liverId] = people.keys();
+    const fastProject = {
+      ...assignBuilder(assignBuilder(project, liverId!), 'dead_person'),
+      progressPoints: 90,
+      autoBuilderPrevRoles: { [liverId!]: 'farmer' as const, dead_person: 'trader' as const },
+    };
+
+    const rng = createRNG(1);
+    const result = processConstruction([fastProject], people, 2, rng);
+    expect(result.completedBuildings).toHaveLength(1);
+    expect(result.completedWorkerIds).toContain(liverId);
+    expect(result.completedWorkerIds).not.toContain('dead_person');
+    expect(result.completedWorkerPrevRoles).toHaveProperty(liverId!);
+    expect(result.completedWorkerPrevRoles).not.toHaveProperty('dead_person');
+  });
 });
 
 // ─── cancelConstruction ──────────────────────────────────────────────────────

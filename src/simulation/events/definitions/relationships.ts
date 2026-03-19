@@ -272,6 +272,8 @@ export const RELATIONSHIP_EVENTS: GameEvent[] = [
         label: 'Grant them a council seat.',
         description: 'Requires an open seat. Earns lasting respect.',
         consequences: [
+          { type: 'add_to_council', target: '{petitioner}' },
+          { type: 'clear_ambition', target: '{petitioner}' },
           { type: 'modify_opinion', target: '{petitioner}', value: 20 },
         ],
       },

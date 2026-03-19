@@ -183,7 +183,8 @@ function applyConsequence(
     }
 
     case 'modify_disposition': {
-      const tribeId = consequence.target;
+      const tribeId = resolveConsequenceTarget(consequence.target, boundActors);
+      if (!tribeId) return state;
       const tribe = state.tribes.get(tribeId);
       if (!tribe) return state;
       const delta = consequence.value as number;
@@ -273,6 +274,14 @@ function applyConsequence(
         settlement: {
           ...state.settlement,
           populationCount: Math.max(0, state.settlement.populationCount - 1),
+          constructionQueue: state.settlement.constructionQueue.map(project =>
+            project.assignedWorkerIds.includes(removePerson.id)
+              ? {
+                  ...project,
+                  assignedWorkerIds: project.assignedWorkerIds.filter(id => id !== removePerson.id),
+                }
+              : project,
+          ),
         },
       };
     }
@@ -648,6 +657,14 @@ function applyConsequence(
       return { ...state, lowMoraleTurns: 0 };
     }
 
+    case 'add_to_council': {
+      const resolvedId = resolveConsequenceTarget(consequence.target, boundActors);
+      if (!resolvedId) return state;
+      if (state.councilMemberIds.includes(resolvedId)) return state;    // already a member
+      if (state.councilMemberIds.length >= 7) return state;             // council full
+      return { ...state, councilMemberIds: [...state.councilMemberIds, resolvedId] };
+    }
+
     case 'perform_marriage': {
       const personAId = resolveConsequenceTarget(consequence.target, boundActors);
       const partnerSlotRaw = consequence.params?.partnerSlot as string | undefined;
@@ -684,6 +701,72 @@ function applyConsequence(
         households: updatedHouseholds,
         eventHistory: [...state.eventHistory, result.eventRecord],
       };
+    }
+
+    case 'modify_expedition_resource': {
+      // Adjusts food/goods/gold/medicine carried by the active expedition.
+      const expeditionId = boundActors?.['_expeditionId'];
+      if (!expeditionId) return state;
+      const expeditions = state.expeditions ?? [];
+      const idx = expeditions.findIndex(e => e.id === expeditionId);
+      if (idx === -1) return state;
+      const exp = expeditions[idx]!;
+      const field = consequence.target as 'food' | 'goods' | 'gold' | 'medicine';
+      const delta = consequence.value ?? 0;
+      const fieldMap: Record<string, keyof typeof exp> = {
+        food: 'foodRemaining',
+        goods: 'goodsRemaining',
+        gold: 'goldRemaining',
+        medicine: 'medicineRemaining',
+      };
+      const expField = fieldMap[field];
+      if (!expField) return state;
+      const current = exp[expField] as number;
+      const newExpeditions = [...expeditions];
+      newExpeditions[idx] = { ...exp, [expField]: Math.max(0, current + delta) };
+      return { ...state, expeditions: newExpeditions };
+    }
+
+    case 'expedition_member_returns_early': {
+      // Removes the targeted person from the expedition; they return on foot with role 'gather_food'.
+      const targetId = resolveConsequenceTarget(consequence.target, boundActors);
+      if (!targetId) return state;
+      const expeditions = (state.expeditions ?? []).map(exp => {
+        if (!exp.memberIds.includes(targetId) && exp.leaderId !== targetId) return exp;
+        return {
+          ...exp,
+          memberIds: exp.memberIds.filter(id => id !== targetId),
+          journal: [
+            ...exp.journal,
+            { turn: state.turnNumber, text: `A party member departed early and began the journey back to the settlement alone.` },
+          ],
+        };
+      });
+      const person = state.people.get(targetId);
+      if (!person) return { ...state, expeditions };
+      const newPeople = new Map(state.people);
+      newPeople.set(targetId, { ...person, role: 'gather_food' as const });
+      return { ...state, expeditions, people: newPeople };
+    }
+
+    case 'establish_tribe_relations': {
+      // Marks a tribe as contacted (and optionally opened for diplomacy).
+      const level = (consequence.params?.['level'] as string | undefined) ?? 'contact';
+      // Target may be a raw tribe ID or resolved from a special bound actor slot.
+      const tribeId =
+        consequence.target?.startsWith('{')
+          ? (boundActors?.[consequence.target.slice(1, -1)] ?? null)
+          : consequence.target;
+      if (!tribeId) return state;
+      const tribes = new Map(state.tribes);
+      const tribe = tribes.get(tribeId);
+      if (!tribe) return state;
+      const updated =
+        level === 'diplomacy'
+          ? { ...tribe, contactEstablished: true, diplomacyOpened: true }
+          : { ...tribe, contactEstablished: true };
+      tribes.set(tribeId, updated);
+      return { ...state, tribes };
     }
 
     // Exhaustiveness guard — compile error if a new ConsequenceType is added without a handler.

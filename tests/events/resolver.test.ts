@@ -1032,6 +1032,81 @@ describe("applyEventChoice — 'set_religious_policy' consequence", () => {
   });
 });
 
+// ─── remove_person — construction queue cleanup ─────────────────────────────
+
+describe("applyEventChoice — 'remove_person' consequence strips person from constructionQueue", () => {
+  function makePersonInQueue(id: string): Person {
+    return {
+      id,
+      firstName: 'Builder',
+      familyName: 'Person',
+      age: 28,
+      sex: 'male' as const,
+      householdId: null,
+      role: 'builder',
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+    } as unknown as Person;
+  }
+
+  it('removes the departed person from all construction project worker lists', () => {
+    const builder = makePersonInQueue('builder_1');
+    const state = makeState();
+    const stateWithPerson: GameState = {
+      ...state,
+      people: new Map([['builder_1', builder]]),
+      settlement: {
+        ...state.settlement,
+        constructionQueue: [
+          {
+            id: 'proj_1',
+            defId: 'longhouse',
+            style: null,
+            progressPoints: 50,
+            totalPoints: 200,
+            assignedWorkerIds: ['builder_1', 'other_person'],
+            startedTurn: 1,
+            resourcesSpent: {},
+            ownerHouseholdId: null,
+          },
+        ] as unknown as GameState['settlement']['constructionQueue'],
+      },
+    };
+    const event = makeEvent([{ type: 'remove_person', target: 'builder_1' }]);
+    const result = applyEventChoice(event, 'choice_a', stateWithPerson);
+    const queue = result.state.settlement.constructionQueue;
+    expect(queue[0]!.assignedWorkerIds).not.toContain('builder_1');
+    expect(queue[0]!.assignedWorkerIds).toContain('other_person');
+  });
+
+  it('is a no-op on construction queue when person was not a builder', () => {
+    const nonBuilder = { ...makePersonInQueue('person_x'), role: 'farmer' as const };
+    const state = makeState();
+    const stateWithPerson: GameState = {
+      ...state,
+      people: new Map([['person_x', nonBuilder]]),
+      settlement: {
+        ...state.settlement,
+        constructionQueue: [
+          {
+            id: 'proj_1',
+            defId: 'longhouse',
+            style: null,
+            progressPoints: 50,
+            totalPoints: 200,
+            assignedWorkerIds: ['someone_else'],
+            startedTurn: 1,
+            resourcesSpent: {},
+            ownerHouseholdId: null,
+          },
+        ] as unknown as GameState['settlement']['constructionQueue'],
+      },
+    };
+    const event = makeEvent([{ type: 'remove_person', target: 'person_x' }]);
+    const result = applyEventChoice(event, 'choice_a', stateWithPerson);
+    expect(result.state.settlement.constructionQueue[0]!.assignedWorkerIds).toEqual(['someone_else']);
+  });
+});
+
 // ─── modify_cultural_blend consequence ───────────────────────────────────────
 
 describe("applyEventChoice — 'modify_cultural_blend' consequence", () => {

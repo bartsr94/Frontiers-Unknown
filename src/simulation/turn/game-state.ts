@@ -483,6 +483,8 @@ export interface Expedition {
   goodsRemaining: number;
   goldRemaining: number;
   medicineRemaining: number;
+  /** Set to `true` once the food-low warning event has been queued, so it fires only once. */
+  firedFoodLowWarning: boolean;
   pendingExpeditionEvents: ExpeditionDeferredEvent[];
   journal: ExpeditionJournalEntry[];
 }
