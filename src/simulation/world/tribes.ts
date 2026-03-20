@@ -80,10 +80,15 @@ export function createTribe(config: TribeConfig): ExternalTribe {
     offerings: [...config.offerings],
     stability: config.stability,
     contactEstablished: false,
+    sighted: false,
+    giftedTurns: null,
     lastTradeTurn: null,
     tradeHistoryCount: 0,
     tradeDesires: [...config.tradeDesires],
     tradeOfferings: [...config.tradeOfferings],
+    diplomacyOpened: false,
+    territoryQ: null,
+    territoryR: null,
   };
 }
 

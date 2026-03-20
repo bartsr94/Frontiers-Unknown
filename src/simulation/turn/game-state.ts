@@ -160,10 +160,22 @@ export interface ExternalTribe {
   /** Resources this tribe has available to sell. */
   tradeOfferings: ResourceType[];
   /**
+   * Whether an expedition has entered this tribe's territory hex. The tribe
+   * becomes visible in the Known Clans list as "Sighted" (with ??? name)
+   * but full details are hidden until contactEstablished is set.
+   */
+  sighted: boolean;
+  /**
    * Whether formal diplomatic channels have been opened with this tribe (beyond
    * mere first contact). Set by expedition events or the emissary system.
    */
   diplomacyOpened: boolean;
+  /**
+   * Turn on which the player last offered gifts to this tribe via the emissary
+   * system. Used for the diminishing-returns calculation (same year = ×0.5).
+   * null if no gifts have ever been given.
+   */
+  giftedTurns: number | null;
   /**
    * Axial q-coordinate of the hex this tribe's territory is centred on.
    * null until the tribe appears on the hex map during world gen.
@@ -487,6 +499,57 @@ export interface Expedition {
   firedFoodLowWarning: boolean;
   pendingExpeditionEvents: ExpeditionDeferredEvent[];
   journal: ExpeditionJournalEntry[];
+}
+
+// ─── Emissary / Diplomacy ─────────────────────────────────────────────────────
+
+export type EmissaryMissionType =
+  | 'open_relations'   // Primary: sets diplomacyOpened on success
+  | 'gift_giving'      // Purely improve disposition; no strings attached
+  | 'request_food'     // Ask for a food grant from the tribe
+  | 'request_goods';   // Ask for a goods grant from the tribe
+
+export interface EmissaryGiftBundle {
+  gold: number;
+  goods: number;
+  food: number;
+}
+
+export interface EmissarySessionAction {
+  type:
+    | 'offer_gifts'     // Expends from giftsRemaining; +disposition
+    | 'ask_food'        // Request food from tribe
+    | 'ask_goods'       // Request goods from tribe
+    | 'propose_trade'   // Sets diplomacyOpened; disposition-gated
+    | 'take_leave';     // Concludes the session
+  /** For offer_gifts: actual amounts the player chose to offer. */
+  giftsOffered?: Partial<EmissaryGiftBundle>;
+  /** For ask_food / ask_goods: how much was received. */
+  resourcesReceived?: Partial<ResourceStock>;
+  /** Net disposition change applied by this action. */
+  dispositionDelta: number;
+  /** Narrative line for the session log. */
+  logEntry: string;
+}
+
+export interface EmissaryDispatch {
+  id: string;
+  tribeId: string;
+  /** Person ID of the emissary. Their role is set to 'away' on dispatch. */
+  emissaryId: string;
+  missionType: EmissaryMissionType;
+  dispatchedTurn: number;
+  /** Turn on which the emissary arrives at the tribe. */
+  arrivalTurn: number;
+  /** Turn on which the emissary returns home. Set when the session ends. */
+  returnTurn: number | null;
+  status: 'travelling' | 'at_tribe' | 'returning' | 'completed';
+  /** Resources packed at dispatch (never changes after dispatch). */
+  packedGifts: EmissaryGiftBundle;
+  /** Resources still available to spend during the session. */
+  giftsRemaining: EmissaryGiftBundle;
+  /** Ordered list of actions taken during the diplomacy session. */
+  sessionActions: EmissarySessionAction[];
 }
 
 /**
@@ -1097,4 +1160,16 @@ export interface GameState {
    * restored when the expedition returns or is lost.
    */
   boatsInPort: number;
+
+  // ─── Emissary / Diplomacy ──────────────────────────────────────────────────
+
+  /** All active and recently-completed emissary dispatches. */
+  emissaries: EmissaryDispatch[];
+
+  /**
+   * Emissary IDs whose diplomatic session is pending player resolution
+   * (status === 'at_tribe', session not yet started). Checked by DiplomacyView
+   * to open the EmissaryDiplomacyOverlay during management phase.
+   */
+  pendingDiplomacySessions: string[];
 }

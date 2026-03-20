@@ -22,7 +22,7 @@ import { defaultDebugSettings } from './game-state';
 import { createRNG } from '../../utils/rng';
 import type { SeededRNG } from '../../utils/rng';
 import { createTribe, TRIBE_PRESETS } from '../world/tribes';
-import { generateHexMap } from '../world/hex-map';
+import { generateHexMap, hexKey } from '../world/hex-map';
 import { IMANIAN_TRAITS } from '../genetics/traits';
 import { TRAIT_CONFLICTS } from '../../data/trait-affinities';
 import type { TraitId } from '../personality/traits';
@@ -278,17 +278,43 @@ export function createInitialState(config: GameConfig, settlementName: string, s
     exportedGoodsThisYear: 0,
   };
 
-  // Instantiate tribes from selected presets.
+  // ── Tribe population ───────────────────────────────────────────────────────
+  // Tribes are always auto-populated regardless of GameConfig.startingTribes
+  // (which is kept for future player customisation but currently unused).
+  //
+  // NEARBY_TRIBE_IDS   — 2 friendly neighbours the settlers already know;
+  //                      contactEstablished: true so trade is available day 1.
+  // DISTANT_TRIBE_IDS  — 6 tribes scattered on the map edges, unknown until
+  //                      an expedition enters their territory hex.
+  const NEARBY_TRIBE_IDS: ReadonlySet<string> = new Set([
+    'njaro_matu_riverfolk',  // friendly riverfolk just downstream
+    'storm_coast_sailors',   // peaceful coastal traders
+  ]);
+  const DISTANT_TRIBE_IDS: readonly string[] = [
+    'black_water_clan',
+    'candibula_host',
+    'red_moon_raiders',
+    'emras_daughters',
+    'cairn_valley_smiths',
+    'deep_canopy_sisters',
+  ];
+  const ALL_MAP_TRIBE_IDS: readonly string[] = [
+    ...NEARBY_TRIBE_IDS,
+    ...DISTANT_TRIBE_IDS,
+  ];
+
+  // Instantiate tribes from the curated lists above.
   const tribes = new Map<string, ReturnType<typeof createTribe>>();
-  for (const presetId of config.startingTribes) {
+  for (const presetId of ALL_MAP_TRIBE_IDS) {
     const preset = TRIBE_PRESETS[presetId];
     if (preset) {
       const tribe = createTribe(preset);
-      // Starting tribes are known contacts — trade is available immediately.
-      // Hex territory positions are assigned after map generation below.
+      const isNearby = NEARBY_TRIBE_IDS.has(presetId);
       tribes.set(tribe.id, {
         ...tribe,
-        contactEstablished: true,
+        contactEstablished: isNearby,
+        sighted: isNearby,
+        giftedTurns: null,
         diplomacyOpened: false,
         territoryQ: null,
         territoryR: null,
@@ -331,10 +357,30 @@ export function createInitialState(config: GameConfig, settlementName: string, s
     massDesertionWarningFired: false,
     lastSettlementMorale: 0,
     lastPayrollShortfall: false,
-    hexMap: generateHexMap(config, rng),
+    hexMap: generateHexMap({ ...config, startingTribes: [...ALL_MAP_TRIBE_IDS] }, rng),
     expeditions: [],
     boatsInPort: 1,
+    emissaries: [],
+    pendingDiplomacySessions: [],
   };
+
+  // Backfill tribe.territoryQ/R from the generated hex map.
+  // generateHexMap seeds tribe_territory content onto hex cells; here we reverse-scan
+  // to copy those coordinates back onto the tribe entries (Option B from design doc).
+  for (const cell of initialGameState.hexMap.cells.values()) {
+    for (const content of cell.contents) {
+      if (content.type === 'tribe_territory' && content.tribeId) {
+        const existing = initialGameState.tribes.get(content.tribeId);
+        if (existing && existing.territoryQ === null) {
+          initialGameState.tribes.set(content.tribeId, {
+            ...existing,
+            territoryQ: cell.q,
+            territoryR: cell.r,
+          });
+        }
+      }
+    }
+  }
 
   // ── Seed opinions and ambitions at game start ──────────────────────────────
   // Both systems normally run inside processDawn, but we initialize them

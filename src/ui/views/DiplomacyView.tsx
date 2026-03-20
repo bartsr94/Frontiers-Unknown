@@ -17,6 +17,8 @@ import type {} from '../../simulation/population/person';
 import DispositionBar from '../components/DispositionBar';
 import HexGrid from '../components/HexGrid';
 import ExpeditionDispatchOverlay from '../overlays/ExpeditionDispatchOverlay';
+import EmissaryDispatchOverlay from '../overlays/EmissaryDispatchOverlay';
+import EmissaryDiplomacyOverlay from '../overlays/EmissaryDiplomacyOverlay';
 
 // ─── Display Metadata ─────────────────────────────────────────────────────────
 
@@ -87,6 +89,25 @@ interface RowProps {
 
 function TribeListRow({ tribe, isSelected, onClick }: RowProps) {
   const meta = ETHNIC_META[tribe.ethnicGroup] ?? FALLBACK_META;
+  if (!tribe.contactEstablished && tribe.sighted) {
+    return (
+      <button
+        onClick={onClick}
+        className={`w-full text-left px-2 py-2 border-l-2 transition-colors opacity-60 ${
+          isSelected
+            ? 'bg-stone-700/80 border-stone-500'
+            : 'border-transparent hover:bg-stone-800/60'
+        }`}
+      >
+        <p className="text-stone-400 italic text-xs font-medium leading-tight">??? — Sighted</p>
+        <div className="mt-1">
+          <span className="text-[9px] px-1 py-0.5 rounded bg-stone-700 text-stone-400 font-semibold leading-none">
+            SIGHTED
+          </span>
+        </div>
+      </button>
+    );
+  }
   return (
     <button
       onClick={onClick}
@@ -112,9 +133,13 @@ function TribeListRow({ tribe, isSelected, onClick }: RowProps) {
 interface CardProps {
   tribe: ExternalTribe;
   onClose: () => void;
+  canSendEmissary: boolean;
+  canSendEmissaryTitle: string;
+  currentPhase: string;
+  onSendEmissary: (missionType?: 'gift_giving' | 'open_relations') => void;
 }
 
-function TribeInfoCard({ tribe, onClose }: CardProps) {
+function TribeInfoCard({ tribe, onClose, canSendEmissary, canSendEmissaryTitle, currentPhase, onSendEmissary }: CardProps) {
   const meta        = ETHNIC_META[tribe.ethnicGroup] ?? FALLBACK_META;
   const stabilityPct = Math.round(tribe.stability * 100);
   const stabLabel   = stabilityPct >= 80 ? 'Stable' : stabilityPct >= 50 ? 'Uncertain' : 'Fragile';
@@ -204,20 +229,63 @@ function TribeInfoCard({ tribe, onClose }: CardProps) {
           )}
         </div>
 
-        {/* Actions — disabled Phase 1 */}
-        <div className="px-3 py-2 space-y-1.5">
-          {(['Send Emissary', 'Offer Gift', 'Seek Alliance'] as const).map(label => (
+        {/* Sighted-only card: minimal info */}
+        {!tribe.contactEstablished && tribe.sighted && (
+          <div className="px-3 py-2">
+            <p className="text-stone-400 text-xs italic leading-snug">
+              Location noted. Send an emissary to make contact.
+            </p>
+          </div>
+        )}
+
+        {/* Actions */}
+        {tribe.contactEstablished && (
+          <div className="px-3 py-2 space-y-1.5">
             <button
-              key={label}
-              disabled
-              title="Requires the Emissary system — coming soon"
-              className="w-full text-left px-2 py-1.5 rounded bg-stone-800 text-stone-600 text-xs cursor-not-allowed flex items-center justify-between"
+              onClick={() => onSendEmissary()}
+              disabled={!canSendEmissary}
+              title={canSendEmissaryTitle}
+              className={`w-full text-left px-2 py-1.5 rounded text-xs flex items-center justify-between transition-colors ${
+                canSendEmissary
+                  ? 'bg-amber-800 hover:bg-amber-700 text-amber-100'
+                  : 'bg-stone-800 text-stone-600 cursor-not-allowed'
+              }`}
             >
-              <span>{label}</span>
-              <span className="text-[10px] text-stone-700">▶</span>
+              <span>Send Emissary</span>
+              <span className="text-[10px] opacity-70">▶</span>
             </button>
-          ))}
-        </div>
+            <button
+              onClick={() => onSendEmissary('gift_giving')}
+              disabled={currentPhase !== 'management'}
+              title={currentPhase !== 'management' ? 'Only during management phase' : 'Send gifts via emissary'}
+              className={`w-full text-left px-2 py-1.5 rounded text-xs flex items-center justify-between transition-colors ${
+                currentPhase === 'management'
+                  ? 'bg-stone-700 hover:bg-stone-600 text-stone-200'
+                  : 'bg-stone-800 text-stone-600 cursor-not-allowed'
+              }`}
+            >
+              <span>Offer Gift</span>
+              <span className="text-[10px] opacity-70">▶</span>
+            </button>
+            <button
+              onClick={() => onSendEmissary('open_relations')}
+              disabled={tribe.diplomacyOpened || tribe.disposition < 20 || currentPhase !== 'management'}
+              title={
+                tribe.diplomacyOpened ? 'Trade already open'
+                : tribe.disposition < 20 ? 'Disposition too low (need ≥20)'
+                : 'Propose a trade relationship'
+              }
+              className={`w-full text-left px-2 py-1.5 rounded text-xs flex items-center justify-between transition-colors ${
+                !tribe.diplomacyOpened && tribe.disposition >= 20 && currentPhase === 'management'
+                  ? 'bg-stone-700 hover:bg-stone-600 text-stone-200'
+                  : 'bg-stone-800 text-stone-600 cursor-not-allowed'
+              }`}
+            >
+              <span>{tribe.diplomacyOpened ? 'Trade Open ✓' : 'Seek Alliance'}</span>
+              <span className="text-[10px] opacity-70">▶</span>
+            </button>
+          </div>
+        )}
 
       </div>
     </div>
@@ -396,6 +464,11 @@ export default function DiplomacyView() {
   const [selectedId, setSelectedId]                       = useState<string | null>(null);
   const [selectedExpeditionId, setSelectedExpeditionId]   = useState<string | null>(null);
   const [showDispatch, setShowDispatch]                   = useState(false);
+  const [showEmissaryDispatch, setShowEmissaryDispatch]   = useState(false);
+  const [emissaryDispatchTribeId, setEmissaryDispatchTribeId] = useState<string | undefined>(undefined);
+  const [emissaryDispatchMission, setEmissaryDispatchMission] = useState<'gift_giving' | 'open_relations' | undefined>(undefined);
+  const [showDiplomacySession, setShowDiplomacySession]   = useState(false);
+  const [activeSessionEmissaryId, setActiveSessionEmissaryId] = useState<string | null>(null);
   const [dispatchTargetQ, setDispatchTargetQ] = useState<number | undefined>(undefined);
   const [dispatchTargetR, setDispatchTargetR] = useState<number | undefined>(undefined);
   const containerWidthRef  = useRef(0);
@@ -506,12 +579,41 @@ export default function DiplomacyView() {
   if (!gameState) return null;
 
   const contacts = [...gameState.tribes.values()]
-    .filter(t => t.contactEstablished)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .filter(t => t.contactEstablished || t.sighted)
+    .sort((a, b) => {
+      if (a.contactEstablished !== b.contactEstablished) return a.contactEstablished ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
 
   const expeditions = gameState.expeditions ?? [];
   const boatsInPort = gameState.boatsInPort ?? 1;
   const canDispatch = currentPhase === 'management';
+
+  const pendingDiplomacySessions = gameState.pendingDiplomacySessions ?? [];
+  const emissaries = gameState.emissaries ?? [];
+
+  function openEmissaryDispatch(tribeId: string, mission?: 'gift_giving' | 'open_relations') {
+    setEmissaryDispatchTribeId(tribeId);
+    setEmissaryDispatchMission(mission);
+    setShowEmissaryDispatch(true);
+    setSelectedId(null);
+  }
+
+  function openFirstPendingSession() {
+    if (pendingDiplomacySessions.length === 0) return;
+    setActiveSessionEmissaryId(pendingDiplomacySessions[0]);
+    setShowDiplomacySession(true);
+  }
+
+  function getCanSendEmissary(tribe: ExternalTribe): [boolean, string] {
+    if (!tribe.contactEstablished) return [false, 'Must establish contact first'];
+    if (currentPhase !== 'management') return [false, 'Only during management phase'];
+    const active = emissaries.find(
+      e => e.tribeId === tribe.id && (e.status === 'travelling' || e.status === 'at_tribe'),
+    );
+    if (active) return [false, 'An emissary is already with this clan'];
+    return [true, 'Send a diplomat to this clan'];
+  }
 
   function handleHexClick(q: number, r: number) {
     setSelectedExpeditionId(null);
@@ -540,7 +642,15 @@ export default function DiplomacyView() {
         <div className="px-3 py-2 border-b border-stone-700 shrink-0">
           <h2 className="text-amber-300 text-xs font-semibold uppercase tracking-wide">Known Clans</h2>
           {contacts.length > 0 && (
-            <p className="text-stone-500 text-[11px] mt-0.5">{contacts.length} known</p>
+            <p className="text-stone-500 text-[11px] mt-0.5">{contacts.filter(t => t.contactEstablished).length} known</p>
+          )}
+          {pendingDiplomacySessions.length > 0 && (
+            <button
+              onClick={openFirstPendingSession}
+              className="text-amber-400 text-[11px] mt-0.5 font-semibold animate-pulse text-left w-full hover:text-amber-300 transition-colors"
+            >
+              {pendingDiplomacySessions.length} session{pendingDiplomacySessions.length > 1 ? 's' : ''} awaiting you
+            </button>
           )}
         </div>
 
@@ -561,8 +671,20 @@ export default function DiplomacyView() {
           )}
         </div>
 
-        {/* Send Expedition button */}
-        <div className="px-3 py-2 border-t border-stone-700 shrink-0">
+        {/* Buttons */}
+        <div className="px-3 py-2 border-t border-stone-700 shrink-0 space-y-1.5">
+          <button
+            onClick={() => { setEmissaryDispatchTribeId(undefined); setEmissaryDispatchMission(undefined); setShowEmissaryDispatch(true); }}
+            disabled={!canDispatch || contacts.filter(t => t.contactEstablished).length === 0}
+            className={`w-full px-2 py-1.5 rounded text-xs font-semibold transition-colors ${
+              canDispatch && contacts.some(t => t.contactEstablished)
+                ? 'bg-amber-800 hover:bg-amber-700 text-amber-100'
+                : 'bg-stone-800 text-stone-600 cursor-not-allowed'
+            }`}
+            title={canDispatch ? 'Send a diplomat to a known clan' : 'Only available during management phase'}
+          >
+            ✦ Send Emissary
+          </button>
           <button
             onClick={() => { setDispatchTargetQ(undefined); setDispatchTargetR(undefined); setShowDispatch(true); }}
             disabled={!canDispatch}
@@ -576,11 +698,11 @@ export default function DiplomacyView() {
             ⚑ Send Expedition
           </button>
           {expeditions.length > 0 && (
-            <p className="text-stone-500 text-[10px] mt-1 text-center">
+            <p className="text-stone-500 text-[10px] text-center">
               {expeditions.filter(e => e.status === 'travelling' || e.status === 'returning').length} expedition{expeditions.length !== 1 ? 's' : ''} out
             </p>
           )}
-          <p className="text-stone-600 text-[10px] mt-0.5 text-center">Boats in port: {boatsInPort}</p>
+          <p className="text-stone-600 text-[10px] text-center">Boats in port: {boatsInPort}</p>
         </div>
 
       </div>
@@ -642,12 +764,19 @@ export default function DiplomacyView() {
         )}
 
         {/* Info card — pinned to container corner, above the map */}
-        {selectedTribe && (
-          <TribeInfoCard
-            tribe={selectedTribe}
-            onClose={() => setSelectedId(null)}
-          />
-        )}
+        {selectedTribe && (() => {
+          const [canSend, canSendTitle] = getCanSendEmissary(selectedTribe);
+          return (
+            <TribeInfoCard
+              tribe={selectedTribe}
+              onClose={() => setSelectedId(null)}
+              canSendEmissary={canSend}
+              canSendEmissaryTitle={canSendTitle}
+              currentPhase={currentPhase}
+              onSendEmissary={(mission) => openEmissaryDispatch(selectedTribe.id, mission)}
+            />
+          );
+        })()}
 
         {/* Expedition status panel — pinned top-right */}
         {selectedExpedition && (
@@ -671,6 +800,34 @@ export default function DiplomacyView() {
           initialDestQ={dispatchTargetQ}
           initialDestR={dispatchTargetR}
           onClose={() => setShowDispatch(false)}
+        />
+      )}
+
+      {/* Emissary dispatch overlay */}
+      {showEmissaryDispatch && (
+        <EmissaryDispatchOverlay
+          initialTribeId={emissaryDispatchTribeId}
+          initialMission={emissaryDispatchMission}
+          onClose={() => setShowEmissaryDispatch(false)}
+        />
+      )}
+
+      {/* Emissary diplomacy session overlay */}
+      {showDiplomacySession && activeSessionEmissaryId && (
+        <EmissaryDiplomacyOverlay
+          emissaryId={activeSessionEmissaryId}
+          onClose={() => {
+            setShowDiplomacySession(false);
+            setActiveSessionEmissaryId(null);
+            // Auto-open the next pending session if any remain.
+            const remaining = (gameState.pendingDiplomacySessions ?? []).filter(
+              id => id !== activeSessionEmissaryId,
+            );
+            if (remaining.length > 0) {
+              setActiveSessionEmissaryId(remaining[0]);
+              setShowDiplomacySession(true);
+            }
+          }}
         />
       )}
 

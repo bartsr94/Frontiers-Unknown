@@ -52,6 +52,8 @@ import type {
   ReligiousPolicy,
   ActivityLogEntry,
   GraveyardEntry,
+  EmissarySessionAction,
+  EmissaryDispatch,
 } from '../simulation/turn/game-state';
 import type { Person, WorkRole } from '../simulation/population/person';
 import { SAUROMATIAN_CULTURE_IDS } from '../simulation/population/culture';
@@ -59,8 +61,15 @@ import type { SkillCheckResult } from '../simulation/events/engine';
 import type { BoundEvent } from '../simulation/events/engine';
 import { resolveActors } from '../simulation/events/actor-resolver';
 import type { DebugSettings } from '../simulation/turn/game-state';
-import { createExpedition, processExpeditions } from '../simulation/world/expeditions';
+import { createExpedition, processExpeditions, discoverTribesFromExpedition } from '../simulation/world/expeditions';
 import type { DispatchExpeditionParams } from '../simulation/world/expeditions';
+import {
+  createEmissaryDispatch,
+  emissaryTravelTime,
+  resolveEmissarySession as resolveEmissarySessionLogic,
+} from '../simulation/world/emissaries';
+import type { DispatchEmissaryParams } from '../simulation/world/emissaries';
+export type { DispatchEmissaryParams };
 
 // Re-export economy types consumed by UI components.
 export type { TradeOffer };
@@ -175,6 +184,17 @@ export interface GameStore {
    * No-op if the expedition is already completed/lost.
    */
   recallExpedition: (expeditionId: string) => void;
+  // ── Emissaries ─────────────────────────────────────────────────────────
+  /**
+   * Dispatches an emissary to a known tribe.
+   * Deducts packed gifts from settlement resources, sets emissary role to 'away'.
+   */
+  dispatchEmissary: (params: DispatchEmissaryParams) => void;
+  /**
+   * Resolves a completed diplomacy session:
+   * applies disposition changes, grants resources, sets diplomacyOpened, sends emissary home.
+   */
+  resolveEmissarySession: (emissaryId: string, actions: EmissarySessionAction[]) => void;
   // ── Derived / computed ────────────────────────────────────────────────────
   getPersonById: (id: string) => Person | undefined;
   getLivingPeople: () => Person[];
@@ -562,10 +582,85 @@ export const useGameStore = create<GameStore>((set, get) => {
         boatsInPort: (gameState.boatsInPort ?? 1) + boatsReturned,
       };
 
-      // Draw 1–3 events from the eligible pool.
-      const eligible  = filterEligibleEvents(ALL_EVENTS, stateAfterDrain);
+      // ── Tribe sighting: mark tribes whose territory was entered this turn ─
+      // discoverTribesFromExpedition returns new tribe IDs from this tick's
+      // expedition movement; we set sighted=true immediately so the tribe
+      // appears in Known Clans on this same turn.
+      const newlySightedIds = new Set<string>();
+      for (const exp of expeditionResult.expeditions) {
+        const discovered = discoverTribesFromExpedition(exp, expeditionResult.hexMap);
+        for (const id of discovered) newlySightedIds.add(id);
+      }
+      const tribesAfterSighting = new Map(stateAfterDrain.tribes);
+      for (const tribeId of newlySightedIds) {
+        const t = tribesAfterSighting.get(tribeId);
+        if (t && !t.sighted) {
+          tribesAfterSighting.set(tribeId, { ...t, sighted: true });
+        }
+      }
+
+      // ── Emissary dawn processing ──────────────────────────────────────────
+      // Advance travelling → at_tribe when arrivalTurn reached,
+      // and returning → completed when returnTurn reached.
+      const currentTurnNum = postDawnState.turnNumber;
+      let updatedEmissaries = [...(stateAfterDrain.emissaries ?? [])];
+      let updatedPendingSessions = [...(stateAfterDrain.pendingDiplomacySessions ?? [])];
+      const restoredPeopleForEmissaries = new Map(stateAfterDrain.people);
+
+      updatedEmissaries = updatedEmissaries.map(em => {
+        if (em.status === 'travelling' && em.arrivalTurn <= currentTurnNum) {
+          // Emissary has arrived — queue a diplomacy session.
+          if (!updatedPendingSessions.includes(em.id)) {
+            updatedPendingSessions = [...updatedPendingSessions, em.id];
+          }
+          return { ...em, status: 'at_tribe' as const };
+        }
+        if (em.status === 'returning' && em.returnTurn !== null && em.returnTurn <= currentTurnNum) {
+          // Emissary returned home — restore their role.
+          const person = restoredPeopleForEmissaries.get(em.emissaryId);
+          if (person && person.role === 'away') {
+            restoredPeopleForEmissaries.set(em.emissaryId, { ...person, role: 'gather_food' });
+          }
+          // Tag leftover gifts so the resource-consolidation loop below can credit them.
+          (em as any)._returnedGifts = em.giftsRemaining;
+          return { ...em, status: 'completed' as const, giftsRemaining: { gold: 0, goods: 0, food: 0 } };
+        }
+        return em;
+      });
+
+      // Consolidate returned gift resources into settlement.
+      let settlementResourcesAfterReturns = { ...stateAfterDrain.settlement.resources };
+      for (const em of updatedEmissaries) {
+        if (em.status === 'completed' && (em as any)._returnedGifts) {
+          const rg = (em as any)._returnedGifts as { gold: number; goods: number; food: number };
+          settlementResourcesAfterReturns = {
+            ...settlementResourcesAfterReturns,
+            gold:  (settlementResourcesAfterReturns.gold  ?? 0) + rg.gold,
+            goods: (settlementResourcesAfterReturns.goods ?? 0) + rg.goods,
+            food:  (settlementResourcesAfterReturns.food  ?? 0) + rg.food,
+          };
+        }
+      }
+
+      // Prune completed emissaries older than 16 turns (4 in-game years).
+      updatedEmissaries = updatedEmissaries.filter(
+        em => em.status !== 'completed' || (currentTurnNum - em.dispatchedTurn) < 16,
+      );
+
+      const stateAfterDrainFinal: GameState = {
+        ...stateAfterDrain,
+        tribes: tribesAfterSighting,
+        people: restoredPeopleForEmissaries,
+        settlement: {
+          ...stateAfterDrain.settlement,
+          resources: settlementResourcesAfterReturns,
+        },
+        emissaries: updatedEmissaries,
+        pendingDiplomacySessions: updatedPendingSessions,
+      };
+      const eligible  = filterEligibleEvents(ALL_EVENTS, stateAfterDrainFinal);
       const drawCount = 1 + rng.nextInt(0, 2);
-      const hasTradingPost = hasBuilding(stateAfterDrain.settlement.buildings, 'trading_post');
+      const hasTradingPost = hasBuilding(stateAfterDrainFinal.settlement.buildings, 'trading_post');
       const weightBoosts: Record<string, number> = hasTradingPost ? { 'eco_passing_merchant': 2 } : {};
       // Apply per-category boosts derived from the settlement's trait composition
       if (dawnResult.traitCategoryBoosts) {
@@ -583,7 +678,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         if (!event.actorRequirements || event.actorRequirements.length === 0) {
           return { ...event, boundActors: {} } as BoundEvent;
         }
-        const actors = resolveActors(event.actorRequirements, stateAfterDrain, rng);
+        const actors = resolveActors(event.actorRequirements, stateAfterDrainFinal, rng);
         return { ...event, boundActors: actors ?? {} } as BoundEvent;
       });
 
@@ -618,7 +713,7 @@ export const useGameStore = create<GameStore>((set, get) => {
           // Bind the spokesperson slot to the highest-leadership faction member.
           const actorSlots = ev.actorRequirements ?? [];
           if (actorSlots.length === 0) return { ...ev, boundActors: {} } as BoundEvent;
-          const actors = resolveActors(actorSlots, stateAfterDrain, rng);
+          const actors = resolveActors(actorSlots, stateAfterDrainFinal, rng);
           return { ...ev, boundActors: actors ?? {} } as BoundEvent;
         })
         .filter((e): e is BoundEvent => e !== null);
@@ -628,7 +723,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
       // Individual desertion — fire once when lowHappinessTurns first hits 3.
       for (const candidateId of dawnResult.desertionCandidateIds) {
-        const candidate = stateAfterDrain.people.get(candidateId);
+        const candidate = stateAfterDrainFinal.people.get(candidateId);
         if (!candidate) continue;
         if (candidate.lowHappinessTurns !== 3) continue; // only on the turn they cross the threshold
         const ev = getEventById('hap_settler_considers_leaving');
@@ -647,7 +742,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         const ev = getEventById('hap_desertion_imminent');
         if (ev) {
           const actorSlots = ev.actorRequirements ?? [];
-          const actors = actorSlots.length > 0 ? resolveActors(actorSlots, stateAfterDrain, rng) : {};
+          const actors = actorSlots.length > 0 ? resolveActors(actorSlots, stateAfterDrainFinal, rng) : {};
           happinessBoundEvents.push({ ...ev, boundActors: actors ?? {} } as BoundEvent);
         }
       }
@@ -677,7 +772,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       // Inject rel_child_outside_marriage for unwed Sauromatian mothers who just gave birth.
       const childBirthBoundEvents: BoundEvent[] = (dawnResult.newBirths ?? [])
         .filter(birth => {
-          const mother = stateAfterDrain.people.get(birth.motherId);
+          const mother = stateAfterDrainFinal.people.get(birth.motherId);
           return (
             mother !== undefined &&
             mother.spouseIds.length === 0 &&
@@ -722,8 +817,8 @@ export const useGameStore = create<GameStore>((set, get) => {
       const showCreoleNotification =
         dawnResult.creoleEmerged && !gameState.flags.creoleEmergedNotified;
       const stateWithFlags: GameState = showCreoleNotification
-        ? { ...stateAfterDrain, flags: { ...stateAfterDrain.flags, creoleEmergedNotified: true } }
-        : stateAfterDrain;
+        ? { ...stateAfterDrainFinal, flags: { ...stateAfterDrainFinal.flags, creoleEmergedNotified: true } }
+        : stateAfterDrainFinal;
 
       _pendingProduction = dawnResult.production;
       _pendingConsumption = dawnResult.consumption;
@@ -1485,6 +1580,100 @@ export const useGameStore = create<GameStore>((set, get) => {
           e.id === expeditionId && e.status === 'travelling'
             ? { ...e, status: 'returning' as const }
             : e
+        ),
+      };
+      set({ gameState: updated });
+      localStorage.setItem(SAVE_KEY, serializeGameState(updated));
+    },
+
+    dispatchEmissary(params) {
+      const { gameState } = get();
+      if (!gameState) return;
+      const tribe = gameState.tribes.get(params.tribeId);
+      if (!tribe) return;
+      const emissaryPerson = gameState.people.get(params.emissaryId);
+      const bargaining = emissaryPerson?.skills?.bargaining ?? 0;
+      const dispatch = createEmissaryDispatch({
+        ...params,
+        travelOneWay: emissaryTravelTime(tribe, bargaining),
+        dispatchedTurn: gameState.turnNumber,
+      });
+      const newResources = { ...gameState.settlement.resources };
+      newResources.gold  = Math.max(0, (newResources.gold  ?? 0) - (params.packedGifts.gold  ?? 0));
+      newResources.goods = Math.max(0, (newResources.goods ?? 0) - (params.packedGifts.goods ?? 0));
+      newResources.food  = Math.max(0, (newResources.food  ?? 0) - (params.packedGifts.food  ?? 0));
+      const newPeople = new Map(gameState.people);
+      const p = newPeople.get(params.emissaryId);
+      if (p) newPeople.set(params.emissaryId, { ...p, role: 'away' });
+      const updated: GameState = {
+        ...gameState,
+        settlement: { ...gameState.settlement, resources: newResources },
+        people: newPeople,
+        emissaries: [...(gameState.emissaries ?? []), dispatch],
+      };
+      set({ gameState: updated });
+      localStorage.setItem(SAVE_KEY, serializeGameState(updated));
+    },
+
+    resolveEmissarySession(emissaryId, actions) {
+      const { gameState } = get();
+      if (!gameState) return;
+      const emissary = (gameState.emissaries ?? []).find(e => e.id === emissaryId);
+      if (!emissary || emissary.status !== 'at_tribe') return;
+      const tribe = gameState.tribes.get(emissary.tribeId);
+      if (!tribe) return;
+      const emissaryPerson = gameState.people.get(emissary.emissaryId);
+      const bargaining = emissaryPerson?.skills?.bargaining ?? 0;
+
+      // Attach the player's chosen actions to the emissary, then resolve.
+      const emissaryWithActions = { ...emissary, sessionActions: actions };
+      const result = resolveEmissarySessionLogic(
+        emissaryWithActions,
+        tribe,
+        gameState.turnNumber,
+        bargaining,
+      );
+
+      // Compute gift consumption: tally offered_gifts actions.
+      const giftsSpent = { gold: 0, goods: 0, food: 0 };
+      for (const action of actions) {
+        if (action.type === 'offer_gifts') {
+          giftsSpent.gold  += action.giftsOffered?.gold  ?? 0;
+          giftsSpent.goods += action.giftsOffered?.goods ?? 0;
+          giftsSpent.food  += action.giftsOffered?.food  ?? 0;
+        }
+      }
+      const remaining = {
+        gold:  Math.max(0, (emissary.giftsRemaining.gold  ?? 0) - giftsSpent.gold),
+        goods: Math.max(0, (emissary.giftsRemaining.goods ?? 0) - giftsSpent.goods),
+        food:  Math.max(0, (emissary.giftsRemaining.food  ?? 0) - giftsSpent.food),
+      };
+
+      // Update emissary state: transition to returning.
+      const updatedEmissary: EmissaryDispatch = {
+        ...emissaryWithActions,
+        status: 'returning',
+        returnTurn: gameState.turnNumber + result.returnTravelTurns,
+        giftsRemaining: remaining,
+      };
+
+      const newTribes = new Map(gameState.tribes);
+      newTribes.set(tribe.id, result.updatedTribe);
+
+      const newResources = { ...gameState.settlement.resources };
+      if (result.resourcesGained.food)  newResources.food  = (newResources.food  ?? 0) + result.resourcesGained.food;
+      if (result.resourcesGained.goods) newResources.goods = (newResources.goods ?? 0) + result.resourcesGained.goods;
+      if (result.resourcesGained.gold)  newResources.gold  = (newResources.gold  ?? 0) + result.resourcesGained.gold;
+
+      const updated: GameState = {
+        ...gameState,
+        tribes: newTribes,
+        settlement: { ...gameState.settlement, resources: newResources },
+        emissaries: (gameState.emissaries ?? []).map(e =>
+          e.id === emissaryId ? updatedEmissary : e,
+        ),
+        pendingDiplomacySessions: (gameState.pendingDiplomacySessions ?? []).filter(
+          id => id !== emissaryId,
         ),
       };
       set({ gameState: updated });

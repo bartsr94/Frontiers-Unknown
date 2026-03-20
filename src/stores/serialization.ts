@@ -140,6 +140,9 @@ export function deserializeGameState(json: string): GameState {
         diplomacyOpened: (t as any).diplomacyOpened ?? false,
         territoryQ:      (t as any).territoryQ      ?? null,
         territoryR:      (t as any).territoryR      ?? null,
+        // Diplomacy system fields — not present in pre-diplomacy saves.
+        sighted:         (t as any).sighted         ?? false,
+        giftedTurns:     (t as any).giftedTurns     ?? null,
       };
       return [id, tribeWithFallbacks] as [string, typeof tribeWithFallbacks];
     }),
@@ -236,5 +239,8 @@ export function deserializeGameState(json: string): GameState {
     })(),
     expeditions:  (s as unknown as Partial<GameState>).expeditions  ?? [],
     boatsInPort:  (s as unknown as Partial<GameState>).boatsInPort  ?? 1,
+    // Emissary / diplomacy system fields — not present in pre-diplomacy saves.
+    emissaries:                (s as unknown as Partial<GameState>).emissaries                ?? [],
+    pendingDiplomacySessions:  (s as unknown as Partial<GameState>).pendingDiplomacySessions  ?? [],
   };
 }
