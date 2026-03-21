@@ -7,7 +7,20 @@
 import { describe, it, expect } from 'vitest';
 import { createTribe, updateTribeDisposition, TRIBE_PRESETS } from '../../src/simulation/world/tribes';
 import type { TribeConfig } from '../../src/simulation/world/tribes';
+import type { EthnicGroup } from '../../src/simulation/population/person';
 import { createRNG } from '../../src/utils/rng';
+
+// ─── Color-family lookup (mirrors SAUROMATIAN_TRIBES.md §2) ──────────────────
+
+const ETHNIC_COLOR_PREFIXES: Record<EthnicGroup, string[]> = {
+  kiswani_riverfolk:   ['Black', 'Blue', 'Dark'],
+  kiswani_bayuk:       ['Green', 'Jade', 'Moss'],
+  kiswani_haisla:      ['Grey', 'Silver', 'Salt'],
+  hanjoda_stormcaller: ['Ash', 'White', 'Pale'],
+  hanjoda_bloodmoon:   ['Red', 'Ochre', 'Crimson'],
+  hanjoda_talon:       ['Amber', 'Gold', 'Gilt'],
+  hanjoda_emrasi:      ['Bronze', 'Brown', 'Copper'],
+};
 
 // ─── Minimal TribeConfig ──────────────────────────────────────────────────────
 
@@ -143,9 +156,9 @@ describe('TRIBE_PRESETS', () => {
   });
 
   it('includes expected named presets', () => {
-    expect(TRIBE_PRESETS).toHaveProperty('njaro_matu_riverfolk');
-    expect(TRIBE_PRESETS).toHaveProperty('candibula_host');
-    expect(TRIBE_PRESETS).toHaveProperty('red_moon_raiders');
+    expect(TRIBE_PRESETS).toHaveProperty('bluetide');
+    expect(TRIBE_PRESETS).toHaveProperty('ashmantle');
+    expect(TRIBE_PRESETS).toHaveProperty('redmoon');
   });
 
   it('at least two presets per Sauromatian ethnic group', () => {
@@ -154,6 +167,187 @@ describe('TRIBE_PRESETS', () => {
     for (const group of groups) {
       const count = Object.values(TRIBE_PRESETS).filter(c => c.ethnicGroup === group).length;
       expect(count).toBeGreaterThanOrEqual(2);
+    }
+  });
+});
+
+// ─── Naming convention ────────────────────────────────────────────────────────
+
+describe('TRIBE_PRESETS — naming convention', () => {
+  it('every name is a single closed compound word (no spaces or hyphens)', () => {
+    for (const config of Object.values(TRIBE_PRESETS)) {
+      expect(config.name).not.toMatch(/[\s-]/);
+    }
+  });
+
+  it('every name starts with an uppercase letter (PascalCase)', () => {
+    for (const config of Object.values(TRIBE_PRESETS)) {
+      expect(config.name[0]).toMatch(/[A-Z]/);
+    }
+  });
+
+  it('every id is the lowercase form of the name', () => {
+    for (const config of Object.values(TRIBE_PRESETS)) {
+      expect(config.id).toBe(config.name.toLowerCase());
+    }
+  });
+
+  it('no two presets share the same display name', () => {
+    const names = Object.values(TRIBE_PRESETS).map(c => c.name);
+    const unique = new Set(names);
+    expect(unique.size).toBe(names.length);
+  });
+});
+
+// ─── Color-family enforcement ─────────────────────────────────────────────────
+
+describe('TRIBE_PRESETS — ethnic color families', () => {
+  it('every preset name begins with a color from its ethnic group palette', () => {
+    for (const config of Object.values(TRIBE_PRESETS)) {
+      const allowed = ETHNIC_COLOR_PREFIXES[config.ethnicGroup];
+      const startsWithValidColor = allowed.some(color =>
+        config.name.startsWith(color),
+      );
+      expect(
+        startsWithValidColor,
+        `"${config.name}" (${config.ethnicGroup}) must start with one of: ${allowed.join(', ')}`,
+      ).toBe(true);
+    }
+  });
+
+  it('kiswani_riverfolk tribes use Black / Blue / Dark prefix', () => {
+    const tribes = Object.values(TRIBE_PRESETS).filter(c => c.ethnicGroup === 'kiswani_riverfolk');
+    for (const t of tribes) {
+      expect(['Black', 'Blue', 'Dark'].some(p => t.name.startsWith(p))).toBe(true);
+    }
+  });
+
+  it('kiswani_bayuk tribes use Green / Jade / Moss prefix', () => {
+    const tribes = Object.values(TRIBE_PRESETS).filter(c => c.ethnicGroup === 'kiswani_bayuk');
+    for (const t of tribes) {
+      expect(['Green', 'Jade', 'Moss'].some(p => t.name.startsWith(p))).toBe(true);
+    }
+  });
+
+  it('kiswani_haisla tribes use Grey / Silver / Salt prefix', () => {
+    const tribes = Object.values(TRIBE_PRESETS).filter(c => c.ethnicGroup === 'kiswani_haisla');
+    for (const t of tribes) {
+      expect(['Grey', 'Silver', 'Salt'].some(p => t.name.startsWith(p))).toBe(true);
+    }
+  });
+
+  it('hanjoda_stormcaller tribes use Ash / White / Pale prefix', () => {
+    const tribes = Object.values(TRIBE_PRESETS).filter(c => c.ethnicGroup === 'hanjoda_stormcaller');
+    for (const t of tribes) {
+      expect(['Ash', 'White', 'Pale'].some(p => t.name.startsWith(p))).toBe(true);
+    }
+  });
+
+  it('hanjoda_bloodmoon tribes use Red / Ochre / Crimson prefix', () => {
+    const tribes = Object.values(TRIBE_PRESETS).filter(c => c.ethnicGroup === 'hanjoda_bloodmoon');
+    for (const t of tribes) {
+      expect(['Red', 'Ochre', 'Crimson'].some(p => t.name.startsWith(p))).toBe(true);
+    }
+  });
+
+  it('hanjoda_talon tribes use Amber / Gold / Gilt prefix', () => {
+    const tribes = Object.values(TRIBE_PRESETS).filter(c => c.ethnicGroup === 'hanjoda_talon');
+    for (const t of tribes) {
+      expect(['Amber', 'Gold', 'Gilt'].some(p => t.name.startsWith(p))).toBe(true);
+    }
+  });
+
+  it('hanjoda_emrasi tribes use Bronze / Brown / Copper prefix', () => {
+    const tribes = Object.values(TRIBE_PRESETS).filter(c => c.ethnicGroup === 'hanjoda_emrasi');
+    for (const t of tribes) {
+      expect(['Bronze', 'Brown', 'Copper'].some(p => t.name.startsWith(p))).toBe(true);
+    }
+  });
+
+  it('no tribe uses a color belonging to a different ethnic group', () => {
+    // A Kiswani tribe should never get an Ash- or Red- prefix, etc.
+    for (const config of Object.values(TRIBE_PRESETS)) {
+      const ownColors = ETHNIC_COLOR_PREFIXES[config.ethnicGroup];
+      const otherColors = Object.entries(ETHNIC_COLOR_PREFIXES)
+        .filter(([group]) => group !== config.ethnicGroup)
+        .flatMap(([, colors]) => colors);
+      for (const foreign of otherColors) {
+        if (config.name.startsWith(foreign)) {
+          // Only flag if it doesn't also start with an own-group color
+          // (e.g. "Bronze" starts with "Br" which won't match "Brown")
+          const alsoOwn = ownColors.some(c => config.name.startsWith(c));
+          expect(
+            alsoOwn,
+            `"${config.name}" starts with foreign color "${foreign}" and has no own-group color match`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+});
+
+// ─── createTribe — runtime field initialisation ───────────────────────────────
+
+describe('createTribe — runtime field initialisation', () => {
+  it('initialises sighted to false', () => {
+    expect(createTribe(makeConfig()).sighted).toBe(false);
+  });
+
+  it('initialises diplomacyOpened to false', () => {
+    expect(createTribe(makeConfig()).diplomacyOpened).toBe(false);
+  });
+
+  it('initialises giftedTurns to null', () => {
+    expect(createTribe(makeConfig()).giftedTurns).toBeNull();
+  });
+
+  it('initialises territoryQ to null', () => {
+    expect(createTribe(makeConfig()).territoryQ).toBeNull();
+  });
+
+  it('initialises territoryR to null', () => {
+    expect(createTribe(makeConfig()).territoryR).toBeNull();
+  });
+});
+
+// ─── updateTribeDisposition — multi-step convergence ─────────────────────────
+
+describe('updateTribeDisposition — convergence', () => {
+  const rng = createRNG(42);
+
+  it('converges a positive disposition to 0 over enough turns', () => {
+    let tribe = createTribe(makeConfig({ startingDisposition: 5 }));
+    for (let i = 0; i < 5; i++) {
+      const next = updateTribeDisposition(tribe, null, rng);
+      tribe = { ...tribe, disposition: next };
+    }
+    expect(tribe.disposition).toBe(0);
+  });
+
+  it('converges a negative disposition to 0 over enough turns', () => {
+    let tribe = createTribe(makeConfig({ startingDisposition: -5 }));
+    for (let i = 0; i < 5; i++) {
+      const next = updateTribeDisposition(tribe, null, rng);
+      tribe = { ...tribe, disposition: next };
+    }
+    expect(tribe.disposition).toBe(0);
+  });
+
+  it('never overshoots 0 from a positive value', () => {
+    let tribe = createTribe(makeConfig({ startingDisposition: 3 }));
+    for (let i = 0; i < 10; i++) {
+      const next = updateTribeDisposition(tribe, null, rng);
+      tribe = { ...tribe, disposition: next };
+      expect(tribe.disposition).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('never overshoots 0 from a negative value', () => {
+    let tribe = createTribe(makeConfig({ startingDisposition: -3 }));
+    for (let i = 0; i < 10; i++) {
+      const next = updateTribeDisposition(tribe, null, rng);
+      tribe = { ...tribe, disposition: next };
+      expect(tribe.disposition).toBeLessThanOrEqual(0);
     }
   });
 });

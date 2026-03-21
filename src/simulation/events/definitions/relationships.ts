@@ -190,7 +190,7 @@ export const RELATIONSHIP_EVENTS: GameEvent[] = [
         label: 'Offer something real — better role, better rations.',
         description: 'Costs goods but keeps a hand.',
         consequences: [
-          { type: 'modify_resource', target: 'goods', value: -2 },
+          { type: 'modify_resource', target: 'wealth', value: -2 },
           { type: 'modify_opinion', target: '{leaver}', value: 30 },
         ],
       },

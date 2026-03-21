@@ -17,8 +17,7 @@ import type { ResourceType } from '../../simulation/turn/game-state';
 export const RESOURCE_EMOJI: Partial<Record<ResourceType, string>> = {
   food:     '✦',
   cattle:   '⁂',
-  goods:    '◈',
-  gold:     '◆',
+  wealth:   '◆',
   lumber:   '⌘',
   stone:    '◼',
   medicine: '✚',
@@ -30,8 +29,7 @@ export const RESOURCE_EMOJI: Partial<Record<ResourceType, string>> = {
 export const RESOURCE_LABEL: Record<ResourceType, string> = {
   food:     'Food',
   cattle:   'Cattle',
-  goods:    'Goods',
-  gold:     'Gold',
+  wealth:   'Wealth',
   lumber:   'Lumber',
   stone:    'Stone',
   medicine: 'Medicine',
@@ -39,12 +37,11 @@ export const RESOURCE_LABEL: Record<ResourceType, string> = {
   horses:   'Horses',
 };
 
-/** All nine resources in canonical display order (glyph + label bundled for convenience). */
+/** All eight resources in canonical display order (glyph + label bundled for convenience). */
 export const ALL_RESOURCES: ReadonlyArray<{ key: ResourceType; emoji: string; label: string }> = [
   { key: 'food',     emoji: '✦',  label: 'Food'     },
   { key: 'cattle',   emoji: '⁂',  label: 'Cattle'   },
-  { key: 'goods',    emoji: '◈',  label: 'Goods'    },
-  { key: 'gold',     emoji: '◆',  label: 'Gold'     },
+  { key: 'wealth',   emoji: '◆',  label: 'Wealth'   },
   { key: 'lumber',   emoji: '⌘',  label: 'Lumber'   },
   { key: 'stone',    emoji: '◼',  label: 'Stone'    },
   { key: 'medicine', emoji: '✚',  label: 'Medicine' },

@@ -30,12 +30,11 @@ export const SPOILAGE_CONFIG: Record<ResourceType, SpoilageConfig | null> = {
   cattle:   { baseRate: 0.03, seasonModifiers: { winter: 2.0 },            mitigatedBy: 'stable'  },
   horses:   { baseRate: 0.02, seasonModifiers: { winter: 2.0 },            mitigatedBy: 'stable'  },
   medicine: { baseRate: 0.02, seasonModifiers: {},                          mitigatedBy: null      },
-  goods:    { baseRate: 0.01, seasonModifiers: {},                          mitigatedBy: null      },
+  wealth:   { baseRate: 0.01, seasonModifiers: {},                          mitigatedBy: null      },
   // Non-perishable — no spoilage.
   steel:    null,
   lumber:   null,
   stone:    null,
-  gold:     null,
 };
 
 // ─── Calculation ──────────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@
  * Opens during management phase when an emissary has arrived at a tribe
  * (status: 'at_tribe'). Player can:
  *   - Offer gifts (sub-panel with sliders)
- *   - Ask for food / goods (one confirmation per type per session)
+ *   - Ask for food / wealth (one confirmation per type per session)
  *   - Propose a trade relationship (disposition-gated)
  *   - Take their leave (concludes the session)
  *
@@ -27,21 +27,19 @@ function clampI(v: number, lo: number, hi: number) {
 // ─── Sub-panel: Offer Gifts ───────────────────────────────────────────────────
 
 interface GiftPanelProps {
-  maxGold: number;
-  maxGoods: number;
+  maxWealth: number;
   maxFood: number;
   tribe: { disposition: number; tradeDesires: string[]; traits: string[]; giftedTurns: number | null };
   currentTurn: number;
   onCancel: () => void;
-  onConfirm: (gold: number, goods: number, food: number, delta: number) => void;
+  onConfirm: (wealth: number, food: number, delta: number) => void;
 }
 
-function GiftPanel({ maxGold, maxGoods, maxFood, tribe, currentTurn, onCancel, onConfirm }: GiftPanelProps) {
-  const [gold,  setGold]  = useState(0);
-  const [goods, setGoods] = useState(0);
-  const [food,  setFood]  = useState(0);
+function GiftPanel({ maxWealth, maxFood, tribe, currentTurn, onCancel, onConfirm }: GiftPanelProps) {
+  const [wealth, setWealth] = useState(0);
+  const [food,   setFood]   = useState(0);
 
-  const estimated = giftDispositionGain(gold, goods, food, tribe as any, currentTurn);
+  const estimated = giftDispositionGain(wealth, food, tribe as any, currentTurn);
   const giftedThisYear = tribe.giftedTurns !== null && (currentTurn - tribe.giftedTurns) < 4;
 
   return (
@@ -49,25 +47,14 @@ function GiftPanel({ maxGold, maxGoods, maxFood, tribe, currentTurn, onCancel, o
       <p className="text-amber-200 text-xs font-semibold">Offer Gifts</p>
 
       <div className="space-y-2">
-        {maxGold > 0 && (
+        {maxWealth > 0 && (
           <div className="space-y-0.5">
             <div className="flex justify-between text-[11px] text-stone-400">
-              <span>Gold</span>
-              <span className="text-stone-200">{gold} / {maxGold}</span>
+              <span>Wealth</span>
+              <span className="text-stone-200">{wealth} / {maxWealth}</span>
             </div>
-            <input type="range" min={0} max={maxGold} value={gold}
-              onChange={e => setGold(Number(e.target.value))}
-              className="w-full accent-amber-500" />
-          </div>
-        )}
-        {maxGoods > 0 && (
-          <div className="space-y-0.5">
-            <div className="flex justify-between text-[11px] text-stone-400">
-              <span>Goods</span>
-              <span className="text-stone-200">{goods} / {maxGoods}</span>
-            </div>
-            <input type="range" min={0} max={maxGoods} value={goods}
-              onChange={e => setGoods(Number(e.target.value))}
+            <input type="range" min={0} max={maxWealth} value={wealth}
+              onChange={e => setWealth(Number(e.target.value))}
               className="w-full accent-amber-500" />
           </div>
         )}
@@ -84,7 +71,7 @@ function GiftPanel({ maxGold, maxGoods, maxFood, tribe, currentTurn, onCancel, o
         )}
       </div>
 
-      {(gold > 0 || goods > 0 || food > 0) ? (
+      {(wealth > 0 || food > 0) ? (
         <div className="space-y-0.5">
           <p className="text-stone-300 text-[11px]">
             Estimated effect: <span className="text-emerald-400 font-semibold">+{estimated} disposition</span>
@@ -92,7 +79,7 @@ function GiftPanel({ maxGold, maxGoods, maxFood, tribe, currentTurn, onCancel, o
           {giftedThisYear && (
             <p className="text-amber-500 text-[10px]">Diminishing returns — gifted recently (×0.5)</p>
           )}
-          {tribe.tradeDesires.some(d => (d === 'gold' && gold > 0) || (d === 'goods' && goods > 0) || (d === 'food' && food > 0)) && (
+          {tribe.tradeDesires.some(d => (d === 'wealth' && wealth > 0) || (d === 'food' && food > 0)) && (
             <p className="text-sky-400 text-[10px]">Tribe desires this resource — bonus applied</p>
           )}
         </div>
@@ -106,10 +93,10 @@ function GiftPanel({ maxGold, maxGoods, maxFood, tribe, currentTurn, onCancel, o
           Cancel
         </button>
         <button
-          onClick={() => onConfirm(gold, goods, food, estimated)}
-          disabled={gold === 0 && goods === 0 && food === 0}
+          onClick={() => onConfirm(wealth, food, estimated)}
+          disabled={wealth === 0 && food === 0}
           className={`flex-1 px-2 py-1.5 rounded text-xs font-semibold transition-colors ${
-            (gold > 0 || goods > 0 || food > 0)
+            (wealth > 0 || food > 0)
               ? 'bg-amber-700 hover:bg-amber-600 text-amber-100'
               : 'bg-stone-800 text-stone-600 cursor-not-allowed'
           }`}
@@ -164,16 +151,14 @@ export default function EmissaryDiplomacyOverlay({ emissaryId, onClose }: Props)
   const offeredSoFar = sessionActions
     .filter(a => a.type === 'offer_gifts')
     .reduce((acc, a) => ({
-      gold:  acc.gold  + (a.giftsOffered?.gold  ?? 0),
-      goods: acc.goods + (a.giftsOffered?.goods ?? 0),
-      food:  acc.food  + (a.giftsOffered?.food  ?? 0),
-    }), { gold: 0, goods: 0, food: 0 });
+      wealth: acc.wealth + (a.giftsOffered?.wealth ?? 0),
+      food:   acc.food   + (a.giftsOffered?.food   ?? 0),
+    }), { wealth: 0, food: 0 });
   const remainingGifts = {
-    gold:  Math.max(0, gifts.gold  - offeredSoFar.gold),
-    goods: Math.max(0, gifts.goods - offeredSoFar.goods),
-    food:  Math.max(0, gifts.food  - offeredSoFar.food),
+    wealth: Math.max(0, gifts.wealth - offeredSoFar.wealth),
+    food:   Math.max(0, gifts.food   - offeredSoFar.food),
   };
-  const hasGiftsLeft = remainingGifts.gold > 0 || remainingGifts.goods > 0 || remainingGifts.food > 0;
+  const hasGiftsLeft = remainingGifts.wealth > 0 || remainingGifts.food > 0;
 
   // Compute current turn-level giftedTurns (may have been updated by earlier actions this session).
   const sessionGiftedTurns = sessionActions.some(a => a.type === 'offer_gifts')
@@ -181,11 +166,11 @@ export default function EmissaryDiplomacyOverlay({ emissaryId, onClose }: Props)
     : tribe.giftedTurns;
   const tribeWithSessionUpdates = { ...tribe, giftedTurns: sessionGiftedTurns, disposition: liveDisposition };
 
-  const foodYield   = computeResourceRequestYield('food',  tribeWithSessionUpdates);
-  const goodsYield  = computeResourceRequestYield('goods', tribeWithSessionUpdates);
+  const foodYield    = computeResourceRequestYield('food',   tribeWithSessionUpdates);
+  const wealthYield  = computeResourceRequestYield('wealth', tribeWithSessionUpdates);
 
-  const canAskFood  = !askedFood  && liveDisposition >= 0 && !tribe.tradeDesires.includes('food');
-  const canAskGoods = !askedGoods && liveDisposition >= 0 && !tribe.tradeDesires.includes('goods');
+  const canAskFood   = !askedFood   && liveDisposition >= 0 && !tribe.tradeDesires.includes('food');
+  const canAskWealth = !askedGoods  && liveDisposition >= 0 && !tribe.tradeDesires.includes('wealth');
   const tradeThreshold = tribe.traits.includes('trader') ? 5 : 20;
   const canProposeTrade = !proposedTrade && !tribe.diplomacyOpened && liveDisposition >= tradeThreshold;
 
@@ -194,12 +179,12 @@ export default function EmissaryDiplomacyOverlay({ emissaryId, onClose }: Props)
     setSessionLog(prev => [...prev, logLine]);
   }
 
-  function handleGiftsConfirmed(gold: number, goods: number, food: number, delta: number) {
+  function handleGiftsConfirmed(wealth: number, food: number, delta: number) {
     const action: EmissarySessionAction = {
       type: 'offer_gifts',
-      giftsOffered: { gold, goods, food },
+      giftsOffered: { wealth, food },
       dispositionDelta: delta,
-      logEntry: `Offered ${[gold > 0 && `${gold} gold`, goods > 0 && `${goods} goods`, food > 0 && `${food} food`].filter(Boolean).join(', ')} — disposition +${delta}.`,
+      logEntry: `Offered ${[wealth > 0 && `${wealth} wealth`, food > 0 && `${food} food`].filter(Boolean).join(', ')} — disposition +${delta}.`,
     };
     addAction(action, action.logEntry);
     setPendingDispositionDelta(d => clampI(d + delta, -100 - (tribe?.disposition ?? 0), 100 - (tribe?.disposition ?? 0)));
@@ -219,13 +204,13 @@ export default function EmissaryDiplomacyOverlay({ emissaryId, onClose }: Props)
     setSubPanel('none');
   }
 
-  function handleAskGoods() {
-    const amount = goodsYield;
+  function handleAskWealth() {
+    const amount = wealthYield;
     const action: EmissarySessionAction = {
       type: 'ask_goods',
-      resourcesReceived: { goods: amount },
+      resourcesReceived: { wealth: amount },
       dispositionDelta: 0,
-      logEntry: `Requested goods — the clan provided ${amount} goods.`,
+      logEntry: `Requested wealth — the clan provided ${amount} wealth.`,
     };
     addAction(action, action.logEntry);
     setAskedGoods(true);
@@ -292,9 +277,8 @@ export default function EmissaryDiplomacyOverlay({ emissaryId, onClose }: Props)
             {/* Gifts on hand */}
             <div className="px-3 py-2 border-b border-stone-700 space-y-0.5">
               <p className="text-stone-400 uppercase text-[10px] tracking-wide">Gifts on hand</p>
-              {remainingGifts.gold  > 0 && <p className="text-amber-300 text-[11px]">◈ {remainingGifts.gold} gold</p>}
-              {remainingGifts.goods > 0 && <p className="text-stone-300 text-[11px]">◈ {remainingGifts.goods} goods</p>}
-              {remainingGifts.food  > 0 && <p className="text-emerald-400 text-[11px]">◈ {remainingGifts.food} food</p>}
+              {remainingGifts.wealth > 0 && <p className="text-amber-300 text-[11px]">◈ {remainingGifts.wealth} wealth</p>}
+              {remainingGifts.food   > 0 && <p className="text-emerald-400 text-[11px]">◈ {remainingGifts.food} food</p>}
               {!hasGiftsLeft && <p className="text-stone-600 text-[11px] italic">No gifts remaining</p>}
             </div>
 
@@ -350,8 +334,7 @@ export default function EmissaryDiplomacyOverlay({ emissaryId, onClose }: Props)
 
               {subPanel === 'offer_gifts' && (
                 <GiftPanel
-                  maxGold={remainingGifts.gold}
-                  maxGoods={remainingGifts.goods}
+                  maxWealth={remainingGifts.wealth}
                   maxFood={remainingGifts.food}
                   tribe={tribeWithSessionUpdates}
                   currentTurn={gameState.turnNumber}
@@ -379,14 +362,14 @@ export default function EmissaryDiplomacyOverlay({ emissaryId, onClose }: Props)
 
               {subPanel === 'confirm_goods' && (
                 <div className="border border-stone-600 rounded p-3 bg-stone-800/50 space-y-2">
-                  <p className="text-stone-200 text-xs">Request goods from the {tribe.name}?</p>
+                  <p className="text-stone-200 text-xs">Request wealth from the {tribe.name}?</p>
                   <p className="text-stone-400 text-[11px]">
-                    Disposition {liveDisposition} · Expected yield: ~{goodsYield} goods
+                    Disposition {liveDisposition} · Expected yield: ~{wealthYield} wealth
                   </p>
                   <div className="flex gap-2 pt-1">
                     <button onClick={() => setSubPanel('none')}
                       className="flex-1 px-2 py-1.5 rounded bg-stone-700 hover:bg-stone-600 text-stone-300 text-xs">Cancel</button>
-                    <button onClick={handleAskGoods}
+                    <button onClick={handleAskWealth}
                       className="flex-1 px-2 py-1.5 rounded bg-emerald-800 hover:bg-emerald-700 text-emerald-100 text-xs font-semibold">
                       Ask politely ▶
                     </button>
@@ -468,22 +451,22 @@ export default function EmissaryDiplomacyOverlay({ emissaryId, onClose }: Props)
 
                   <button
                     onClick={() => setSubPanel('confirm_goods')}
-                    disabled={!canAskGoods}
+                    disabled={!canAskWealth}
                     title={
                       askedGoods ? 'Already requested this session'
                       : liveDisposition < 0 ? 'Disposition too low (hostile)'
-                      : tribe.tradeDesires.includes('goods') ? 'This clan needs goods — they will not give them away'
-                      : 'Ask the clan for a goods grant'
+                      : tribe.tradeDesires.includes('wealth') ? 'This clan needs wealth — they will not give it away'
+                      : 'Ask the clan for a wealth grant'
                     }
                     className={`w-full text-left px-3 py-2 rounded border text-xs transition-colors ${
-                      canAskGoods
+                      canAskWealth
                         ? 'border-stone-600 hover:border-emerald-500 bg-stone-800/40 hover:bg-stone-700/40 text-stone-200'
                         : 'border-stone-700 bg-stone-900/40 text-stone-600 cursor-not-allowed'
                     }`}
                   >
-                    ◈ Ask for Goods
-                    {goodsYield > 0 && canAskGoods && (
-                      <span className="ml-1.5 text-emerald-400 text-[10px]">~{goodsYield}</span>
+                    ◈ Ask for Wealth
+                    {wealthYield > 0 && canAskWealth && (
+                      <span className="ml-1.5 text-emerald-400 text-[10px]">~{wealthYield}</span>
                     )}
                   </button>
 

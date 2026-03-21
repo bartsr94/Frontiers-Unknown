@@ -39,11 +39,11 @@ export const IDENTITY_EVENTS: GameEvent[] = [
     choices: [
       {
         id: 'send_gift',
-        label: 'Send a reassurance gift of gold.',
-        description: 'Five gold pieces and a respectful letter should reassure the Factor for now.',
-        requirements: [{ type: 'has_resource', params: { resource: 'gold', amount: 5 } }],
+        label: 'Send a reassurance gift of wealth.',
+        description: 'Five wealth and a respectful letter should reassure the Factor for now.',
+        requirements: [{ type: 'has_resource', params: { resource: 'wealth', amount: 5 } }],
         consequences: [
-          { type: 'modify_resource', target: 'gold', value: -5 },
+          { type: 'modify_resource', target: 'wealth', value: -5 },
         ],
       },
       {

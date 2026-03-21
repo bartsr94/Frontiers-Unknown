@@ -525,9 +525,9 @@ function HouseholdCard({
       {/* Card header */}
       <div className="px-3 py-2 bg-stone-800 border-b border-stone-700 flex items-center gap-2">
         <span className="text-xs font-semibold text-amber-300">{hh.name}</span>
-        {(hh.householdGold ?? 0) > 0 && (
+        {(hh.householdWealth ?? 0) > 0 && (
           <span className="text-[10px] bg-amber-900/60 text-amber-300 border border-amber-700/50 rounded px-1 py-0.5 leading-none">
-            ⚜ {hh.householdGold}g
+            ◆ {hh.householdWealth}w
           </span>
         )}
         <span className="ml-auto text-[10px] text-stone-500">{members.length} members</span>

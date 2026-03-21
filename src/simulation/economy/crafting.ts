@@ -17,11 +17,9 @@ import { hasBuilding } from '../buildings/building-effects';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type CraftRecipeId =
-  | 'craft_lumber_to_goods'
   | 'craft_cattle_slaughter'
   | 'craft_horse_breeding'
   | 'craft_medicine_prep'
-  | 'craft_goods_to_gold'
   | 'craft_boat';
 
 export interface CraftRecipe {
@@ -45,17 +43,6 @@ export type CraftValidation =
 // ─── Recipe Definitions ───────────────────────────────────────────────────────
 
 export const CRAFT_RECIPES: Record<CraftRecipeId, CraftRecipe> = {
-  craft_lumber_to_goods: {
-    id: 'craft_lumber_to_goods',
-    label: 'Process Timber',
-    description: 'Workers in the Workshop convert raw timber into finished trade goods.',
-    requires: {
-      buildings: ['workshop'],
-      resources: { lumber: 3 },
-    },
-    produces: { goods: 4 },
-  },
-
   craft_cattle_slaughter: {
     id: 'craft_cattle_slaughter',
     label: 'Slaughter Cattle',
@@ -64,7 +51,7 @@ export const CRAFT_RECIPES: Record<CraftRecipeId, CraftRecipe> = {
       buildings: [],
       resources: { cattle: 2 },
     },
-    produces: { food: 3, goods: 1 },
+    produces: { food: 3 },
   },
 
   craft_horse_breeding: {
@@ -81,23 +68,12 @@ export const CRAFT_RECIPES: Record<CraftRecipeId, CraftRecipe> = {
   craft_medicine_prep: {
     id: 'craft_medicine_prep',
     label: 'Prepare Medicines',
-    description: "The healer converts food stores and trade goods into refined medicines.",
+    description: "The healer converts food stores and trade credit into refined medicines.",
     requires: {
       buildings: ['healers_hut'],
-      resources: { food: 3, goods: 2 },
+      resources: { food: 3, wealth: 2 },
     },
     produces: { medicine: 4 },
-  },
-
-  craft_goods_to_gold: {
-    id: 'craft_goods_to_gold',
-    label: 'Trade Goods for Company Scrip',
-    description: 'Exchange trade goods at the Company rate for gold scrip. A poor deal, but useful in a quota crunch.',
-    requires: {
-      buildings: [],
-      resources: { goods: 5 },
-    },
-    produces: { gold: 2 },
   },
 
   craft_boat: {
@@ -106,7 +82,7 @@ export const CRAFT_RECIPES: Record<CraftRecipeId, CraftRecipe> = {
     description: 'Construct a shallow-draft river boat at the dock. Boats dramatically increase expedition speed along river hexes and allow safe coastal travel.',
     requires: {
       buildings: ['dock'] as BuildingId[],
-      resources: { lumber: 15, goods: 3 },
+      resources: { lumber: 15 },
     },
     produces: {},
   },

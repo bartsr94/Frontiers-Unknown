@@ -88,7 +88,7 @@ export const FACTION_EVENTS: GameEvent[] = [
         description: 'Goodwill is hard-won; let it be acknowledged.',
         consequences: [
           { type: 'modify_opinion', target: '{spokesperson}', value: 10 },
-          { type: 'modify_resource', target: 'goods', value: 3 },
+          { type: 'modify_resource', target: 'wealth', value: 3 },
         ],
       },
       {

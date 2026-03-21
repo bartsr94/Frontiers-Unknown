@@ -1,7 +1,7 @@
 /**
  * TopBar — persistent header showing current game stats.
  *
- * Displays: season, year, food stock, gold stock, trade goods stock, population.
+ * Displays: season, year, food stock, wealth stock, population.
  * Read-only: dispatches no actions. Re-renders whenever the store updates.
  */
 
@@ -68,9 +68,8 @@ export default function TopBar() {
 
       {/* Resources */}
       <div className="flex items-center gap-2 flex-wrap">
-        <StatPill label="Food"   value={resources.food}  accent="text-green-200" />
-        <StatPill label="Gold"   value={resources.gold}  accent="text-yellow-200" />
-        <StatPill label="Goods"  value={resources.goods} accent="text-amber-200" />
+        <StatPill label="Food"   value={resources.food}   accent="text-green-200" />
+        <StatPill label="Wealth" value={resources.wealth} accent="text-amber-200" />
         <StatPill label="Cattle" value={resources.cattle} accent="text-orange-200" />
       </div>
 

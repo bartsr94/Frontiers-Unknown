@@ -1,10 +1,10 @@
 import { useGameStore } from './stores/game-store';
 import GameScreen from './ui/layout/GameScreen';
-import GameSetup from './ui/overlays/GameSetup';
+import IntroSequence from './ui/overlays/IntroSequence';
 
 function App() {
   const gameState = useGameStore(s => s.gameState);
-  return gameState ? <GameScreen /> : <GameSetup />;
+  return gameState ? <GameScreen /> : <IntroSequence />;
 }
 
 export default App;

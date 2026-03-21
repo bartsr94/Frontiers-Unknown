@@ -41,22 +41,20 @@ export type TradeValidation =
 // ─── Base Exchange Rates ──────────────────────────────────────────────────────
 
 /**
- * Gold-equivalent value of 1 unit of each resource.
- * Base exchange rate: 1 goods = 2 food = 1 steel = 0.5 gold = 4 lumber
- *                    = 4 stone = 2 medicine = 0.5 horses.
- * (In gold units — goods = 1, gold = 2, horses = 2.)
+ * Relative value of 1 unit of each resource for trade fairness calculations.
+ * wealth = 1.0 (neutral base); food and cattle are food-equivalent at 0.5;
+ * horses are premium at 2.0; lumber/stone are raw materials at 0.25.
  *
- * Source: ECONOMY_SYSTEM.md §4.3
+ * Source: WEALTH_SYSTEM.md §9
  */
 export const RESOURCE_BASE_VALUES: Record<ResourceType, number> = {
-  goods:    1.0,
+  wealth:   1.0,
   food:     0.5,
   cattle:   0.5,
   steel:    1.0,
   lumber:   0.25,
   stone:    0.25,
   medicine: 0.5,
-  gold:     2.0,
   horses:   2.0,
 };
 

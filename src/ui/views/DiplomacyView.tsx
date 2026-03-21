@@ -61,7 +61,7 @@ const DESIRE_LABEL: Record<TribeDesire, string> = {
   territory: 'Territory',
   trade:     'Trade access',
   food:      'Food',
-  gold:      'Gold',
+  wealth:    'Wealth',
   lumber:    'Lumber',
 };
 

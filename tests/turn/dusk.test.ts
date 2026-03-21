@@ -17,8 +17,7 @@ function makeState(overrides: {
   currentSeason?: Season;
   currentYear?: number;
   standing?: number;
-  quotaContributedGold?: number;
-  quotaContributedGoods?: number;
+  quotaContributedWealth?: number;
   supportLevel?: GameState['company']['supportLevel'];
   consecutiveFailures?: number;
   religiousPolicy?: GameState['settlement']['religiousPolicy'];
@@ -36,7 +35,7 @@ function makeState(overrides: {
       name: 'Test',
       location: 'marsh',
       buildings: [],
-      resources: { food: 0, cattle: 0, goods: 0, steel: 0, lumber: 0, stone: 0, medicine: 0, gold: 0, horses: 0 },
+      resources: { food: 0, cattle: 0, wealth: 0, steel: 0, lumber: 0, stone: 0, medicine: 0, horses: 0 },
       populationCount: 0,
       religiousPolicy: overrides.religiousPolicy ?? 'tolerant',
     },
@@ -64,13 +63,11 @@ function makeState(overrides: {
     tribes: new Map(),
     company: {
       standing: overrides.standing ?? 60,
-      annualQuotaGold: 0,
-      annualQuotaGoods: 0,
+      annualQuotaWealth: 0,
       consecutiveFailures: overrides.consecutiveFailures ?? 0,
       supportLevel: overrides.supportLevel ?? 'standard',
       yearsActive: 0,
-      quotaContributedGold: overrides.quotaContributedGold ?? 0,
-      quotaContributedGoods: overrides.quotaContributedGoods ?? 0,
+      quotaContributedWealth: overrides.quotaContributedWealth ?? 0,
     },
     eventHistory: [],
     eventCooldowns: new Map(),
@@ -138,19 +135,19 @@ describe('processDusk — quota check', () => {
   });
 
   it('returns a non-null quotaStatus in autumn', () => {
-    const { quotaStatus } = processDusk(makeState({ currentSeason: 'autumn', currentYear: 4 }), 'autumn');
+    const { quotaStatus } = processDusk(makeState({ currentSeason: 'autumn', currentYear: 11 }), 'autumn');
     expect(quotaStatus).not.toBeNull();
   });
 
-  it('returns "failed" when nothing has been contributed and year >= 4', () => {
-    const state = makeState({ currentSeason: 'autumn', currentYear: 4, quotaContributedGold: 0, quotaContributedGoods: 0 });
+  it('returns "failed" when nothing has been contributed and year >= 11', () => {
+    const state = makeState({ currentSeason: 'autumn', currentYear: 11, quotaContributedWealth: 0 });
     const { quotaStatus } = processDusk(state, 'autumn');
     expect(quotaStatus).toBe('failed');
   });
 
-  it('returns "met" when contributions exceed the quota', () => {
-    // Year 4: quotaGold = 5 + (4-3)*2 = 7; quotaGoods = 8 + (4-3)*3 = 11
-    const state = makeState({ currentSeason: 'autumn', currentYear: 4, quotaContributedGold: 20, quotaContributedGoods: 30 });
+  it('returns "exceeded" when contributions exceed the quota', () => {
+    // Year 11: quotaWealth = 10 + (11-10)*5 = 15; contributing 30 exceeds it
+    const state = makeState({ currentSeason: 'autumn', currentYear: 11, quotaContributedWealth: 30 });
     const { quotaStatus } = processDusk(state, 'autumn');
     expect(quotaStatus).toBe('exceeded');
   });

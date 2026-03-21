@@ -56,8 +56,8 @@ function makeMap(people: Person[]): Map<string, Person> {
 }
 
 const FULL_RESOURCES: ResourceStock = {
-  food: 100, cattle: 50, goods: 60, steel: 10,
-  lumber: 40, stone: 30, medicine: 5, gold: 20, horses: 3,
+  food: 100, cattle: 50, wealth: 80, steel: 10,
+  lumber: 40, stone: 30, medicine: 5, horses: 3,
 };
 
 // ─── ROLE_TO_BUILDING ─────────────────────────────────────────────────────────
@@ -239,12 +239,12 @@ describe('distributeHouseholdWages', () => {
 describe('getSurplus', () => {
   it('returns full stock when no floors set', () => {
     const resources: ResourceStock = {
-      food: 50, cattle: 20, goods: 10, steel: 5,
-      lumber: 30, stone: 15, medicine: 3, gold: 8, horses: 2,
+      food: 50, cattle: 20, wealth: 10, steel: 5,
+      lumber: 30, stone: 15, medicine: 3, horses: 2,
     };
     const surplus = getSurplus(resources, {});
     expect(surplus.food).toBe(50);
-    expect(surplus.gold).toBe(8);
+    expect(surplus.wealth).toBe(10);
     expect(surplus.lumber).toBe(30);
   });
 
@@ -303,7 +303,7 @@ describe('processPrivateBuilding', () => {
       seniorWifeId: string | null;
       memberIds: string[];
       buildingSlots: (string | null)[];
-      householdGold: number;
+      householdWealth: number;
       productionBuildingIds: string[];
     }> = {},
   ): Household {
@@ -320,7 +320,7 @@ describe('processPrivateBuilding', () => {
       productionBuildingIds: opts.productionBuildingIds ?? [],
       isAutoNamed: true,
       buildingSlots: opts.buildingSlots ?? Array(9).fill(null) as (string | null)[],
-      householdGold: opts.householdGold ?? 0,
+      householdWealth: opts.householdWealth ?? 0,
     };
   }
 
@@ -341,8 +341,8 @@ describe('processPrivateBuilding', () => {
   }
 
   const EMPTY_RESOURCES: ResourceStock = {
-    food: 0, cattle: 0, goods: 0, steel: 0,
-    lumber: 0, stone: 0, medicine: 0, gold: 0, horses: 0,
+    food: 0, cattle: 0, wealth: 0, steel: 0,
+    lumber: 0, stone: 0, medicine: 0, horses: 0,
   };
 
   function makeState(
@@ -368,7 +368,7 @@ describe('processPrivateBuilding', () => {
   // ── No ambition ─────────────────────────────────────────────────────────────
 
   it('skips household with no head and no seniorWife', () => {
-    const hh = makeHousehold('h1', { householdGold: 10 });
+    const hh = makeHousehold('h1', { householdWealth: 10 });
     const state = makeState(new Map([['h1', hh]]), new Map());
     const result = processPrivateBuilding(state);
     expect(result.newProjects).toHaveLength(0);
@@ -377,7 +377,7 @@ describe('processPrivateBuilding', () => {
 
   it('skips household whose head has no ambition', () => {
     const person = makePerson('p1', 'h1');
-    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 10 });
+    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 10 });
     const state = makeState(new Map([['h1', hh]]), new Map([['p1', person]]));
     const result = processPrivateBuilding(state);
     expect(result.newProjects).toHaveLength(0);
@@ -390,7 +390,7 @@ describe('processPrivateBuilding', () => {
     } as GameState['settlement']['buildings'][number];
     const person = { ...makePerson('p1', 'h1'), ambition: makeAmbition('seek_council') } as unknown as Person;
     const hh = makeHousehold('h1', {
-      headId: 'p1', memberIds: ['p1'], householdGold: 15,
+      headId: 'p1', memberIds: ['p1'], householdWealth: 15,
       buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
     });
     const state = makeState(
@@ -405,10 +405,10 @@ describe('processPrivateBuilding', () => {
 
   // ── seek_better_housing ─────────────────────────────────────────────────────
 
-  it('starts a wattle_hut project when household has no dwelling and enough gold + lumber', () => {
-    // wattle_hut: privateGoldCost=1, cost={lumber:5}
+  it('starts a wattle_hut project when household has no dwelling and enough wealth + lumber', () => {
+    // wattle_hut: privateWealthCost=1, cost={lumber:5}
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
-    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 2 });
+    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 2 });
     const state = makeState(
       new Map([['h1', hh]]), new Map([['p1', person]]),
       { lumber: 10 },
@@ -420,22 +420,22 @@ describe('processPrivateBuilding', () => {
     expect(result.newProjects[0]!.startedTurn).toBe(5);
   });
 
-  it('deducts household gold after purchase', () => {
+  it('deducts household wealth after purchase', () => {
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
-    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 5 });
+    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 5 });
     const state = makeState(
       new Map([['h1', hh]]), new Map([['p1', person]]),
       { lumber: 10 },
     );
     const result = processPrivateBuilding(state);
-    // wattle_hut costs 1 gold
-    expect(result.updatedHouseholds.get('h1')!.householdGold).toBe(4);
+    // wattle_hut costs 1 wealth
+    expect(result.updatedHouseholds.get('h1')!.householdWealth).toBe(4);
   });
 
   it('deducts materials from updatedResources after purchase', () => {
     // wattle_hut costs 3 lumber
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
-    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 3 });
+    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 3 });
     const state = makeState(
       new Map([['h1', hh]]), new Map([['p1', person]]),
       { lumber: 10 },
@@ -444,10 +444,10 @@ describe('processPrivateBuilding', () => {
     expect(result.updatedResources.lumber).toBe(7); // 10 - 3
   });
 
-  it('skips purchase when household gold is insufficient', () => {
-    // wattle_hut costs 1 gold — insufficient if household has 0
+  it('skips purchase when household wealth is insufficient', () => {
+    // wattle_hut costs 1 wealth — insufficient if household has 0
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
-    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 0 });
+    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 0 });
     const state = makeState(
       new Map([['h1', hh]]), new Map([['p1', person]]),
       { lumber: 10 },
@@ -459,7 +459,7 @@ describe('processPrivateBuilding', () => {
   it('skips purchase when material surplus is too low', () => {
     // wattle_hut needs 3 lumber surplus; floor=8 → surplus=2 with 10 stock
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
-    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 5 });
+    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 5 });
     const state = makeState(
       new Map([['h1', hh]]), new Map([['p1', person]]),
       { lumber: 10 },
@@ -478,7 +478,7 @@ describe('processPrivateBuilding', () => {
     const hh = makeHousehold('h1', {
       headId: 'p1',
       memberIds: ['p1'],
-      householdGold: 5,
+      householdWealth: 5,
       buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
     });
     const state = makeState(
@@ -501,13 +501,13 @@ describe('processPrivateBuilding', () => {
     const hh = makeHousehold('h1', {
       headId: 'p1',
       memberIds: ['p1'],
-      householdGold: 20,
+      householdWealth: 20,
       buildingSlots: ['compound_0', ...Array(8).fill(null)],
     });
     const state = makeState(
       new Map([['h1', hh]]),
       new Map([['p1', person]]),
-      { lumber: 50, gold: 10 },
+      { lumber: 50, wealth: 10 },
       {},
       [compoundBuilding],
     );
@@ -524,7 +524,7 @@ describe('processPrivateBuilding', () => {
     } as GameState['settlement']['buildings'][number];
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_production_building'), 'farmer');
     const hh = makeHousehold('h1', {
-      headId: 'p1', memberIds: ['p1'], householdGold: 5,
+      headId: 'p1', memberIds: ['p1'], householdWealth: 5,
       buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
     });
     const state = makeState(
@@ -541,7 +541,7 @@ describe('processPrivateBuilding', () => {
 
   it('writes a log entry on successful purchase', () => {
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
-    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 3 });
+    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 3 });
     const state = makeState(
       new Map([['h1', hh]]), new Map([['p1', person]]),
       { lumber: 10 },
@@ -556,7 +556,7 @@ describe('processPrivateBuilding', () => {
     // Two members each with a different role, both wanting production buildings
     const head = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_production_building'), 'farmer');
     const member = { ...makePerson('p2', 'h1', { role: 'blacksmith' }), ambition: null } as unknown as Person;
-    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1', 'p2'], householdGold: 20 });
+    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1', 'p2'], householdWealth: 20 });
     const state = makeState(
       new Map([['h1', hh]]),
       new Map([['p1', head], ['p2', member]]),
@@ -570,8 +570,8 @@ describe('processPrivateBuilding', () => {
   it('processes independent projects for two different households in one pass', () => {
     const p1 = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
     const p2 = makePersonWithAmbition('p2', 'h2', makeAmbition('seek_better_housing'));
-    const hh1 = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 5 });
-    const hh2 = makeHousehold('h2', { headId: 'p2', memberIds: ['p2'], householdGold: 5 });
+    const hh1 = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 5 });
+    const hh2 = makeHousehold('h2', { headId: 'p2', memberIds: ['p2'], householdWealth: 5 });
     const state = makeState(
       new Map([['h1', hh1], ['h2', hh2]]),
       new Map([['p1', p1], ['p2', p2]]),
@@ -585,8 +585,8 @@ describe('processPrivateBuilding', () => {
   it('second household is blocked if first depletes the lumber surplus', () => {
     const p1 = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
     const p2 = makePersonWithAmbition('p2', 'h2', makeAmbition('seek_better_housing'));
-    const hh1 = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 5 });
-    const hh2 = makeHousehold('h2', { headId: 'p2', memberIds: ['p2'], householdGold: 5 });
+    const hh1 = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 5 });
+    const hh2 = makeHousehold('h2', { headId: 'p2', memberIds: ['p2'], householdWealth: 5 });
     const state = makeState(
       new Map([['h1', hh1], ['h2', hh2]]),
       new Map([['p1', p1], ['p2', p2]]),
@@ -618,7 +618,7 @@ describe('processPrivateBuilding', () => {
       headId: null,
       seniorWifeId: 'w1',
       memberIds: ['w1'],
-      householdGold: 3,
+      householdWealth: 3,
     });
     const state = makeState(
       new Map([['h1', hh]]), new Map([['w1', wife]]),
@@ -630,29 +630,29 @@ describe('processPrivateBuilding', () => {
     expect(result.logEntries[0]!.personId).toBe('w1');
   });
 
-  it('skips household when both headId and seniorWifeId are null', () => {
-    const hh = makeHousehold('h1', { headId: null, seniorWifeId: null, householdGold: 10 });
+  it('skips when both headId and seniorWifeId are null', () => {
+    const hh = makeHousehold('h1', { headId: null, seniorWifeId: null, householdWealth: 10 });
     const state = makeState(new Map([['h1', hh]]), new Map(), { lumber: 20 });
     expect(processPrivateBuilding(state).newProjects).toHaveLength(0);
   });
 
   it('skips when leaderId resolves to missing person', () => {
     // headId points to a person not in the people map
-    const hh = makeHousehold('h1', { headId: 'ghost', memberIds: [], householdGold: 10 });
+    const hh = makeHousehold('h1', { headId: 'ghost', memberIds: [], householdWealth: 10 });
     const state = makeState(new Map([['h1', hh]]), new Map(), { lumber: 20 });
     expect(processPrivateBuilding(state).newProjects).toHaveLength(0);
   });
 
   // ── seek_production_building — detailed checks ─────────────────────────────
 
-  it('seek_production_building: deducts correct gold from household', () => {
-    // fields: privateGoldCost = 2. Household already has wattle_hut → Path B.
+  it('seek_production_building: deducts correct wealth from household', () => {
+    // fields: privateWealthCost = 2. Household already has wattle_hut → Path B.
     const existingWattle = {
       instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
     } as GameState['settlement']['buildings'][number];
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_production_building'), 'farmer');
     const hh = makeHousehold('h1', {
-      headId: 'p1', memberIds: ['p1'], householdGold: 7,
+      headId: 'p1', memberIds: ['p1'], householdWealth: 7,
       buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
     });
     const state = makeState(
@@ -662,7 +662,7 @@ describe('processPrivateBuilding', () => {
       [existingWattle],
     );
     const result = processPrivateBuilding(state);
-    expect(result.updatedHouseholds.get('h1')!.householdGold).toBe(5); // 7 - 2
+    expect(result.updatedHouseholds.get('h1')!.householdWealth).toBe(5); // 7 - 2
   });
 
   it('seek_production_building: deducts correct materials', () => {
@@ -672,7 +672,7 @@ describe('processPrivateBuilding', () => {
     } as GameState['settlement']['buildings'][number];
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_production_building'), 'farmer');
     const hh = makeHousehold('h1', {
-      headId: 'p1', memberIds: ['p1'], householdGold: 5,
+      headId: 'p1', memberIds: ['p1'], householdWealth: 5,
       buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
     });
     const state = makeState(
@@ -685,14 +685,14 @@ describe('processPrivateBuilding', () => {
     expect(result.updatedResources.lumber).toBe(15); // 20 - 5
   });
 
-  it('seek_production_building: blocked when gold insufficient', () => {
-    // fields: privateGoldCost = 2; household has only 1. Household has wattle_hut → Path B.
+  it('seek_production_building: blocked when wealth insufficient', () => {
+    // fields: privateWealthCost = 2; household has only 1. Household has wattle_hut → Path B.
     const existingWattle = {
       instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
     } as GameState['settlement']['buildings'][number];
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_production_building'), 'farmer');
     const hh = makeHousehold('h1', {
-      headId: 'p1', memberIds: ['p1'], householdGold: 1,
+      headId: 'p1', memberIds: ['p1'], householdWealth: 1,
       buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
     });
     const state = makeState(
@@ -711,7 +711,7 @@ describe('processPrivateBuilding', () => {
     } as GameState['settlement']['buildings'][number];
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_production_building'), 'farmer');
     const hh = makeHousehold('h1', {
-      headId: 'p1', memberIds: ['p1'], householdGold: 5,
+      headId: 'p1', memberIds: ['p1'], householdWealth: 5,
       buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
     });
     const state = makeState(
@@ -738,7 +738,7 @@ describe('processPrivateBuilding', () => {
     const hh = makeHousehold('h1', {
       headId: 'p1',
       memberIds: ['p1', 'p2'],
-      householdGold: 10,
+      householdWealth: 10,
       buildingSlots: ['wattle_hut_0', 'smithy_1', ...Array(7).fill(null)],
     });
     const state = makeState(
@@ -770,7 +770,7 @@ describe('processPrivateBuilding', () => {
     const hh = makeHousehold('h1', {
       headId: 'p1',
       memberIds: ['p1'],
-      householdGold: 10,
+      householdWealth: 10,
       buildingSlots: ['wattle_hut_0', 'fields_1', 'orchard_1', ...Array(6).fill(null)],
     });
     const state = makeState(
@@ -791,7 +791,7 @@ describe('processPrivateBuilding', () => {
     } as GameState['settlement']['buildings'][number];
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_production_building'), 'trader');
     const hh = makeHousehold('h1', {
-      headId: 'p1', memberIds: ['p1'], householdGold: 10,
+      headId: 'p1', memberIds: ['p1'], householdWealth: 10,
       buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
     });
     const state = makeState(
@@ -813,7 +813,7 @@ describe('processPrivateBuilding', () => {
     const hh = makeHousehold('h1', {
       headId: 'p1',
       memberIds: ['p1', 'ghost'],
-      householdGold: 10,
+      householdWealth: 10,
       buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
     });
     const state = makeState(
@@ -833,7 +833,7 @@ describe('processPrivateBuilding', () => {
   it('project totalPoints equals buildSeasons × 100', () => {
     // wattle_hut buildSeasons = 1 → totalPoints = 100
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
-    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 3 });
+    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 3 });
     const state = makeState(
       new Map([['h1', hh]]), new Map([['p1', person]]),
       { lumber: 10 },
@@ -845,7 +845,7 @@ describe('processPrivateBuilding', () => {
 
   it('project id encodes building type and household id', () => {
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
-    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 3 });
+    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 3 });
     const state = makeState(
       new Map([['h1', hh]]), new Map([['p1', person]]),
       { lumber: 10 },
@@ -857,7 +857,7 @@ describe('processPrivateBuilding', () => {
 
   it('project auto-assigns the head as builder, correct turn and owner', () => {
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
-    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 3 });
+    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 3 });
     const state = makeState(
       new Map([['h1', hh]]), new Map([['p1', person]]),
       { lumber: 10 },
@@ -882,7 +882,7 @@ describe('processPrivateBuilding', () => {
       firstName: 'Mira',
       ambition: makeAmbition('seek_better_housing'),
     } as unknown as Person;
-    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 3 });
+    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 3 });
     const state = makeState(
       new Map([['h1', hh]]), new Map([['p1', person]]),
       { lumber: 10 },
@@ -893,7 +893,7 @@ describe('processPrivateBuilding', () => {
 
   it('log entry turn matches state turnNumber', () => {
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
-    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 3 });
+    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 3 });
     const state = makeState(
       new Map([['h1', hh]]), new Map([['p1', person]]),
       { lumber: 10 },
@@ -907,7 +907,7 @@ describe('processPrivateBuilding', () => {
   it('uses settlement.economyReserves (not communalResourceMinimum) as the reserve floor', () => {
     // floor in economyReserves blocks purchase; communalResourceMinimum is not set
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
-    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 5 });
+    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 5 });
     // stock=10 lumber, floor=8 → surplus=2, need 3 → blocked
     const state = makeState(
       new Map([['h1', hh]]), new Map([['p1', person]]),
@@ -920,7 +920,7 @@ describe('processPrivateBuilding', () => {
   it('purchase succeeds when economyReserves floor leaves exactly enough surplus', () => {
     // wattle_hut needs 3 lumber; stock=10, floor=7 → surplus=3 exactly
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
-    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 3 });
+    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 3 });
     const state = makeState(
       new Map([['h1', hh]]), new Map([['p1', person]]),
       { lumber: 10 },
@@ -933,7 +933,7 @@ describe('processPrivateBuilding', () => {
 
   it('missing economyReserves (old save) defaults to {} — all stock is surplus', () => {
     const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
-    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 3 });
+    const hh = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 3 });
     // Build a state without economyReserves to simulate an old save
     const state = {
       households: new Map([['h1', hh]]),
@@ -956,8 +956,8 @@ describe('processPrivateBuilding', () => {
     // Each buys a wattle_hut (3 lumber). Total deduction: 6 lumber.
     const p1 = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
     const p2 = makePersonWithAmbition('p2', 'h2', makeAmbition('seek_better_housing'));
-    const hh1 = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 5 });
-    const hh2 = makeHousehold('h2', { headId: 'p2', memberIds: ['p2'], householdGold: 5 });
+    const hh1 = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 5 });
+    const hh2 = makeHousehold('h2', { headId: 'p2', memberIds: ['p2'], householdWealth: 5 });
     const state = makeState(
       new Map([['h1', hh1], ['h2', hh2]]),
       new Map([['p1', p1], ['p2', p2]]),
@@ -968,20 +968,20 @@ describe('processPrivateBuilding', () => {
     expect(result.updatedResources.lumber).toBe(14); // 20 - 6
   });
 
-  it('gold deduction from two households is independent', () => {
+  it('wealth deduction from two households is independent', () => {
     const p1 = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
     const p2 = makePersonWithAmbition('p2', 'h2', makeAmbition('seek_better_housing'));
-    const hh1 = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdGold: 4 });
-    const hh2 = makeHousehold('h2', { headId: 'p2', memberIds: ['p2'], householdGold: 6 });
+    const hh1 = makeHousehold('h1', { headId: 'p1', memberIds: ['p1'], householdWealth: 4 });
+    const hh2 = makeHousehold('h2', { headId: 'p2', memberIds: ['p2'], householdWealth: 6 });
     const state = makeState(
       new Map([['h1', hh1], ['h2', hh2]]),
       new Map([['p1', p1], ['p2', p2]]),
       { lumber: 20 },
     );
     const result = processPrivateBuilding(state);
-    // wattle_hut costs 1 gold each
-    expect(result.updatedHouseholds.get('h1')!.householdGold).toBe(3);
-    expect(result.updatedHouseholds.get('h2')!.householdGold).toBe(5);
+    // wattle_hut costs 1 wealth each
+    expect(result.updatedHouseholds.get('h1')!.householdWealth).toBe(3);
+    expect(result.updatedHouseholds.get('h2')!.householdWealth).toBe(5);
   });
 });
 
@@ -1029,7 +1029,7 @@ describe('replaceDeadHouseholdBuilders', () => {
       dwellingBuildingId: null,
       productionBuildingIds: [],
       buildingSlots: Array(9).fill(null),
-      householdGold: 0,
+      householdWealth: 0,
     };
   }
 
@@ -1182,7 +1182,7 @@ describe('getNextHouseholdProductionTarget', () => {
       productionBuildingIds: [],
       isAutoNamed: true,
       buildingSlots: slots,
-      householdGold: 0,
+      householdWealth: 0,
     };
   }
 

@@ -120,11 +120,24 @@ export function serializeGameState(state: GameState): string {
 export function deserializeGameState(json: string): GameState {
   const s: SerialGameState = JSON.parse(json) as SerialGameState;
   const rawCompany = s.company as Partial<CompanyRelation> & typeof s.company;
+  // Handle old saves that had annualQuotaGold/annualQuotaGoods (pre-Wealth System).
+  const legacyQuotaWealth = (
+    ((rawCompany as any).annualQuotaGold ?? 0) +
+    Math.floor(((rawCompany as any).annualQuotaGoods ?? 0) / 2)
+  );
+  const legacyContribWealth = (
+    ((rawCompany as any).quotaContributedGold ?? 0) +
+    Math.floor(((rawCompany as any).quotaContributedGoods ?? 0) / 2)
+  );
   const restoredCompany: CompanyRelation = {
-    ...s.company,
-    quotaContributedGold:    rawCompany.quotaContributedGold    ?? 0,
-    quotaContributedGoods:   rawCompany.quotaContributedGoods   ?? 0,
-    exportedGoodsThisYear:   rawCompany.exportedGoodsThisYear   ?? 0,
+    standing:               rawCompany.standing               ?? 60,
+    annualQuotaWealth:      rawCompany.annualQuotaWealth      ?? legacyQuotaWealth,
+    quotaContributedWealth: rawCompany.quotaContributedWealth ?? legacyContribWealth,
+    consecutiveFailures:    rawCompany.consecutiveFailures    ?? 0,
+    supportLevel:           rawCompany.supportLevel           ?? 'standard',
+    yearsActive:            rawCompany.yearsActive            ?? 0,
+    // Old saves pre-date the location system — treat as kethani_mouth (full supply).
+    locationSupplyModifier: rawCompany.locationSupplyModifier ?? 1.0,
   };
   // Restore ExternalTribe fields added for the trade system.
   const restoredTribes = new Map(
@@ -170,7 +183,10 @@ export function deserializeGameState(json: string): GameState {
           dwellingBuildingId:  (h as Partial<typeof h>).dwellingBuildingId  ?? null,
           productionBuildingIds: (h as Partial<typeof h>).productionBuildingIds ?? [],
           isAutoNamed: (h as Partial<typeof h>).isAutoNamed ?? true,
-          householdGold: (h as Partial<typeof h>).householdGold ?? 0,
+          // Handle old saves that had householdGold or goldSavings.
+          householdWealth: (h as any).householdWealth ?? (h as any).householdGold ?? 0,
+          wealthAccumulator: (h as any).wealthAccumulator ?? 0,
+          wealthMaintenanceDebt: (h as any).wealthMaintenanceDebt ?? 0,
           buildingSlots: (h as any).buildingSlots ?? [
             (h as any).dwellingBuildingId ?? null,
             ...((h as any).productionBuildingIds ?? []).slice(0, 8),
@@ -228,7 +244,7 @@ export function deserializeGameState(json: string): GameState {
           difficulty: 'normal' as const,
           startingTribes: [] as string[],
           startingLocation: 'riverside_clearing',
-          includeSauromatianWomen: false,
+          companionChoices: { imanianWives: false, townbornAuxiliaries: false, wildbornWomen: false },
         };
         return generateHexMap(cfg, createRNG(s.seed));
       }

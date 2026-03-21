@@ -388,7 +388,7 @@ export interface PrivateBuildResult {
  * For every household whose head (or senior wife as fallback) holds a
  * `seek_better_housing` or `seek_production_building` ambition, tries to
  * start a private construction project if:
- *   – the household has enough gold (`privateGoldCost`), and
+ *   – the household has enough wealth (`privateWealthCost`), and
  *   – every required material is available as surplus above the communal
  *     reserve floor.
  *
@@ -483,8 +483,8 @@ export function processPrivateBuilding(
 
     // ── Affordability checks ─────────────────────────────────────────────────
     const def = BUILDING_CATALOG[desiredBuildId];
-    const goldCost = def.privateGoldCost;
-    if (goldCost === undefined || household.householdGold < goldCost) continue;
+    const wealthCost = def.privateWealthCost;
+    if (wealthCost === undefined || household.householdWealth < wealthCost) continue;
 
     const surplus = getSurplus(updatedResources, reserves);
     let canAffordMaterials = true;
@@ -497,7 +497,7 @@ export function processPrivateBuilding(
     if (!canAffordMaterials) continue;
 
     // ── Purchase ─────────────────────────────────────────────────────────────
-    updatedHouseholds.set(hhId, { ...household, householdGold: household.householdGold - goldCost });
+    updatedHouseholds.set(hhId, { ...household, householdWealth: household.householdWealth - wealthCost });
 
     // Deduct materials from the running resource snapshot
     for (const [resource, amount] of Object.entries(def.cost) as [keyof ResourceStock, number][]) {
@@ -543,6 +543,74 @@ export function processPrivateBuilding(
   }
 
   return { updatedHouseholds, updatedResources, newProjects, logEntries, autoBuilderAssignments };
+}
+
+// ─── Dwelling Maintenance ─────────────────────────────────────────────────────
+
+/** Seasonal wealth cost per dwelling tier (from household treasury). */
+const DWELLING_MAINTENANCE: Partial<Record<BuildingId, number>> = {
+  wattle_hut: 0,
+  cottage:    1,
+  homestead:  2,
+  compound:   4,
+};
+
+/** Result returned by applyDwellingMaintenance. */
+export interface DwellingMaintenanceResult {
+  /** Updated households (wealth deducted / debt incremented where applicable). */
+  updatedHouseholds: Map<string, Household>;
+  /**
+   * Instance IDs of dwellings whose household has been in debt for 2+ consecutive
+   * seasons — these should trigger a downgrade event.
+   */
+  atRiskBuildingIds: string[];
+}
+
+/**
+ * Deducts per-season dwelling maintenance costs from each household's wealth
+ * treasury. If a household cannot pay:
+ *   – `wealthMaintenanceDebt` increments by 1.
+ *   – After 2 consecutive unpaid seasons, the dwelling instance ID is added to
+ *     `atRiskBuildingIds` (caller queues the downgrade event).
+ *
+ * When a household can pay after a debt run, the debt counter resets to 0.
+ */
+export function applyDwellingMaintenance(
+  households: Map<string, Household>,
+  allBuildings: BuiltBuilding[],
+): DwellingMaintenanceResult {
+  const updatedHouseholds = new Map(households);
+  const atRiskBuildingIds: string[] = [];
+
+  for (const [hhId, household] of households) {
+    const dwellingInstanceId = household.buildingSlots[0] ?? null;
+    if (!dwellingInstanceId) continue;
+
+    const dwelling = allBuildings.find(b => b.instanceId === dwellingInstanceId);
+    if (!dwelling) continue;
+
+    const cost = DWELLING_MAINTENANCE[dwelling.defId as BuildingId] ?? 0;
+    if (cost === 0) continue; // wattle_hut and undefined tiers are free
+
+    if (household.householdWealth >= cost) {
+      updatedHouseholds.set(hhId, {
+        ...household,
+        householdWealth: household.householdWealth - cost,
+        wealthMaintenanceDebt: 0,
+      });
+    } else {
+      const newDebt = (household.wealthMaintenanceDebt ?? 0) + 1;
+      updatedHouseholds.set(hhId, {
+        ...household,
+        wealthMaintenanceDebt: newDebt,
+      });
+      if (newDebt >= 2) {
+        atRiskBuildingIds.push(dwellingInstanceId);
+      }
+    }
+  }
+
+  return { updatedHouseholds, atRiskBuildingIds };
 }
 
 /**

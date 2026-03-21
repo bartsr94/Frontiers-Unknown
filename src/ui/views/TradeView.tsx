@@ -42,12 +42,11 @@ interface QuotaPanelProps {
 }
 
 function QuotaPanel({ disabled }: QuotaPanelProps) {
-  const gameState        = useGameStore(s => s.gameState);
+  const gameState         = useGameStore(s => s.gameState);
   const contributeToQuota = useGameStore(s => s.contributeToQuota);
 
-  const [goldInput,  setGoldInput]  = useState(0);
-  const [goodsInput, setGoodsInput] = useState(0);
-  const [feedback,   setFeedback]   = useState<string | null>(null);
+  const [wealthInput, setWealthInput] = useState(0);
+  const [feedback,    setFeedback]    = useState<string | null>(null);
 
   if (!gameState) return null;
 
@@ -56,69 +55,49 @@ function QuotaPanel({ disabled }: QuotaPanelProps) {
   const resources = settlement.resources;
 
   function handleContribute() {
-    if (goldInput <= 0 && goodsInput <= 0) return;
-    if (goldInput  > (resources.gold  ?? 0)) { setFeedback('Not enough gold.');  return; }
-    if (goodsInput > (resources.goods ?? 0)) { setFeedback('Not enough goods.'); return; }
-    contributeToQuota(goldInput, goodsInput);
-    setGoldInput(0);
-    setGoodsInput(0);
-    setFeedback(`Contributed ${goldInput > 0 ? `${goldInput} gold` : ''}${goldInput > 0 && goodsInput > 0 ? ' and ' : ''}${goodsInput > 0 ? `${goodsInput} goods` : ''}.`);
+    if (wealthInput <= 0) return;
+    if (wealthInput > (resources.wealth ?? 0)) { setFeedback('Not enough wealth.'); return; }
+    contributeToQuota(wealthInput);
+    setWealthInput(0);
+    setFeedback(`Contributed ${wealthInput} wealth.`);
   }
 
-  const maxGold  = Math.max(0, (quota.gold  - company.quotaContributedGold));
-  const maxGoods = Math.max(0, (quota.goods - company.quotaContributedGoods));
+  const maxWealth = Math.max(0, (quota.wealth - company.quotaContributedWealth));
 
   return (
     <div className="p-3 border border-stone-700 rounded bg-stone-900/50 space-y-3">
       <h3 className="text-amber-300 text-xs font-semibold uppercase tracking-wide">Ansberry Co. Quota</h3>
 
-      {quota.gold === 0 ? (
+      {quota.wealth === 0 ? (
         <p className="text-stone-400 text-xs italic">Grace period — no quota required yet.</p>
       ) : (
         <>
           <div className="space-y-1.5">
             <div>
-              <span className="text-stone-300 text-xs">💰 Gold</span>
-              <QuotaBar contributed={company.quotaContributedGold}  required={quota.gold}  />
-            </div>
-            <div>
-              <span className="text-stone-300 text-xs">📦 Goods</span>
-              <QuotaBar contributed={company.quotaContributedGoods} required={quota.goods} />
+              <span className="text-stone-300 text-xs">◆ Wealth</span>
+              <QuotaBar contributed={company.quotaContributedWealth} required={quota.wealth} />
             </div>
           </div>
 
-          {!disabled && (maxGold > 0 || maxGoods > 0) && (
+          {!disabled && maxWealth > 0 && (
             <div className="space-y-2 pt-1 border-t border-stone-700">
               <p className="text-stone-400 text-xs">Contribute toward quota:</p>
               <div className="flex gap-2 items-center">
-                <span className="text-xs text-stone-400 w-8">Gold</span>
+                <span className="text-xs text-stone-400 w-12">Wealth</span>
                 <input
-                  type="number" min={0} max={Math.min(Math.floor(resources.gold ?? 0), maxGold)}
-                  value={goldInput}
-                  onChange={e => setGoldInput(Math.max(0, Math.min(
-                    Math.min(Math.floor(resources.gold ?? 0), maxGold),
+                  type="number" min={0} max={Math.min(Math.floor(resources.wealth ?? 0), maxWealth)}
+                  value={wealthInput}
+                  onChange={e => setWealthInput(Math.max(0, Math.min(
+                    Math.min(Math.floor(resources.wealth ?? 0), maxWealth),
                     Number(e.target.value),
                   )))}
                   className="w-16 bg-stone-800 border border-stone-600 text-stone-200 text-xs rounded px-1.5 py-0.5 text-right"
                 />
-                <span className="text-stone-500 text-xs">/ {Math.floor(resources.gold ?? 0)} avail.</span>
-              </div>
-              <div className="flex gap-2 items-center">
-                <span className="text-xs text-stone-400 w-8">Goods</span>
-                <input
-                  type="number" min={0} max={Math.min(Math.floor(resources.goods ?? 0), maxGoods)}
-                  value={goodsInput}
-                  onChange={e => setGoodsInput(Math.max(0, Math.min(
-                    Math.min(Math.floor(resources.goods ?? 0), maxGoods),
-                    Number(e.target.value),
-                  )))}
-                  className="w-16 bg-stone-800 border border-stone-600 text-stone-200 text-xs rounded px-1.5 py-0.5 text-right"
-                />
-                <span className="text-stone-500 text-xs">/ {Math.floor(resources.goods ?? 0)} avail.</span>
+                <span className="text-stone-500 text-xs">/ {Math.floor(resources.wealth ?? 0)} avail.</span>
               </div>
               <button
                 onClick={handleContribute}
-                disabled={goldInput <= 0 && goodsInput <= 0}
+                disabled={wealthInput <= 0}
                 className="w-full py-1 text-xs rounded bg-amber-700 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-amber-100 font-medium"
               >
                 Contribute
@@ -127,7 +106,7 @@ function QuotaPanel({ disabled }: QuotaPanelProps) {
             </div>
           )}
 
-          {(maxGold <= 0 && maxGoods <= 0) && (
+          {maxWealth <= 0 && (
             <p className="text-emerald-400 text-xs">✓ Quota met for this year.</p>
           )}
         </>

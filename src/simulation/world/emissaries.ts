@@ -4,7 +4,7 @@
  * Covers:
  *  - Travel time calculation (abstracted; no hex-by-hex events for emissaries)
  *  - Gift disposition gain formula (tribe-trait- and desire-aware)
- *  - Resource request yield formula (ask_food / ask_goods)
+ *  - Resource request yield formula (ask_food / ask_wealth)
  *  - EmissaryDispatch factory
  *  - Session resolution helper (produces the state mutations for the store)
  */
@@ -88,21 +88,19 @@ export function createEmissaryDispatch(params: DispatchEmissaryParams): Emissary
  *  - Single-session cap: +40 max.
  */
 export function giftDispositionGain(
-  gold: number,
-  goods: number,
+  wealth: number,
   food: number,
   tribe: ExternalTribe,
   currentTurn: number,
 ): number {
-  if (gold <= 0 && goods <= 0 && food <= 0) return 0;
+  if (wealth <= 0 && food <= 0) return 0;
 
-  let delta = gold * 5 + goods * 3 + food * 1;
+  let delta = wealth * 4 + food * 1;
 
   // Desire bonuses
   const desires = new Set(tribe.tradeDesires);
-  if (desires.has('gold')  && gold  > 0) delta += Math.floor(gold  * 5 * 0.5);
-  if (desires.has('goods') && goods > 0) delta += Math.floor(goods * 3 * 0.5);
-  if (desires.has('food')  && food  > 0) delta += Math.floor(food  * 1 * 0.5);
+  if (desires.has('wealth') && wealth > 0) delta += Math.floor(wealth * 4 * 0.5);
+  if (desires.has('food')   && food   > 0) delta += Math.floor(food   * 1 * 0.5);
 
   // Trait modifiers
   if (tribe.traits.includes('warlike'))      delta = Math.floor(delta * 0.7);
@@ -129,7 +127,7 @@ export function giftDispositionGain(
  *  - the tribe's tradeDesires include the requested resource (they won't give away what they need)
  */
 export function computeResourceRequestYield(
-  resource: 'food' | 'goods',
+  resource: 'food' | 'wealth',
   tribe: ExternalTribe,
 ): number {
   if (tribe.disposition < 0) return 0;
@@ -181,8 +179,8 @@ export function resolveEmissarySession(
         break;
       }
       case 'ask_goods': {
-        const amount = action.resourcesReceived?.goods ?? 0;
-        if (amount > 0) resourcesGained.goods = (resourcesGained.goods ?? 0) + amount;
+        const amount = action.resourcesReceived?.wealth ?? 0;
+        if (amount > 0) resourcesGained.wealth = (resourcesGained.wealth ?? 0) + amount;
         break;
       }
       case 'propose_trade': {

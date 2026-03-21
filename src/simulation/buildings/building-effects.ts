@@ -48,7 +48,7 @@ export function getBuildingFlatProductionBonus(
  * Returns the per-role production bonus granted to a person this season
  * by buildings in the settlement.
  *
- * Example: Workshop gives every craftsman +1 goods per season.
+ * Neglected buildings do not contribute their roleProductionBonus.
  */
 export function getRoleProductionBonus(
   buildings: BuiltBuilding[],
@@ -56,6 +56,7 @@ export function getRoleProductionBonus(
 ): Partial<ResourceStock> {
   const result: Partial<ResourceStock> = {};
   for (const b of buildings) {
+    if (b.neglected) continue;
     const def = BUILDING_CATALOG[b.defId];
     if (def.roleProductionBonus && def.roleProductionBonus.role === role) {
       for (const [key, value] of Object.entries(def.roleProductionBonus.bonus) as [keyof ResourceStock, number][]) {
@@ -144,6 +145,7 @@ export function getDefenseBonus(buildings: BuiltBuilding[]): number {
  * their role and the buildings standing in the settlement.
  *
  * Council membership is checked via councilMemberIds for the 'council' pseudo-role.
+ * Neglected buildings do not contribute skill growth.
  */
 export function getSkillGrowthBonuses(
   buildings: BuiltBuilding[],
@@ -154,6 +156,7 @@ export function getSkillGrowthBonuses(
   const isCouncil = councilMemberIds.includes(person.id);
 
   for (const b of buildings) {
+    if (b.neglected) continue;
     const def = BUILDING_CATALOG[b.defId];
     if (!def.skillGrowth) continue;
 
@@ -243,9 +246,11 @@ export function lacksBuilding(buildings: BuiltBuilding[], defId: BuildingId): bo
  * Returns the total additive fertility bonus granted by all standing buildings.
  * Each building can define `fertilityBonus` (fraction 0.0–1.0).
  * The result is capped at 0.25 in the caller (fertility.ts).
+ * Neglected buildings do not contribute fertility bonuses.
  */
 export function getBuildingFertilityBonus(buildings: BuiltBuilding[]): number {
   return buildings.reduce((sum, b) => {
+    if (b.neglected) return sum;
     const bonus = BUILDING_CATALOG[b.defId].fertilityBonus;
     return bonus !== undefined ? sum + bonus : sum;
   }, 0);
@@ -262,15 +267,8 @@ import type { GameState } from '../turn/game-state';
  * Formula:
  *   completedBuildings.length × 3
  *   + floor(food / 15)
- *   + floor(goods / 8)
- *   + gold × 2
+ *   + floor(wealth / 3)
  *   + floor(populationCount / 5)
- *
- * Representative values:
- *   Starting camp, 8 settlers              ≈ 10
- *   4 buildings, modest resources, 12 pop  ≈ 20–25
- *   8 buildings, comfortable, 20 pop       ≈ 40–55
- *   14 buildings, well-stocked, 35 pop     ≈ 80+
  */
 export function computeProsperityScore(state: GameState): number {
   const { settlement } = state;
@@ -278,8 +276,49 @@ export function computeProsperityScore(state: GameState): number {
   return (
     settlement.buildings.length * 3
     + Math.floor(r.food / 15)
-    + Math.floor(r.goods / 8)
-    + r.gold * 2
+    + Math.floor(r.wealth / 3)
     + Math.floor(settlement.populationCount / 5)
   );
+}
+
+// ─── Building Maintenance ─────────────────────────────────────────────────────
+
+/**
+ * Processes building maintenance for the settlement:
+ * - Deducts maintenanceCost from resources for each building that can pay.
+ * - Marks buildings as neglected if they cannot pay.
+ * - Clears the neglected flag for buildings that can now pay.
+ *
+ * Buildings are processed in order. Each building is all-or-nothing:
+ * partial payment is not accepted.
+ */
+export function applyBuildingMaintenance(
+  buildings: BuiltBuilding[],
+  resources: ResourceStock,
+): { updatedBuildings: BuiltBuilding[]; updatedResources: ResourceStock; neglectedIds: string[] } {
+  let res = { ...resources };
+  const neglectedIds: string[] = [];
+  const updatedBuildings = buildings.map(b => {
+    const def = BUILDING_CATALOG[b.defId];
+    if (!def.maintenanceCost) {
+      // No maintenance required — clear neglected flag if it was set
+      return b.neglected ? { ...b, neglected: false } : b;
+    }
+    // Check if we can afford full maintenance cost
+    const canAfford = (Object.entries(def.maintenanceCost) as [keyof ResourceStock, number][])
+      .every(([r, cost]) => (res[r] ?? 0) >= cost);
+    if (canAfford) {
+      // Deduct cost
+      const updated = { ...res };
+      for (const [r, cost] of Object.entries(def.maintenanceCost) as [keyof ResourceStock, number][]) {
+        updated[r] = (updated[r] ?? 0) - cost;
+      }
+      res = updated;
+      return b.neglected ? { ...b, neglected: false } : b;
+    } else {
+      neglectedIds.push(b.instanceId);
+      return { ...b, neglected: true };
+    }
+  });
+  return { updatedBuildings, updatedResources: res, neglectedIds };
 }

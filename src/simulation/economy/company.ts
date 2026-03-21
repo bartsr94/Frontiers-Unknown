@@ -20,14 +20,12 @@ import { clamp } from '../../utils/math';
 
 /** The amounts contributed by the player toward the current year's quota. */
 export interface QuotaContribution {
-  gold: number;
-  goods: number;
+  wealth: number;
 }
 
 /** The yearly quota requirements for a given year. */
 export interface YearlyQuota {
-  gold: number;
-  goods: number;
+  wealth: number;
 }
 
 /** Delivery contents of the annual resupply ship. */
@@ -35,25 +33,19 @@ export type SupplyDelivery = Partial<Record<ResourceType, number>>;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/** Years 1–3 are a grace period: no quota required by the Company. */
-export const QUOTA_GRACE_YEARS = 3;
-
-/**
- * Exchange rate: 1 gold = this many goods-equivalent in quota value.
- * Used to calculate overpay credit when a player uses one resource to cover a
- * shortfall in the other.
- */
-export const GOLD_TO_GOODS_RATE = 2;
+/** Years 1–10 are an investment phase: no quota required by the Company. */
+export const QUOTA_GRACE_YEARS = 10;
 
 /**
  * Base supply deliveries per support level.
  * The annual ship delivers these amounts each spring.
+ * During years 1–10 (investment phase) the Company funds the settlement directly.
  */
 export const SUPPLY_DELIVERIES: Record<CompanySupportLevel, SupplyDelivery> = {
-  full_support: { food: 15, gold: 10, goods: 5, medicine: 5 },
-  standard:     { food: 10, gold: 5,  goods: 3 },
-  reduced:      { food: 5,  gold: 2 },
-  minimal:      { food: 2 },
+  full_support: { food: 15, wealth: 12, medicine: 5 },
+  standard:     { food: 10, wealth: 7  },
+  reduced:      { food: 5,  wealth: 3  },
+  minimal:      { food: 2               },
   abandoned:    {},
 };
 
@@ -62,20 +54,18 @@ export const SUPPLY_DELIVERIES: Record<CompanySupportLevel, SupplyDelivery> = {
 /**
  * Computes the annual quota required for a given in-game year.
  *
- * Grace period: years 1–3 return 0 for both quotas.
- * From year 4: quota scales linearly with years beyond the grace period.
+ * Investment phase: years 1–10 return zero wealth (no quota expected).
+ * From year 11: quota scales linearly, giving the player time to grow
+ * their economy before the Company starts demanding returns.
  *
  * @param year - The current in-game year (1-indexed).
  */
 export function computeYearlyQuota(year: number): YearlyQuota {
   if (year <= QUOTA_GRACE_YEARS) {
-    return { gold: 0, goods: 0 };
+    return { wealth: 0 };
   }
   const delta = year - QUOTA_GRACE_YEARS;
-  return {
-    gold:  5 + delta * 2,
-    goods: 8 + delta * 3,
-  };
+  return { wealth: 10 + delta * 5 };
 }
 
 // ─── Quota Status Check ───────────────────────────────────────────────────────
@@ -83,37 +73,25 @@ export function computeYearlyQuota(year: number): YearlyQuota {
 /**
  * Checks whether the player's contributions satisfy the annual quota.
  *
- * Exchange logic: contributions in goods offset a gold shortfall (and vice
- * versa) at the GOLD_TO_GOODS_RATE exchange rate.
- *
- * Status thresholds (measured as fraction of total quota VALUE delivered):
+ * Status thresholds (measured as fraction of total quota wealth delivered):
  *   exceeded  ≥ 110%
  *   met        90–109%  (±10% tolerance)
  *   partial    50– 89%
  *   failed      < 50%
  *
- * During the grace period (quota = 0) the status is always 'exceeded'.
+ * During the investment phase (quota = 0) the status is always 'exceeded'.
  *
- * @param contribution - How much gold and goods the player has contributed this year.
- * @param quota - The required amounts for this year.
+ * @param contribution - How much wealth the player has contributed this year.
+ * @param quota - The required wealth for this year.
  */
 export function checkQuotaStatus(
   contribution: QuotaContribution,
   quota: YearlyQuota,
 ): QuotaStatus {
-  // Grace period: no requirements — automatically exceeded.
-  if (quota.gold === 0 && quota.goods === 0) return 'exceeded';
+  // Investment phase: no requirements — automatically exceeded.
+  if (quota.wealth === 0) return 'exceeded';
 
-  // Convert everything to gold-equivalent for comparison.
-  // 1 gold = GOLD_TO_GOODS_RATE goods in quota value.
-  // So gold quota is worth: quotaGold gold.
-  // And goods quota is worth: quotaGoods / GOLD_TO_GOODS_RATE gold.
-  const requiredValue = quota.gold + quota.goods / GOLD_TO_GOODS_RATE;
-
-  const contributedValue =
-    contribution.gold + contribution.goods / GOLD_TO_GOODS_RATE;
-
-  const fraction = contributedValue / requiredValue;
+  const fraction = contribution.wealth / quota.wealth;
 
   if (fraction >= 1.1)  return 'exceeded';
   if (fraction >= 0.9)  return 'met';
@@ -224,10 +202,9 @@ export function getCompanySupplyDelivery(supportLevel: CompanySupportLevel): Sup
 }
 
 /**
- * Returns the supply delivery for a given year, stripping the gold component
- * after year 10 (the Company stops all gold transfers in year 11+).
- *
- * Non-monetary aid (food, goods, medicine) continues unchanged regardless of year.
+ * Returns the supply delivery for a given year.
+ * During years 1–10 (investment phase) the full wealth component is included.
+ * From year 11 onward only non-monetary aid continues.
  *
  * @param supportLevel - Current Company support tier.
  * @param currentYear  - Current in-game year (1-indexed).
@@ -237,9 +214,9 @@ export function computeAnnualDelivery(
   currentYear: number,
 ): SupplyDelivery {
   const base = getCompanySupplyDelivery(supportLevel);
-  if (currentYear > 10) {
+  if (currentYear > QUOTA_GRACE_YEARS) {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { gold: _gold, ...rest } = base;
+    const { wealth: _wealth, ...rest } = base;
     return rest;
   }
   return base;

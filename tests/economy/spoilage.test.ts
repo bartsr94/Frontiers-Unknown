@@ -12,12 +12,11 @@ function makeResources(overrides: Partial<ResourceStock> = {}): ResourceStock {
   return {
     food: 0,
     cattle: 0,
-    goods: 0,
+    wealth: 0,
     steel: 0,
     lumber: 0,
     stone: 0,
     medicine: 0,
-    gold: 0,
     horses: 0,
     ...overrides,
   };
@@ -30,15 +29,14 @@ function makeBuilding(defId: BuiltBuilding['defId']): BuiltBuilding {
 // ─── SPOILAGE_CONFIG ──────────────────────────────────────────────────────────
 
 describe('SPOILAGE_CONFIG', () => {
-  it('steel, lumber, stone, gold have no spoilage (null)', () => {
+  it('steel, lumber, stone have no spoilage (null)', () => {
     expect(SPOILAGE_CONFIG.steel).toBeNull();
     expect(SPOILAGE_CONFIG.lumber).toBeNull();
     expect(SPOILAGE_CONFIG.stone).toBeNull();
-    expect(SPOILAGE_CONFIG.gold).toBeNull();
   });
 
-  it('food, cattle, horses, medicine, goods all have a positive base rate', () => {
-    for (const key of ['food', 'cattle', 'horses', 'medicine', 'goods'] as const) {
+  it('food, cattle, horses, medicine, wealth all have a positive base rate', () => {
+    for (const key of ['food', 'cattle', 'horses', 'medicine', 'wealth'] as const) {
       const cfg = SPOILAGE_CONFIG[key];
       expect(cfg).not.toBeNull();
       expect(cfg!.baseRate).toBeGreaterThan(0);
@@ -110,13 +108,12 @@ describe('calculateSpoilage', () => {
     expect((withStable.horses ?? 0)).toBeLessThan((withoutStable.horses ?? 0));
   });
 
-  it('steel, lumber, stone, gold never spoil', () => {
-    const resources = makeResources({ steel: 1000, lumber: 1000, stone: 1000, gold: 1000 });
+  it('steel, lumber, stone, wealth never spoil (no configuration)', () => {
+    const resources = makeResources({ steel: 1000, lumber: 1000, stone: 1000 });
     const losses = calculateSpoilage(resources, 'summer', []);
     expect(losses.steel).toBeUndefined();
     expect(losses.lumber).toBeUndefined();
     expect(losses.stone).toBeUndefined();
-    expect(losses.gold).toBeUndefined();
   });
 
   it('loss does not exceed available stock', () => {
@@ -160,8 +157,8 @@ describe('applySpoilage', () => {
   });
 
   it('leaves untouched resources unchanged', () => {
-    const resources = makeResources({ food: 50, gold: 100 });
+    const resources = makeResources({ food: 50, wealth: 100 });
     const updated = applySpoilage(resources, { food: 5 });
-    expect(updated.gold).toBe(100);
+    expect(updated.wealth).toBe(100);
   });
 });

@@ -59,7 +59,7 @@ export const IMMIGRATION_EVENTS: GameEvent[] = [
             religion: 'sacred_wheel',
             initialSkillBoosts: { bargaining: 12, custom: 8 },
           }},
-          { type: 'modify_resource', target: 'goods', value: 6 },
+          { type: 'modify_resource', target: 'wealth', value: 6 },
           { type: 'modify_disposition', target: 'any_kiswani_tribe', value: 5 },
         ],
       },

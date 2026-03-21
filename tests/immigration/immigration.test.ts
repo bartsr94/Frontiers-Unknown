@@ -48,14 +48,13 @@ function builtBuilding(defId: BuiltBuilding['defId'], instanceId?: string): Buil
 function makeState(overrides: {
   buildings?: BuiltBuilding[];
   food?: number;
-  goods?: number;
-  gold?: number;
+  wealth?: number;
   pop?: number;
   tribes?: GameState['tribes'];
 } = {}): GameState {
   const DEFAULT_RESOURCES: Record<ResourceType, number> = {
-    food: 0, cattle: 0, goods: 0, steel: 0, lumber: 0,
-    stone: 0, medicine: 0, gold: 0, horses: 0,
+    food: 0, cattle: 0, wealth: 0, steel: 0, lumber: 0,
+    stone: 0, medicine: 0, horses: 0,
   };
 
   return {
@@ -72,9 +71,8 @@ function makeState(overrides: {
       buildings: overrides.buildings ?? [],
       resources: {
         ...DEFAULT_RESOURCES,
-        food:  overrides.food  ?? 0,
-        goods: overrides.goods ?? 0,
-        gold:  overrides.gold  ?? 0,
+        food:   overrides.food   ?? 0,
+        wealth: overrides.wealth ?? 0,
       },
       populationCount: overrides.pop ?? 0,
     },
@@ -221,7 +219,7 @@ describe('getBuildingFertilityBonus', () => {
 
 describe('computeProsperityScore', () => {
   it('returns 0 for a completely empty settlement', () => {
-    const state = makeState({ buildings: [], food: 0, goods: 0, gold: 0, pop: 0 });
+    const state = makeState({ buildings: [], food: 0, wealth: 0, pop: 0 });
     expect(computeProsperityScore(state)).toBe(0);
   });
 
@@ -235,14 +233,9 @@ describe('computeProsperityScore', () => {
     expect(computeProsperityScore(state)).toBe(2); // floor(30/15) = 2
   });
 
-  it('goods contributes floor(goods/8)', () => {
-    const state = makeState({ goods: 16 });
-    expect(computeProsperityScore(state)).toBe(2); // floor(16/8) = 2
-  });
-
-  it('gold contributes gold × 2', () => {
-    const state = makeState({ gold: 5 });
-    expect(computeProsperityScore(state)).toBe(10); // 5 × 2
+  it('wealth contributes floor(wealth/3)', () => {
+    const state = makeState({ wealth: 9 });
+    expect(computeProsperityScore(state)).toBe(3); // floor(9/3) = 3
   });
 
   it('population contributes floor(pop/5)', () => {
@@ -251,19 +244,19 @@ describe('computeProsperityScore', () => {
   });
 
   it('correctly sums all components', () => {
-    // 3 buildings → 9, food 30 → 2, goods 8 → 1, gold 3 → 6, pop 10 → 2  = 20
+    // 3 buildings → 9, food 30 → 2, wealth 9 → 3, pop 10 → 2  = 16
     const state = makeState({
       buildings: [builtBuilding('camp'), builtBuilding('granary'), builtBuilding('gathering_hall')],
-      food: 30, goods: 8, gold: 3, pop: 10,
+      food: 30, wealth: 9, pop: 10,
     });
-    expect(computeProsperityScore(state)).toBe(20);
+    expect(computeProsperityScore(state)).toBe(16);
   });
 
   it('matches the documented representative value for a starting camp', () => {
-    // 1 building (3) + floor(0/15)=0 + floor(0/8)=0 + 0×2=0 + floor(8/5)=1  = 4
+    // 1 building (3) + floor(0/15)=0 + floor(0/3)=0 + floor(8/5)=1  = 4
     const state = makeState({
       buildings: [builtBuilding('camp')],
-      food: 0, goods: 0, gold: 0, pop: 8,
+      food: 0, wealth: 0, pop: 8,
     });
     expect(computeProsperityScore(state)).toBe(4);
   });
@@ -450,20 +443,20 @@ describe('event prerequisite — min_prosperity', () => {
   }
 
   it('passes when prosperity score meets the threshold', () => {
-    // 3 buildings (9) + gold 5 (10) = 19 → threshold 15 passes
+    // 3 buildings (9) + floor(18/3)=6 wealth = 15 → threshold 15 passes
     const state = makeState({
       buildings: [builtBuilding('camp'), builtBuilding('granary'), builtBuilding('trading_post')],
-      gold: 5,
+      wealth: 18,
     });
     const event = eventWithProsperity(15);
     expect(isEventEligible(event, state)).toBe(true);
   });
 
   it('passes when prosperity score exactly equals the threshold', () => {
-    // 3 buildings (9) + gold 3 (6) = 15
+    // 3 buildings (9) + floor(18/3)=6 wealth = 15 exactly
     const state = makeState({
       buildings: [builtBuilding('camp'), builtBuilding('granary'), builtBuilding('trading_post')],
-      gold: 3,
+      wealth: 18,
     });
     const event = eventWithProsperity(15);
     expect(isEventEligible(event, state)).toBe(true);

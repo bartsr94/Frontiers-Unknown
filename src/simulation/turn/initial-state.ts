@@ -7,14 +7,14 @@
  */
 
 import { createPerson, ETHNIC_GROUP_PRIMARY_LANGUAGE, ETHNIC_GROUP_CULTURE } from '../population/person';
-import type { Person, WorkRole, CultureId } from '../population/person';
+import type { Person, WorkRole, CultureId, EthnicGroup } from '../population/person';
 import { generateName } from '../population/naming';
 import { emptyResourceStock } from '../economy/resources';
 import { initializeBaselineOpinions, getOpinion, setOpinion } from '../population/opinions';
-import { SAUROMATIAN_CULTURE_IDS } from '../population/culture';
+import { SAUROMATIAN_CULTURE_IDS, computeCulturalBlend } from '../population/culture';
 import { generateAmbition } from '../population/ambitions';
 import { seedFoundingRelationships } from '../population/named-relationships';
-import { initializeHouseholds } from '../population/household';
+import { initializeHouseholds, createHousehold, addToHousehold } from '../population/household';
 import { createFertilityProfile } from '../genetics/fertility';
 import { ETHNIC_DISTRIBUTIONS } from '../../data/ethnic-distributions';
 import type { GameState, ResourceStock, Settlement, SettlementCulture, CompanyRelation, GameConfig } from './game-state';
@@ -32,6 +32,19 @@ import { clamp } from '../../utils/math';
 
 /** Standard Imanian sex-ratio modifier: equal probability of male/female offspring. */
 const IMANIAN_GENDER_RATIO = 0.5;
+
+/**
+ * Fraction of the full Company annual supply delivery that actually arrives,
+ * based on how far along the Kethani the settlement is founded.
+ * Further west = smaller, less reliable ships.
+ */
+const LOCATION_SUPPLY_MODIFIERS: Record<string, number> = {
+  kethani_mouth:       1.00,
+  kethani_lowlands:    0.85,
+  kethani_midreach:    0.60,
+  kethani_uplands:     0.35,
+  kethani_headwaters:  0.15,
+};
 
 /** Role and age-range configuration for each male founding settler.
  * Settlers who will eventually farm start as foragers — the settlement begins
@@ -113,6 +126,65 @@ function sampleImanianGenetics(rng: SeededRNG): Person['genetics'] {
   };
 }
 
+/**
+ * Samples genetics blended between Imanian and a Kiswani sub-group.
+ * imanianFrac (0–1) governs how strongly each ethnic distribution influences the result.
+ */
+function sampleBlendedGenetics(imanianFrac: number, kiswaniGroup: EthnicGroup, rng: SeededRNG): Person['genetics'] {
+  const im = IMANIAN_TRAITS;
+  const ki = ETHNIC_DISTRIBUTIONS[kiswaniGroup];
+  const kiFrac = 1 - imanianFrac;
+  return {
+    visibleTraits: {
+      skinTone: clamp(rng.gaussian(
+        imanianFrac * im.skinTone.mean + kiFrac * ki.skinTone.mean,
+        Math.sqrt(imanianFrac * im.skinTone.variance + kiFrac * ki.skinTone.variance + 0.001),
+      ), 0, 1),
+      skinUndertone:   rng.next() < imanianFrac ? rng.weightedPick(im.skinUndertone.weights) : rng.weightedPick(ki.skinUndertone.weights),
+      hairColor:       rng.next() < imanianFrac ? rng.weightedPick(im.hairColor.weights)     : rng.weightedPick(ki.hairColor.weights),
+      hairTexture:     rng.next() < imanianFrac ? rng.weightedPick(im.hairTexture.weights)   : rng.weightedPick(ki.hairTexture.weights),
+      eyeColor:        rng.next() < imanianFrac ? rng.weightedPick(im.eyeColor.weights)      : rng.weightedPick(ki.eyeColor.weights),
+      buildType:       rng.next() < imanianFrac ? rng.weightedPick(im.buildType.weights)     : rng.weightedPick(ki.buildType.weights),
+      height:          rng.next() < imanianFrac ? rng.weightedPick(im.height.weights)        : rng.weightedPick(ki.height.weights),
+      facialStructure: rng.next() < imanianFrac ? rng.weightedPick(im.facialStructure.weights): rng.weightedPick(ki.facialStructure.weights),
+    },
+    // Blend gender ratio and fertility toward Kiswani/Sauromatian side
+    genderRatioModifier: imanianFrac * 0.5 + kiFrac * 0.35,
+    extendedFertility: rng.next() > imanianFrac,
+  };
+}
+
+// ─── Location-based wildborn companion configuration ─────────────────────────
+
+/** Ethnic group for wildborn Sauromatian women, per starting location.
+ * Two entries on kethani_lowlands and kethani_midreach represent the RNG split
+ * documented in the design spec (INTRO_SEQUENCE.md §6). */
+const WILDBORN_ETHNIC_GROUPS: Record<string, EthnicGroup[]> = {
+  kethani_mouth:       ['kiswani_riverfolk'],
+  kethani_lowlands:    ['kiswani_riverfolk', 'hanjoda_bloodmoon'],
+  kethani_midreach:    ['hanjoda_stormcaller', 'hanjoda_bloodmoon'],
+  kethani_uplands:     ['hanjoda_stormcaller'],
+  kethani_headwaters:  ['hanjoda_stormcaller'],
+};
+
+/** Tradetalk fluency of wildborn women at each location. */
+const WILDBORN_TRADETALK: Record<string, number> = {
+  kethani_mouth:       0.35,
+  kethani_lowlands:    0.25,
+  kethani_midreach:    0.15,
+  kethani_uplands:     0.05,
+  kethani_headwaters:  0.0,
+};
+
+/** Per-location starting resource adjustments applied on top of the base stock. */
+const LOCATION_RESOURCE_ADJUSTMENTS: Record<string, Partial<ResourceStock>> = {
+  kethani_mouth:       {},
+  kethani_lowlands:    { food: 5 },
+  kethani_midreach:    {},
+  kethani_uplands:     { lumber: 10, food: -5 },
+  kethani_headwaters:  { stone: 5, food: -10, lumber: -5 },
+};
+
 // ─── Council seeding ──────────────────────────────────────────────────────────
 
 /**
@@ -168,16 +240,161 @@ export function createInitialState(config: GameConfig, settlementName: string, s
     people.set(person.id, person);
   }
 
-  // Optional founding Sauromatian women (enable via GameConfig.includeSauromatianWomen).
-  if (config.includeSauromatianWomen) {
-    // Determine ethnic group from the first selected tribe, or fall back.
-    const firstPresetId = config.startingTribes[0];
-    const firstPreset = firstPresetId ? TRIBE_PRESETS[firstPresetId] : undefined;
-    const sauroGroup = firstPreset?.ethnicGroup ?? 'kiswani_riverfolk';
-    const sauroTraitDist = ETHNIC_DISTRIBUTIONS[sauroGroup];
+  // ── Companion generation ───────────────────────────────────────────────────
+  // Collect households pre-formed here (married couples); later merged with
+  // the solo households from initializeHouseholds.
+  const preFormedHouseholds = new Map<string, ReturnType<typeof createHousehold>>();
 
-    // Three women join per starting configuration; names, appearance, and traits
-    // are seeded from the game RNG for variety across play-throughs.
+  // ── A) Imanian Wives ───────────────────────────────────────────────────────
+  // 2–3 women pre-married to founding male settlers. Households form on day 1.
+  if (config.companionChoices?.imanianWives) {
+    const wifeCount = rng.nextInt(2, 3);
+    // Pick the first N eligible founding males by age (≥ 22, not yet married)
+    const eligibleHusbands = Array.from(people.values())
+      .filter(p => p.sex === 'male' && p.age >= 22)
+      .sort((a, b) => a.age - b.age)
+      .slice(0, wifeCount);
+
+    for (const husband of eligibleHusbands) {
+      const wifeAge = clamp(husband.age + rng.nextInt(-3, 3), 20, 38);
+      const { firstName: wFirstName, familyName: wFamilyName } = generateName(
+        'female', 'ansberite', '', husband.familyName, rng,
+      );
+      const wife = createPerson({
+        firstName: wFirstName,
+        familyName: wFamilyName,
+        sex: 'female',
+        age: wifeAge,
+        role: 'unassigned',
+        socialStatus: 'founding_member',
+        languages: [{ language: 'imanian', fluency: 1.0 }],
+        genetics: sampleImanianGenetics(rng),
+        religion: 'imanian_orthodox',
+        traits: pickFounderTraits(rng),
+        spouseIds: [husband.id],
+        heritage: {
+          bloodline: [{ group: 'imanian', fraction: 1.0 }],
+          primaryCulture: 'ansberite',
+          culturalFluency: new Map<CultureId, number>([['ansberite', 1.0]]),
+        },
+      }, rng);
+
+      // Update the husband to link to his wife
+      const updatedHusband: Person = { ...husband, spouseIds: [wife.id] };
+      people.set(husband.id, updatedHusband);
+      people.set(wife.id, wife);
+
+      // Create the household now so it survives initializeHouseholds
+      const hh = createHousehold({
+        name: `House ${husband.familyName}`,
+        tradition: 'imanian',
+        headId: husband.id,
+        seniorWifeId: wife.id,
+        foundedTurn: 0,
+      });
+      const hhWithMembers = addToHousehold(addToHousehold(hh, husband.id), wife.id);
+      preFormedHouseholds.set(hhWithMembers.id, hhWithMembers);
+
+      // Mark both people as belonging to this household so initializeHouseholds skips them
+      people.set(husband.id, { ...updatedHusband, householdId: hhWithMembers.id, householdRole: 'head' });
+      people.set(wife.id, { ...wife, householdId: hhWithMembers.id, householdRole: 'wife' });
+
+      // 30% chance to add a young child (age 2–6)
+      if (rng.next() < 0.30) {
+        const childAge = rng.nextInt(2, 6);
+        const childSex = rng.next() < 0.5 ? 'male' : 'female';
+        const { firstName: cFirstName } = generateName(childSex, 'ansberite', wife.firstName, husband.familyName, rng);
+        const child = createPerson({
+          firstName: cFirstName,
+          familyName: husband.familyName,
+          sex: childSex,
+          age: childAge,
+          role: 'child',
+          socialStatus: 'founding_member',
+          languages: [{ language: 'imanian', fluency: 1.0 }],
+          genetics: sampleImanianGenetics(rng),
+          religion: 'imanian_orthodox',
+          traits: [],
+          parentIds: [wife.id, husband.id],
+          householdId: hhWithMembers.id,
+          householdRole: 'child',
+          heritage: {
+            bloodline: [{ group: 'imanian', fraction: 1.0 }],
+            primaryCulture: 'ansberite',
+            culturalFluency: new Map<CultureId, number>([['ansberite', 1.0]]),
+          },
+        }, rng);
+        people.set(child.id, child);
+        preFormedHouseholds.set(hhWithMembers.id, addToHousehold(hhWithMembers, child.id));
+      }
+    }
+  }
+
+  // ── B) Townborn Auxiliaries ────────────────────────────────────────────────
+  // 3 mixed-heritage locals from Shackle Station. Imanian–Kiswani bloodline.
+  if (config.companionChoices?.townbornAuxiliaries) {
+    const townbornCount = 3;
+    // Sex split: either 2 women + 1 man or 1 woman + 2 men (equal probability)
+    const sexPattern: Array<'male' | 'female'> = rng.next() < 0.5
+      ? ['female', 'female', 'male']
+      : ['female', 'male', 'male'];
+
+    for (let i = 0; i < townbornCount; i++) {
+      const sex = sexPattern[i] ?? 'male';
+      const imanianFrac = clamp(rng.gaussian(0.35, 0.08), 0.20, 0.50);
+      const kiswaniGroup: EthnicGroup = 'kiswani_riverfolk';
+      const primaryCulture: CultureId = imanianFrac >= 0.50 ? 'ansberite' : ETHNIC_GROUP_CULTURE[kiswaniGroup];
+      const { firstName, familyName } = generateName(sex, 'ansberite', '', '', rng);
+      const religion = rng.next() < 0.60 ? 'imanian_orthodox' : ('sacred_wheel' as const);
+      const imanianFluency = clamp(rng.gaussian(0.60, 0.07), 0.50, 0.75);
+      const tradetalkFluency = clamp(rng.gaussian(0.80, 0.06), 0.65, 0.95);
+      const kiswaniFluency = clamp(rng.gaussian(0.90, 0.05), 0.80, 1.0);
+
+      const townborn = createPerson({
+        firstName,
+        familyName,
+        sex,
+        age: rng.nextInt(16, 30),
+        role: 'unassigned',
+        socialStatus: 'newcomer',
+        languages: [
+          { language: 'imanian', fluency: imanianFluency },
+          { language: 'tradetalk', fluency: tradetalkFluency },
+          { language: 'kiswani', fluency: kiswaniFluency },
+        ],
+        genetics: sampleBlendedGenetics(imanianFrac, kiswaniGroup, rng),
+        religion,
+        traits: pickFounderTraits(rng),
+        heritage: {
+          bloodline: [
+            { group: 'imanian', fraction: imanianFrac },
+            { group: kiswaniGroup, fraction: 1 - imanianFrac },
+          ],
+          primaryCulture,
+          culturalFluency: new Map<CultureId, number>([
+            ['ansberite', imanianFrac],
+            [ETHNIC_GROUP_CULTURE[kiswaniGroup], 1 - imanianFrac],
+          ]),
+        },
+      }, rng);
+      people.set(townborn.id, townborn);
+    }
+  }
+
+  // ── C) Wildborn Sauromatian Women ──────────────────────────────────────────
+  // Pure or near-pure Sauromatian women. Ethnic group and Tradetalk fluency
+  // depend on the settlement location. Falls back to legacy flag if needed.
+  const useWildborn = config.companionChoices?.wildbornWomen ?? config.includeSauromatianWomen ?? false;
+  if (useWildborn) {
+    const location = config.startingLocation;
+    const ethnicOptions = WILDBORN_ETHNIC_GROUPS[location] ?? ['kiswani_riverfolk'];
+    // Pick ethnic group from the options array — multi-option locations use RNG
+    const sauroGroup: EthnicGroup = ethnicOptions.length > 1
+      ? (ethnicOptions[rng.next() < 0.60 ? 0 : 1] ?? 'kiswani_riverfolk')
+      : (ethnicOptions[0] ?? 'kiswani_riverfolk');
+
+    const tradetalkFluency = WILDBORN_TRADETALK[location] ?? 0.3;
+    const sauroTraitDist = ETHNIC_DISTRIBUTIONS[sauroGroup];
     const SAURO_AGE_RANGES = [[18, 22], [22, 27], [27, 33]] as const;
 
     for (const [ageMin, ageMax] of SAURO_AGE_RANGES) {
@@ -207,7 +424,7 @@ export function createInitialState(config: GameConfig, settlementName: string, s
             height:          rng.weightedPick(d.height.weights),
             facialStructure: rng.weightedPick(d.facialStructure.weights),
           },
-          genderRatioModifier: 0.14, // Pure Sauromatian
+          genderRatioModifier: 0.14,
           extendedFertility: true,
         },
         fertility: createFertilityProfile(true),
@@ -216,12 +433,12 @@ export function createInitialState(config: GameConfig, settlementName: string, s
           primaryCulture: ETHNIC_GROUP_CULTURE[sauroGroup],
           culturalFluency: new Map<CultureId, number>([[ETHNIC_GROUP_CULTURE[sauroGroup], 1.0]]),
         },
-        // Sauromatian women joining a trading company will have picked up some
-        // Tradetalk — it's the lingua franca of cross-tribal commerce.
-        languages: [
-          { language: ETHNIC_GROUP_PRIMARY_LANGUAGE[sauroGroup], fluency: 1.0 },
-          { language: 'tradetalk', fluency: 0.3 },
-        ],
+        languages: tradetalkFluency > 0
+          ? [
+              { language: ETHNIC_GROUP_PRIMARY_LANGUAGE[sauroGroup], fluency: 1.0 },
+              { language: 'tradetalk', fluency: tradetalkFluency },
+            ]
+          : [{ language: ETHNIC_GROUP_PRIMARY_LANGUAGE[sauroGroup], fluency: 1.0 }],
         religion: 'sacred_wheel',
         traits: pickFounderTraits(rng),
       }, rng);
@@ -229,14 +446,24 @@ export function createInitialState(config: GameConfig, settlementName: string, s
     }
   }
 
+  // ── D) Location-based resource adjustments ─────────────────────────────────
+  // Apply per-location starting resource modifiers on top of the base stock.
+  const locationAdj = LOCATION_RESOURCE_ADJUSTMENTS[config.startingLocation] ?? {};
+
+  // ── E) Townborn supply modifier bonus ─────────────────────────────────────
+  // If Townborn are present at hard-to-reach locations, they provide a small
+  // logistical knowledge bonus (+0.10 to supply delivery modifier).
+  const hasTownborn = config.companionChoices?.townbornAuxiliaries ?? false;
+  const isRemoteLocation = config.startingLocation === 'kethani_uplands' || config.startingLocation === 'kethani_headwaters';
+  const townbornSupplyBonus = hasTownborn && isRemoteLocation ? 0.10 : 0.0;
+
   const initialResources: ResourceStock = {
     ...emptyResourceStock(),
-    food: 20,
-    gold: 50,
-    goods: 5,
+    food:   Math.max(0, 20 + (locationAdj.food   ?? 0)),
+    wealth: 30,
     cattle: 5,
-    lumber: 20,
-    stone: 10,
+    lumber: Math.max(0, 20 + (locationAdj.lumber ?? 0)),
+    stone:  Math.max(0, 10 + (locationAdj.stone  ?? 0)),
   };
 
   const settlement: Settlement = {
@@ -256,7 +483,7 @@ export function createInitialState(config: GameConfig, settlementName: string, s
     primaryLanguage: 'imanian',
     religions: new Map([['imanian_orthodox', 1.0]]),
     religiousTension: 0,
-    culturalBlend: 0,
+    culturalBlend: computeCulturalBlend(people),
     practices: ['imanian_liturgy', 'company_law'],
     governance: 'patriarchal_imanian',
     languageDiversityTurns: 0,
@@ -268,14 +495,15 @@ export function createInitialState(config: GameConfig, settlementName: string, s
 
   const company: CompanyRelation = {
     standing: 60,
-    annualQuotaGold: 20,
-    annualQuotaGoods: 5,
+    annualQuotaWealth: 0,
     consecutiveFailures: 0,
     supportLevel: 'standard',
     yearsActive: 0,
-    quotaContributedGold: 0,
-    quotaContributedGoods: 0,
-    exportedGoodsThisYear: 0,
+    quotaContributedWealth: 0,
+    locationSupplyModifier: clamp(
+      (LOCATION_SUPPLY_MODIFIERS[config.startingLocation] ?? 1.0) + townbornSupplyBonus,
+      0.0, 1.0,
+    ),
   };
 
   // ── Tribe population ───────────────────────────────────────────────────────
@@ -323,9 +551,13 @@ export function createInitialState(config: GameConfig, settlementName: string, s
   }
 
   // Seed households for all founding persons before building initial state.
+  // People who already have a householdId set (married couples from the Imanian
+  // wives branch) are skipped by initializeHouseholds automatically.
   const { updatedPeople: peopleWithHouseholds, newHouseholds: foundingHouseholds } =
     initializeHouseholds(people, 0);
   for (const [id, p] of peopleWithHouseholds) people.set(id, p);
+  // Merge pre-formed couple households into the founding household map
+  for (const [id, hh] of preFormedHouseholds) foundingHouseholds.set(id, hh);
 
   const initialGameState: GameState = {
     version: '1.0.0',
@@ -397,7 +629,7 @@ export function createInitialState(config: GameConfig, settlementName: string, s
   // setOpinion with value 0 would DELETE the entry, so we clamp to a minimum.
   //   Women → men: min +15 (above the seek_companion/seek_spouse threshold of 5)
   //   Men → women: min +30 (above the seek_spouse/seek_informal_union threshold of 25)
-  if (config.includeSauromatianWomen) {
+  if (useWildborn || config.companionChoices?.imanianWives) {
     const sauroWomen = Array.from(seededPeople.values()).filter(
       p => p.sex === 'female' && SAUROMATIAN_CULTURE_IDS.has(p.heritage.primaryCulture),
     );
@@ -417,6 +649,17 @@ export function createInitialState(config: GameConfig, settlementName: string, s
         const manRaw = getOpinion(seededPeople.get(man.id)!, woman.id);
         const updatedMan = setOpinion(seededPeople.get(man.id)!, woman.id, Math.max(manRaw + 35, 30));
         seededPeople.set(man.id, updatedMan);
+      }
+    }
+  }
+  // Imanian wives: seed spouse opinions at the marriage floor (+50)
+  if (config.companionChoices?.imanianWives) {
+    for (const person of seededPeople.values()) {
+      for (const spouseId of person.spouseIds) {
+        const spouse = seededPeople.get(spouseId);
+        if (!spouse) continue;
+        const current = getOpinion(seededPeople.get(person.id)!, spouseId);
+        seededPeople.set(person.id, setOpinion(seededPeople.get(person.id)!, spouseId, Math.max(current, 50)));
       }
     }
   }

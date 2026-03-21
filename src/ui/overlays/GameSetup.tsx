@@ -14,7 +14,7 @@ export default function GameSetup() {
 
   const [settlementName, setSettlementName] = useState('');
   const [difficulty, setDifficulty] = useState<GameConfig['difficulty']>('normal');
-  const [includeSauromatianWomen, setIncludeSauromatianWomen] = useState(false);
+  const [includeSauromatianWomen, setIncludeSauromatianWomen] = useState(true);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

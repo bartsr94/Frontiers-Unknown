@@ -41,7 +41,7 @@ export const CULTURAL_EVENTS: GameEvent[] = [
         description: 'Hospitality costs little and earns a great deal — if it is given well.',
         consequences: [
           { type: 'modify_resource', target: 'food',  value: 6 },
-          { type: 'modify_resource', target: 'goods', value: 3 },
+          { type: 'modify_resource', target: 'wealth', value: 3 },
         ],
         skillCheck: {
           skill: 'diplomacy',
@@ -62,7 +62,7 @@ export const CULTURAL_EVENTS: GameEvent[] = [
           'neither offended nor particularly warmed.',
         consequences: [
           { type: 'modify_resource', target: 'food', value: 6 },
-          { type: 'modify_resource', target: 'goods', value: 3 },
+          { type: 'modify_resource', target: 'wealth', value: 3 },
         ],
       },
       {
@@ -360,11 +360,11 @@ export const CULTURAL_EVENTS: GameEvent[] = [
         successText: 'The technique is absorbed with respect and reciprocity. The team is better for it, and she knows it was received properly.',
         failureText: 'The technique is adopted in pieces. Some men learn it well; others default to old habits. A partial improvement all the same.',
         onSuccess: [
-          { type: 'modify_resource', target: 'goods', value: 4 },
+          { type: 'modify_resource', target: 'wealth', value: 4 },
           { type: 'modify_opinion',  target: 'sauromatian_women', value: 6 },
         ],
         onFailure: [
-          { type: 'modify_resource', target: 'goods', value: 2 },
+          { type: 'modify_resource', target: 'wealth', value: 2 },
         ],
       },
       {
@@ -373,7 +373,7 @@ export const CULTURAL_EVENTS: GameEvent[] = [
         description:
           'The result is the same; the credit is diluted. She notices.',
         consequences: [
-          { type: 'modify_resource', target: 'goods', value: 4 },
+          { type: 'modify_resource', target: 'wealth', value: 4 },
           { type: 'modify_opinion', target: 'sauromatian_women', value: -2 },
         ],
       },
@@ -1185,8 +1185,7 @@ export const CULTURAL_EVENTS: GameEvent[] = [
         consequences: [
           { type: 'modify_opinion', target: 'sauromatian_women',    value: 5 },
           { type: 'modify_opinion', target: 'traditional_imanians', value: -1 },
-          { type: 'modify_resource', target: 'goods', value: -2 },
-        ],
+          { type: 'modify_resource', target: 'wealth', value: -2 },        ],
       },
     ],
   },

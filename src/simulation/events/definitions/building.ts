@@ -96,7 +96,7 @@ export const BUILDING_EVENTS: GameEvent[] = [
         description: 'Distance is not harmony, but it is a start.',
         skipActorBond: true,
         consequences: [
-          { type: 'modify_resource', target: 'goods', value: -1 },
+          { type: 'modify_resource', target: 'wealth', value: -1 },
         ],
         skillCheck: {
           skill: 'leadership',
@@ -128,7 +128,7 @@ export const BUILDING_EVENTS: GameEvent[] = [
         description: 'Channel the anger into labour. The people know what overcrowding means — show them you do too.',
         skipActorBond: true,
         consequences: [
-          { type: 'modify_resource', target: 'goods', value: 2 },
+          { type: 'modify_resource', target: 'wealth', value: 2 },
           { type: 'modify_standing', target: 'company', value: 1 },
           { type: 'modify_opinion_pair', target: '{settler}', value: -6, params: { slotB: '{rival}', label: 'Underlying tension' } },
         ],
@@ -190,7 +190,7 @@ export const BUILDING_EVENTS: GameEvent[] = [
         label: 'Lift the flask with everyone who helped.',
         description: 'Tonight the work is finished. Tomorrow it becomes home.',
         consequences: [
-          { type: 'modify_resource', target: 'goods', value: 3 },
+          { type: 'modify_resource', target: 'wealth', value: 3 },
           { type: 'modify_standing', target: 'company', value: 2 },
         ],
       },
@@ -220,8 +220,8 @@ export const BUILDING_EVENTS: GameEvent[] = [
         label: 'Give them samples of what you produce and invite them back next season.',
         description: 'First impressions in trade are everything.',
         consequences: [
-          { type: 'modify_resource', target: 'goods',  value: -3 },
-          { type: 'modify_resource', target: 'gold',   value: 8 },
+          { type: 'modify_resource', target: 'wealth',  value: -3 },
+          { type: 'modify_resource', target: 'wealth',   value: 8 },
         ],
         skillCheck: {
           skill: 'bargaining',
@@ -230,7 +230,7 @@ export const BUILDING_EVENTS: GameEvent[] = [
           attemptLabel: 'Negotiate terms',
         },
         onSuccess: [
-          { type: 'modify_resource', target: 'gold', value: 6 },
+          { type: 'modify_resource', target: 'wealth', value: 6 },
         ],
         onFailure: [],
       },
@@ -246,8 +246,8 @@ export const BUILDING_EVENTS: GameEvent[] = [
           attemptLabel: 'Hold your ground',
         },
         onSuccess: [
-          { type: 'modify_resource', target: 'gold',  value: 18 },
-          { type: 'modify_resource', target: 'goods', value: -2 },
+          { type: 'modify_resource', target: 'wealth',  value: 18 },
+          { type: 'modify_resource', target: 'wealth', value: -2 },
         ],
         onFailure: [
           { type: 'modify_standing', target: 'company', value: -3 },

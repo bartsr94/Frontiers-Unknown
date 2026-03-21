@@ -125,11 +125,11 @@ export function updateTribeDisposition(
  */
 export const TRIBE_PRESETS: Record<string, TribeConfig> = {
 
-  // ── Kiswani Riverfolk ────────────────────────────────────────────────────
+  // ── Kiswani Riverfolk — colors: Black · Blue · Dark ──────────────────────
 
-  njaro_matu_riverfolk: {
-    id: 'njaro_matu_riverfolk',
-    name: 'Njaro-Matu Riverfolk',
+  bluetide: {
+    id: 'bluetide',
+    name: 'Bluetide',
     ethnicGroup: 'kiswani_riverfolk',
     population: 800,
     startingDisposition: 25,
@@ -138,12 +138,12 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     offerings: ['food', 'pearls', 'knowledge'],
     stability: 0.8,
     tradeDesires: ['steel', 'medicine'],
-    tradeOfferings: ['food', 'gold'],
+    tradeOfferings: ['food', 'wealth'],
   },
 
-  black_water_clan: {
-    id: 'black_water_clan',
-    name: 'Black Water Clan',
+  darkwake: {
+    id: 'darkwake',
+    name: 'Darkwake',
     ethnicGroup: 'kiswani_riverfolk',
     population: 300,
     startingDisposition: -10,
@@ -152,14 +152,14 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     offerings: ['furs', 'warriors'],
     stability: 0.6,
     tradeDesires: ['steel'],
-    tradeOfferings: ['goods'],
+    tradeOfferings: ['wealth'],
   },
 
-  // ── Kiswani Bayuk ────────────────────────────────────────────────────────
+  // ── Kiswani Bayuk — colors: Green · Jade · Moss ──────────────────────────
 
-  deep_canopy_sisters: {
-    id: 'deep_canopy_sisters',
-    name: 'Deep Canopy Sisters',
+  jadehollow: {
+    id: 'jadehollow',
+    name: 'Jadehollow',
     ethnicGroup: 'kiswani_bayuk',
     population: 150,
     startingDisposition: 0,
@@ -171,9 +171,9 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     tradeOfferings: ['medicine'],
   },
 
-  jade_viper_band: {
-    id: 'jade_viper_band',
-    name: 'Jade Viper Band',
+  greenthorn: {
+    id: 'greenthorn',
+    name: 'Greenthorn',
     ethnicGroup: 'kiswani_bayuk',
     population: 200,
     startingDisposition: -15,
@@ -182,14 +182,14 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     offerings: ['warriors', 'furs'],
     stability: 0.4,
     tradeDesires: ['steel'],
-    tradeOfferings: ['goods'],
+    tradeOfferings: ['wealth'],
   },
 
-  // ── Kiswani Haisla ───────────────────────────────────────────────────────
+  // ── Kiswani Haisla — colors: Grey · Silver · Salt ────────────────────────
 
-  storm_coast_sailors: {
-    id: 'storm_coast_sailors',
-    name: 'Storm Coast Sailors',
+  silvercrest: {
+    id: 'silvercrest',
+    name: 'Silvercrest',
     ethnicGroup: 'kiswani_haisla',
     population: 400,
     startingDisposition: 20,
@@ -198,28 +198,28 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     offerings: ['food', 'trade_goods', 'knowledge'],
     stability: 0.75,
     tradeDesires: ['steel', 'lumber'],
-    tradeOfferings: ['food', 'goods'],
+    tradeOfferings: ['food', 'wealth'],
   },
 
-  black_tide_crew: {
-    id: 'black_tide_crew',
-    name: 'Black Tide Crew',
+  greysquall: {
+    id: 'greysquall',
+    name: 'Greysquall',
     ethnicGroup: 'kiswani_haisla',
     population: 250,
     startingDisposition: -20,
     traits: ['warlike'],
-    desires: ['steel', 'gold'],
+    desires: ['steel', 'wealth'],
     offerings: ['trade_goods', 'horses'],
     stability: 0.5,
-    tradeDesires: ['steel', 'gold'],
-    tradeOfferings: ['goods', 'horses'],
+    tradeDesires: ['steel'],
+    tradeOfferings: ['wealth', 'horses'],
   },
 
-  // ── Hanjoda Stormcaller ──────────────────────────────────────────────────
+  // ── Hanjoda Stormcaller — colors: Ash · White · Pale ─────────────────────
 
-  candibula_host: {
-    id: 'candibula_host',
-    name: 'Candibula Host',
+  ashmantle: {
+    id: 'ashmantle',
+    name: 'Ashmantle',
     ethnicGroup: 'hanjoda_stormcaller',
     population: 600,
     startingDisposition: 15,
@@ -231,9 +231,9 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     tradeOfferings: ['horses'],
   },
 
-  thunder_veil_band: {
-    id: 'thunder_veil_band',
-    name: 'Thunder Veil Band',
+  paleveil: {
+    id: 'paleveil',
+    name: 'Paleveil',
     ethnicGroup: 'hanjoda_stormcaller',
     population: 200,
     startingDisposition: -5,
@@ -245,11 +245,11 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     tradeOfferings: ['medicine'],
   },
 
-  // ── Hanjoda Bloodmoon ────────────────────────────────────────────────────
+  // ── Hanjoda Bloodmoon — colors: Red · Ochre · Crimson ────────────────────
 
-  red_moon_raiders: {
-    id: 'red_moon_raiders',
-    name: 'Red Moon Raiders',
+  redmoon: {
+    id: 'redmoon',
+    name: 'Redmoon',
     ethnicGroup: 'hanjoda_bloodmoon',
     population: 350,
     startingDisposition: -25,
@@ -261,9 +261,9 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     tradeOfferings: ['horses'],
   },
 
-  crescent_hunters: {
-    id: 'crescent_hunters',
-    name: 'Crescent Hunters',
+  ochrescar: {
+    id: 'ochrescar',
+    name: 'Ochrescar',
     ethnicGroup: 'hanjoda_bloodmoon',
     population: 200,
     startingDisposition: -10,
@@ -272,14 +272,42 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     offerings: ['furs', 'food'],
     stability: 0.65,
     tradeDesires: ['steel'],
-    tradeOfferings: ['goods', 'food'],
+    tradeOfferings: ['wealth', 'food'],
   },
 
-  // ── Hanjoda Talon ────────────────────────────────────────────────────────
+  ochredrift: {
+    id: 'ochredrift',
+    name: 'Ochredrift',
+    ethnicGroup: 'hanjoda_bloodmoon',
+    population: 280,
+    startingDisposition: 5,
+    traits: ['peaceful', 'trader'],
+    desires: ['medicine', 'trade'],
+    offerings: ['horses', 'furs', 'knowledge'],
+    stability: 0.7,
+    tradeDesires: ['medicine'],
+    tradeOfferings: ['horses', 'wealth'],
+  },
 
-  cairn_valley_smiths: {
-    id: 'cairn_valley_smiths',
-    name: 'Cairn Valley Smiths',
+  crimsonfang: {
+    id: 'crimsonfang',
+    name: 'Crimsonfang',
+    ethnicGroup: 'hanjoda_bloodmoon',
+    population: 180,
+    startingDisposition: -30,
+    traits: ['warlike', 'desperate'],
+    desires: ['steel', 'food'],
+    offerings: ['warriors'],
+    stability: 0.35,
+    tradeDesires: ['steel', 'food'],
+    tradeOfferings: ['wealth'],
+  },
+
+  // ── Hanjoda Talon — colors: Amber · Gold · Gilt ──────────────────────────
+
+  goldhand: {
+    id: 'goldhand',
+    name: 'Goldhand',
     ethnicGroup: 'hanjoda_talon',
     population: 300,
     startingDisposition: 10,
@@ -288,12 +316,12 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     offerings: ['steel', 'stone', 'trade_goods'],
     stability: 0.8,
     tradeDesires: ['food', 'medicine'],
-    tradeOfferings: ['steel', 'stone', 'goods'],
+    tradeOfferings: ['steel', 'stone', 'wealth'],
   },
 
-  grey_stone_watchers: {
-    id: 'grey_stone_watchers',
-    name: 'Grey Stone Watchers',
+  ambercairn: {
+    id: 'ambercairn',
+    name: 'Ambercairn',
     ethnicGroup: 'hanjoda_talon',
     population: 150,
     startingDisposition: -5,
@@ -305,11 +333,11 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     tradeOfferings: ['stone'],
   },
 
-  // ── Hanjoda Emrasi ───────────────────────────────────────────────────────
+  // ── Hanjoda Emrasi — colors: Bronze · Brown · Copper ─────────────────────
 
-  emras_daughters: {
-    id: 'emras_daughters',
-    name: "Emra's Daughters",
+  bronzemouth: {
+    id: 'bronzemouth',
+    name: 'Bronzemouth',
     ethnicGroup: 'hanjoda_emrasi',
     population: 700,
     startingDisposition: 20,
@@ -318,12 +346,12 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     offerings: ['food', 'pearls', 'wives'],
     stability: 0.85,
     tradeDesires: ['steel', 'medicine', 'lumber'],
-    tradeOfferings: ['food', 'gold'],
+    tradeOfferings: ['food', 'wealth'],
   },
 
-  inland_fisher_clans: {
-    id: 'inland_fisher_clans',
-    name: 'Inland Fisher Clans',
+  copperhook: {
+    id: 'copperhook',
+    name: 'Copperhook',
     ethnicGroup: 'hanjoda_emrasi',
     population: 400,
     startingDisposition: 5,
@@ -333,36 +361,6 @@ export const TRIBE_PRESETS: Record<string, TribeConfig> = {
     stability: 0.75,
     tradeDesires: ['steel'],
     tradeOfferings: ['food', 'horses'],
-  },
-
-  // ── Hanjoda Bloodmoon (additional) ──────────────────────────────────────
-
-  ochre_path_wanderers: {
-    id: 'ochre_path_wanderers',
-    name: 'Ochre Path Wanderers',
-    ethnicGroup: 'hanjoda_bloodmoon',
-    population: 280,
-    startingDisposition: 5,
-    traits: ['peaceful', 'trader'],
-    desires: ['medicine', 'trade'],
-    offerings: ['horses', 'furs', 'knowledge'],
-    stability: 0.7,
-    tradeDesires: ['medicine'],
-    tradeOfferings: ['horses', 'goods'],
-  },
-
-  ironblood_warband: {
-    id: 'ironblood_warband',
-    name: 'Ironblood Warband',
-    ethnicGroup: 'hanjoda_bloodmoon',
-    population: 180,
-    startingDisposition: -30,
-    traits: ['warlike', 'desperate'],
-    desires: ['steel', 'food'],
-    offerings: ['warriors'],
-    stability: 0.35,
-    tradeDesires: ['steel', 'food'],
-    tradeOfferings: ['goods'],
   },
 
 } as const satisfies Record<string, TribeConfig>;

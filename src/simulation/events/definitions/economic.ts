@@ -29,15 +29,15 @@ export const ECONOMIC_EVENTS: GameEvent[] = [
         description: 'A fair deal. Manufactured goods are hard to come by this far from the city.',
         consequences: [
           { type: 'modify_resource', target: 'food', value: -8 },
-          { type: 'modify_resource', target: 'goods', value: 4 },
+          { type: 'modify_resource', target: 'wealth', value: 4 },
         ],
       },
       {
         id: 'trade_gold',
-        label: 'Pay him 5 gold. Keep the food stores intact.',
-        description: 'Gold is easier to replenish than a winter food reserve. You send {negotiator} to see what terms he will accept.',
+        label: 'Pay him 5 wealth. Keep the food stores intact.',
+        description: 'Wealth is easier to replenish than a winter food reserve. You send {negotiator} to see what terms he will accept.',
         consequences: [
-          { type: 'modify_resource', target: 'gold', value: -5 },
+          { type: 'modify_resource', target: 'wealth', value: -5 },
         ],
         skillCheck: {
           skill: 'bargaining',
@@ -47,8 +47,8 @@ export const ECONOMIC_EVENTS: GameEvent[] = [
         },
         successText: '{negotiator}\'s sharp eye and harder manner get you the better end of the deal. He throws in an extra crate.',
         failureText: 'The merchant is pleasant but unmovable. You take what is on offer.',
-        onSuccess: [{ type: 'modify_resource', target: 'goods', value: 5 }],
-        onFailure:  [{ type: 'modify_resource', target: 'goods', value: 3 }],
+        onSuccess: [{ type: 'modify_resource', target: 'wealth', value: 5 }],
+        onFailure:  [{ type: 'modify_resource', target: 'wealth', value: 3 }],
       },
       {
         id: 'decline',

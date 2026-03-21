@@ -47,15 +47,14 @@ function makeMinimalSaveJson(extras: Record<string, unknown> = {}): string {
       location: 'marsh',
       buildings: [],
       resources: {
-        food: 0, cattle: 0, goods: 0, steel: 0,
-        lumber: 0, stone: 0, medicine: 0, gold: 0, horses: 0,
+        food: 0, cattle: 0, wealth: 0, steel: 0,
+        lumber: 0, stone: 0, medicine: 0, horses: 0,
       },
       populationCount: 0,
     },
     company: {
       standing: 60,
-      annualQuotaGold: 0,
-      annualQuotaGoods: 0,
+      annualQuotaWealth: 0,
       consecutiveFailures: 0,
       supportLevel: 'standard',
       yearsActive: 0,
@@ -145,8 +144,7 @@ describe('deserializeGameState — other fallbacks', () => {
 
   it('provides quotaContributed fallbacks when company fields are absent', () => {
     const state = deserializeGameState(makeMinimalSaveJson());
-    expect(state.company.quotaContributedGold).toBe(0);
-    expect(state.company.quotaContributedGoods).toBe(0);
+    expect(state.company.quotaContributedWealth).toBe(0);
   });
 
   it('provides culture hiddenWheel fallbacks when absent', () => {
@@ -542,7 +540,7 @@ describe('deserializeGameState — BuiltBuilding field fallbacks', () => {
       location: 'marsh',
       buildings: [{ defId: 'camp', instanceId: 'camp_0', builtTurn: 1, style: null }],
       constructionQueue: [],
-      resources: { food: 0, cattle: 0, goods: 0, steel: 0, lumber: 0, stone: 0, medicine: 0, gold: 0, horses: 0 },
+      resources: { food: 0, cattle: 0, wealth: 0, steel: 0, lumber: 0, stone: 0, medicine: 0, horses: 0 },
       populationCount: 0,
     };
   }
@@ -567,10 +565,10 @@ describe('deserializeGameState — BuiltBuilding field fallbacks', () => {
           id: 'proj_1', defId: 'longhouse', style: null,
           progressPoints: 0, totalPoints: 100,
           assignedWorkerIds: [], startedTurn: 1,
-          resourcesSpent: { food: 0, cattle: 0, goods: 0, steel: 0, lumber: 0, stone: 0, medicine: 0, gold: 0, horses: 0 },
+          resourcesSpent: { food: 0, cattle: 0, wealth: 0, steel: 0, lumber: 0, stone: 0, medicine: 0, horses: 0 },
           // ownerHouseholdId deliberately absent
         }],
-        resources: { food: 0, cattle: 0, goods: 0, steel: 0, lumber: 0, stone: 0, medicine: 0, gold: 0, horses: 0 },
+        resources: { food: 0, cattle: 0, wealth: 0, steel: 0, lumber: 0, stone: 0, medicine: 0, horses: 0 },
         populationCount: 0,
       },
     });
@@ -616,7 +614,7 @@ describe('deserializeGameState -- private economy fallbacks', () => {
         location: 'marsh',
         buildings: [],
         constructionQueue: [],
-        resources: { food: 0, cattle: 0, goods: 0, steel: 0, lumber: 0, stone: 0, medicine: 0, gold: 0, horses: 0 },
+        resources: { food: 0, cattle: 0, wealth: 0, steel: 0, lumber: 0, stone: 0, medicine: 0, horses: 0 },
         populationCount: 0,
         economyReserves: { lumber: 10, stone: 5 },
       },
@@ -624,28 +622,28 @@ describe('deserializeGameState -- private economy fallbacks', () => {
     expect(state.settlement.economyReserves).toEqual({ lumber: 10, stone: 5 });
   });
 
-  it('defaults household.householdGold to 0 when absent (old save)', () => {
+  it('defaults household.householdWealth to 0 when absent (old save)', () => {
     const state = deserializeGameState(makeMinimalSaveJson({
       households: [['hh1', {
         id: 'hh1', name: 'Test HH', isAutoNamed: true, tradition: 'imanian',
         headId: null, seniorWifeId: null, memberIds: [], ashkaMelathiBonds: [],
         foundedTurn: 0, dwellingBuildingId: null, productionBuildingIds: [],
-        // householdGold deliberately absent
+        // householdWealth deliberately absent
       }]],
     }));
-    expect(state.households.get('hh1')!.householdGold).toBe(0);
+    expect(state.households.get('hh1')!.householdWealth).toBe(0);
   });
 
-  it('preserves household.householdGold when present in save', () => {
+  it('preserves household.householdWealth when present in save', () => {
     const state = deserializeGameState(makeMinimalSaveJson({
       households: [['hh1', {
         id: 'hh1', name: 'Test HH', isAutoNamed: true, tradition: 'imanian',
         headId: null, seniorWifeId: null, memberIds: [], ashkaMelathiBonds: [],
         foundedTurn: 0, dwellingBuildingId: null, productionBuildingIds: [],
-        householdGold: 42,
+        householdWealth: 42,
       }]],
     }));
-    expect(state.households.get('hh1')!.householdGold).toBe(42);
+    expect(state.households.get('hh1')!.householdWealth).toBe(42);
   });
 });
 

@@ -31,7 +31,7 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
         label: 'Organize a proper hunting party — four men, full kit.',
         description: 'Commit properly and the return will be worth it. Costs a little in supplies.',
         consequences: [
-          { type: 'modify_resource', target: 'goods', value: -1 },
+          { type: 'modify_resource', target: 'wealth', value: -1 },
         ],
         skillCheck: {
           skill: 'hunting',
@@ -91,14 +91,14 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
         successText: 'He listens. When you are done he nods — the quiet nod of a man who needed to hear it said plainly. He is back at his post the next morning.',
         failureText: 'The words land wrong. He says nothing more, but the distance in his eyes does not go away. You will need to spend something to keep him here.',
         onSuccess: [],
-        onFailure:  [{ type: 'modify_resource', target: 'gold', value: -3 }],
+        onFailure:  [{ type: 'modify_resource', target: 'wealth', value: -3 }],
       },
       {
         id: 'give_bonus',
         label: 'Give him something extra from the reserves.',
         description:
           'A few coins — a gesture that his service is seen and valued. It costs you, but it costs less than losing him.',
-        consequences: [{ type: 'modify_resource', target: 'gold', value: -5 }],
+        consequences: [{ type: 'modify_resource', target: 'wealth', value: -5 }],
       },
       {
         id: 'invoke_contract',
@@ -145,7 +145,7 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
         failureText: 'The project is done, but the execution is rougher than hoped. The basics are addressed. The refinements will need another attempt.',
         onSuccess: [
           { type: 'modify_resource', target: 'food',  value: 7 },
-          { type: 'modify_resource', target: 'goods', value: 2 },
+          { type: 'modify_resource', target: 'wealth', value: 2 },
           { type: 'modify_opinion_pair', target: '{lead}', value: 8, params: { slotB: '{partner}', label: 'Joint project' } },
         ],
         onFailure: [
@@ -257,19 +257,19 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
     choices: [
       {
         id: 'request_three',
-        label: 'Request three women. (−150 gold)',
+        label: 'Request three women. (−150 wealth)',
         description: 'A substantial investment in the settlement\'s future.',
         consequences: [
-          { type: 'modify_resource', target: 'gold', value: -150 },
+          { type: 'modify_resource', target: 'wealth', value: -150 },
           { type: 'add_person', target: 'imanian_woman', value: 3, params: { sex: 'female', ethnicGroup: 'imanian', minAge: 18, maxAge: 30, religion: 'imanian_orthodox', socialStatus: 'newcomer' } },
         ],
       },
       {
         id: 'request_one',
-        label: 'Request one woman. (−50 gold)',
+        label: 'Request one woman. (−50 wealth)',
         description: 'Modest but affordable. The Company will note your restraint.',
         consequences: [
-          { type: 'modify_resource', target: 'gold', value: -50 },
+          { type: 'modify_resource', target: 'wealth', value: -50 },
           { type: 'add_person', target: 'imanian_woman', value: 1, params: { sex: 'female', ethnicGroup: 'imanian', minAge: 18, maxAge: 30, religion: 'imanian_orthodox', socialStatus: 'newcomer' } },
         ],
       },
@@ -281,10 +281,10 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       },
       {
         id: 'request_craftsmen',
-        label: 'Decline — but request skilled craftsmen instead. (−80 gold)',
+        label: 'Decline — but request skilled craftsmen instead. (−80 wealth)',
         description: 'A counter-proposal. Whether the Company sends its best depends on how the request is made.',
         consequences: [
-          { type: 'modify_resource', target: 'gold', value: -80 },
+          { type: 'modify_resource', target: 'wealth', value: -80 },
         ],
         skillCheck: {
           skill: 'bargaining',
@@ -294,8 +294,8 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
         },
         successText: 'The counter-proposal is well-argued. The Company notes the practical reasoning and sends good men.',
         failureText: 'The request is accepted but filed under "eccentric preference". The craftsmen who arrive are competent, but not their best.',
-        onSuccess: [{ type: 'modify_resource', target: 'goods', value: 10 }],
-        onFailure:  [{ type: 'modify_resource', target: 'goods', value: 5  }],
+        onSuccess: [{ type: 'modify_resource', target: 'wealth', value: 10 }],
+        onFailure:  [{ type: 'modify_resource', target: 'wealth', value: 5  }],
       },
     ],
   },
@@ -411,11 +411,11 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       },
       {
         id: 'arrange_formally',
-        label: 'Arrange it formally, with gifts and acknowledgment. (−5 goods)',
+        label: 'Arrange it formally, with gifts and acknowledgment. (−5 wealth)',
         description: 'Doing it properly shows respect for her culture and his commitment. A better outcome for all.',
         skipActorBond: true,
         consequences: [
-          { type: 'modify_resource', target: 'goods', value: -5 },
+          { type: 'modify_resource', target: 'wealth', value: -5 },
           { type: 'modify_opinion_pair', target: '{suitor}', value: 15, params: { slotB: '{beloved}', label: 'Formally acknowledged' } },
         ],
       },
@@ -514,7 +514,7 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
         label: 'Acknowledge it quietly. Give the mother a gift. Keep the moment private.',
         description: 'Respectful and politically careful. Good for stability.',
         consequences: [
-          { type: 'modify_resource', target: 'goods', value: -3 },
+          { type: 'modify_resource', target: 'wealth', value: -3 },
         ],
       },
       {
@@ -663,10 +663,10 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
       },
       {
         id: 'wine_and_dine',
-        label: 'Wine and dine him generously before he opens the books. (−15 gold)',
+        label: 'Wine and dine him generously before he opens the books. (−15 wealth)',
         description: 'Good hospitality still requires a good host. A well-fed man is more forgiving — if the evening is well-spent.',
         consequences: [
-          { type: 'modify_resource', target: 'gold', value: -15 },
+          { type: 'modify_resource', target: 'wealth', value: -15 },
         ],
         skillCheck: {
           skill: 'diplomacy',
@@ -943,7 +943,7 @@ export const DOMESTIC_EVENTS: GameEvent[] = [
         label: 'Formalize the lessons. Give her time and a proper space for it.',
         description: 'Make it official. The three men bring their notes. Two more join.',
         consequences: [
-          { type: 'modify_resource', target: 'goods', value: -2 },
+          { type: 'modify_resource', target: 'wealth', value: -2 },
         ],
       },
       {

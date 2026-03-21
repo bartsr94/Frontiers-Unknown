@@ -5,15 +5,15 @@
  * The Zustand store applies these deltas to the settlement's resource stock.
  *
  * Production rules:
- *   - Farmers produce 3 food per season (seasonal modifier applies).
- *   - Traders produce 1 good per season (seasonal modifier applies).
+ *   - Farmers produce 1 food per season (seasonal modifier applies) + 2 from Tilled Fields.
  *   - Every 2 cattle produce 1 food per season (dairy/butchery bonus, seasonal).
  *   - guard, craftsman, healer, unassigned → base 0 (buildings add role bonuses).
  *   - Buildings add flat and per-role bonuses on top of role-based production.
  *   - Overcrowding reduces all production by 10% when ratio > 1.25.
+ * Wealth generation is a separate pass via calculateWealthGeneration().
  */
 
-import { type Person, getChildWorkModifier } from '../population/person';
+import { type Person, type WorkRole, getChildWorkModifier } from '../population/person';
 import type { Settlement, ResourceType, ResourceStock, Season, BuiltBuilding } from '../turn/game-state';
 import { SEASON_MODIFIERS } from '../turn/season';
 import {
@@ -32,12 +32,11 @@ export function emptyResourceStock(): ResourceStock {
   return {
     food: 0,
     cattle: 0,
-    goods: 0,
+    wealth: 0,
     steel: 0,
     lumber: 0,
     stone: 0,
     medicine: 0,
-    gold: 0,
     horses: 0,
   };
 }
@@ -74,12 +73,14 @@ export function clampResourceStock(stock: ResourceStock): ResourceStock {
  * seasonal modifiers, and active buildings.
  *
  * Production rules:
- *   - farmers → +3 food each, scaled by seasonal foodProduction modifier
- *   - traders → +1 goods each, scaled by seasonal goodsProduction modifier
+ *   - farmers → +1 food each, scaled by seasonal foodProduction modifier
+ *              (Fields building adds +2 food/farmer via roleProductionBonus)
+ *   - gather_food → 1–3 food scaled by plants skill, seasonal
+ *   - hunter → 1–3 food scaled by combat skill, seasonal
  *   - cattle  → +1 food per 2 head, also scaled by foodProduction modifier
- *   - buildings add flat bonuses (e.g. Granary +2 food) and per-role bonuses
- *     (e.g. Workshop +1 goods per craftsman)
+ *   - buildings add flat bonuses and per-role bonuses
  *   - overcrowding > 1.25 reduces all production by 10%
+ * Wealth generation is handled separately by calculateWealthGeneration().
  *
  * @param people - All living people in the settlement.
  * @param settlement - Current settlement state (cattle + buildings).
@@ -119,12 +120,12 @@ export function calculateProduction(
 
     // Base production by role (seasonal modifiers applied below).
     let personFood = 0;
-    let personGoods = 0;
+    let personWealth = 0;
     switch (person.role) {
       // Without Tilled Fields, farmers are only as productive as unskilled
       // foragers. Fields add +2 food/farmer via roleProductionBonus below.
-      case 'farmer':        personFood   = 1; break;
-      case 'trader':        personGoods  = 1; break;
+      case 'farmer':        personFood    = 1; break;
+      case 'trader':        personWealth  = 1; break;
       // gather_food is seasonally scaled like farming
       case 'gather_food':   personFood   = gatherYield(person.skills.plants); break;
       // hunter produces food via combat skill — seasonally scaled like gather_food; goods come from building bonuses
@@ -153,11 +154,11 @@ export function calculateProduction(
     }
 
     // Per-role building bonuses.
-    // food and goods flow through personFood/personGoods so seasonal scaling applies.
-    // All other resources (steel, lumber, stone, etc.) are added directly to delta.
+    // food and wealth flow through personFood/personWealth so role-base + bonus
+    // are multiplied together. All other resources are added directly to delta.
     const roleBonus = getRoleProductionBonus(buildings, person.role);
-    personGoods += roleBonus.goods ?? 0;
-    personFood  += roleBonus.food  ?? 0;
+    personFood   += roleBonus.food   ?? 0;
+    personWealth += roleBonus.wealth ?? 0;
 
     // Trade training bonus: completed apprenticeship grants a permanent % boost to production
     // in the trained role. Only applies when the person is actually working that role.
@@ -165,19 +166,18 @@ export function calculateProduction(
     const tradeMult  = tradeBonus > 0 ? 1 + tradeBonus / 100 : 1.0;
 
     for (const [key, value] of Object.entries(roleBonus) as [keyof ResourceStock, number][]) {
-      if (key !== 'food' && key !== 'goods') {
+      if (key !== 'food' && key !== 'wealth') {
         delta[key] += Math.floor(value * effectiveMult * tradeMult);
       }
     }
 
-    // Apply happiness, child-age, and trade-training multipliers to food and goods.
-    delta.food  += personFood  * effectiveMult * tradeMult;
-    delta.goods += personGoods * effectiveMult * tradeMult;
+    // Apply happiness, child-age, and trade-training multipliers to food and wealth.
+    delta.food   += personFood   * effectiveMult * tradeMult;
+    delta.wealth += Math.floor(personWealth * effectiveMult * tradeMult);
   }
 
-  // Apply seasonal modifiers to accumulated food and goods.
+  // Apply seasonal modifier to accumulated food.
   delta.food  = Math.floor(delta.food  * mods.foodProduction);
-  delta.goods = Math.floor(delta.goods * mods.goodsProduction);
 
   // Cattle food bonus: every 2 cattle produce 1 food (dairy/butchery), seasonal.
   const cattleBonus = Math.floor(settlement.resources.cattle / 2);
@@ -196,10 +196,99 @@ export function calculateProduction(
   const productionMult = getOvercrowdingProductionMultiplier(overcrowdingRatio);
   if (productionMult < 1.0) {
     delta.food  = Math.floor(delta.food  * productionMult);
-    delta.goods = Math.floor(delta.goods * productionMult);
   }
 
   return delta;
+}
+
+// ─── Wealth Generation ───────────────────────────────────────────────────────────────
+
+/**
+ * Base wealth generated per role per season.
+ * Split 70/30 between household and settlement at generation time.
+ */
+export const WEALTH_YIELD: Partial<Record<WorkRole, number>> = {
+  gather_food:          0.1,  // fractional — accumulates over ~10 seasons to 1 wealth
+  farmer:               1,
+  gather_stone:         1,
+  gather_lumber:        1,
+  guard:                1,
+  healer:               2,
+  craftsman:            2,
+  herder:               2,
+  miller:               2,
+  hunter:               2,
+  trader:               3,
+  blacksmith:           3,
+  tailor:               3,
+  brewer:               2,
+  priest_solar:         1,
+  wheel_singer:         1,
+  voice_of_wheel:       1,
+  keth_thara:           1,
+  builder:              1,
+  bathhouse_attendant:  2,
+  // away, unassigned, child → 0 (omitted from table = 0)
+};
+
+/** Fraction of each person's wealth yield that flows into settlement resources. */
+export const SETTLEMENT_TAX_RATE = 0.30;
+
+/** Result of the per-dawn wealth generation pass. */
+export interface WealthGenerationResult {
+  /** Per-household wealth deltas (key = household ID). */
+  householdDeltas: Map<string, number>;
+  /** Total wealth to add to settlement.resources.wealth. */
+  settlementDelta: number;
+}
+
+/**
+ * Computes how much wealth is generated by the living population this season.
+ *
+ * Each worker's yield is split at source:
+ *   personalWealth = floor(yield × effectiveMult × tradeMult × (1 − TAX_RATE))
+ *   taxWealth      = yield − personalWealth → settlement
+ *
+ * Persons with no householdId contribute their personal share to the
+ * settlement instead (company-funded pioneers without a formed household).
+ *
+ * @param people            – All living persons.
+ * @param happinessMultipliers – Per-person production multipliers from happiness tracking.
+ */
+export function calculateWealthGeneration(
+  people: Map<string, Person>,
+  happinessMultipliers: Map<string, number> = new Map(),
+): WealthGenerationResult {
+  const householdDeltas = new Map<string, number>();
+  let settlementDelta = 0;
+
+  for (const person of people.values()) {
+    const yieldBase = WEALTH_YIELD[person.role] ?? 0;
+    if (yieldBase === 0) continue;
+
+    const happMult = happinessMultipliers.get(person.id) ?? 1.0;
+    const effectiveMult = happMult * getChildWorkModifier(person.age);
+    if (effectiveMult === 0) continue;
+
+    const tradeBonus = person.tradeTraining?.[person.role] ?? 0;
+    const tradeMult  = tradeBonus > 0 ? 1 + tradeBonus / 100 : 1.0;
+
+    const totalYield    = yieldBase * effectiveMult * tradeMult;
+    const taxWealth     = totalYield * SETTLEMENT_TAX_RATE;
+    const personalWealth = totalYield - taxWealth;
+
+    settlementDelta += taxWealth;
+
+    const hhId = person.householdId;
+    if (hhId) {
+      householdDeltas.set(hhId, (householdDeltas.get(hhId) ?? 0) + personalWealth);
+    } else {
+      // No household yet — personal share flows to settlement.
+      settlementDelta += personalWealth;
+    }
+  }
+
+  return { householdDeltas, settlementDelta };
 }
 
 // ─── Consumption ─────────────────────────────────────────────────────────────

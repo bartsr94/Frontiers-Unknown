@@ -36,12 +36,11 @@ function makeResources(overrides: Partial<ResourceStock> = {}): ResourceStock {
   return {
     food: 20,
     cattle: 10,
-    goods: 15,
+    wealth: 25,
     steel: 8,
     lumber: 30,
     stone: 25,
     medicine: 5,
-    gold: 10,
     horses: 4,
     ...overrides,
   };
@@ -50,21 +49,21 @@ function makeResources(overrides: Partial<ResourceStock> = {}): ResourceStock {
 // ─── RESOURCE_BASE_VALUES ─────────────────────────────────────────────────────
 
 describe('RESOURCE_BASE_VALUES', () => {
-  it('covers all 9 resource types', () => {
+  it('covers all 8 resource types', () => {
     const expected: Array<keyof ResourceStock> = [
-      'food', 'cattle', 'goods', 'steel', 'lumber', 'stone', 'medicine', 'gold', 'horses',
+      'food', 'cattle', 'wealth', 'steel', 'lumber', 'stone', 'medicine', 'horses',
     ];
     for (const key of expected) {
       expect(RESOURCE_BASE_VALUES[key]).toBeGreaterThan(0);
     }
   });
 
-  it('gold is the most valuable single resource', () => {
-    const maxNonGold = Math.max(
-      ...(['food', 'cattle', 'goods', 'steel', 'lumber', 'stone', 'medicine', 'horses'] as const)
+  it('horses is the highest-value single resource', () => {
+    const maxOther = Math.max(
+      ...(['food', 'cattle', 'wealth', 'steel', 'lumber', 'stone', 'medicine'] as const)
         .map(r => RESOURCE_BASE_VALUES[r])
     );
-    expect(RESOURCE_BASE_VALUES.gold).toBeGreaterThanOrEqual(maxNonGold);
+    expect(RESOURCE_BASE_VALUES.horses).toBeGreaterThan(maxOther);
   });
 });
 
@@ -115,7 +114,7 @@ describe('getTradeValue', () => {
 
   it('zero quantity entries are ignored', () => {
     const tribe = makeTribe();
-    expect(getTradeValue({ food: 0, gold: 0 }, tribe, 'player')).toBe(0);
+    expect(getTradeValue({ food: 0, wealth: 0 }, tribe, 'player')).toBe(0);
   });
 });
 
@@ -162,9 +161,9 @@ describe('validateTrade', () => {
   it('returns ok:true for a valid trade', () => {
     const tribe = makeTribe({ tradeOfferings: ['food'] });
     const result = validateTrade(
-      { goods: 3 },
+      { wealth: 3 },
       { food: 5 },
-      makeResources({ goods: 10 }),
+      makeResources({ wealth: 10 }),
       tribe,
       5,
     );
@@ -173,20 +172,20 @@ describe('validateTrade', () => {
 
   it('fails when contact not established', () => {
     const tribe = makeTribe({ contactEstablished: false });
-    const result = validateTrade({ goods: 2 }, { food: 3 }, makeResources(), tribe, 1);
+    const result = validateTrade({ wealth: 2 }, { food: 3 }, makeResources(), tribe, 1);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBeTruthy();
   });
 
   it('fails when disposition < 20', () => {
     const tribe = makeTribe({ disposition: 15 });
-    const result = validateTrade({ goods: 2 }, { food: 3 }, makeResources(), tribe, 1);
+    const result = validateTrade({ wealth: 2 }, { food: 3 }, makeResources(), tribe, 1);
     expect(result.ok).toBe(false);
   });
 
   it('fails when already traded this turn', () => {
     const tribe = makeTribe({ lastTradeTurn: 3 });
-    const result = validateTrade({ goods: 2 }, { food: 3 }, makeResources(), tribe, 3);
+    const result = validateTrade({ wealth: 2 }, { food: 3 }, makeResources(), tribe, 3);
     expect(result.ok).toBe(false);
   });
 
@@ -199,9 +198,9 @@ describe('validateTrade', () => {
   it('fails when player lacks resources', () => {
     const tribe = makeTribe({ tradeOfferings: ['food'] });
     const result = validateTrade(
-      { gold: 100 },
+      { wealth: 100 },
       { food: 5 },
-      makeResources({ gold: 2 }),
+      makeResources({ wealth: 2 }),
       tribe,
       1,
     );
@@ -211,7 +210,7 @@ describe('validateTrade', () => {
   it('fails when requesting resource tribe does not offer', () => {
     const tribe = makeTribe({ tradeOfferings: ['food'] }); // no horses
     const result = validateTrade(
-      { goods: 3 },
+      { wealth: 3 },
       { horses: 2 },
       makeResources(),
       tribe,
@@ -226,36 +225,36 @@ describe('validateTrade', () => {
 describe('executeTribeTradeLogic', () => {
   it('deducts player offer and adds requested resources', () => {
     const tribe = makeTribe();
-    const resources = makeResources({ goods: 10, food: 5 });
-    const result = executeTribeTradeLogic(resources, { goods: 3 }, { food: 8 }, tribe, 7);
-    expect(result.newResources.goods).toBe(7);
+    const resources = makeResources({ wealth: 10, food: 5 });
+    const result = executeTribeTradeLogic(resources, { wealth: 3 }, { food: 8 }, tribe, 7);
+    expect(result.newResources.wealth).toBe(7);
     expect(result.newResources.food).toBe(13);
   });
 
   it('records tradeTurn correctly', () => {
     const tribe = makeTribe();
-    const result = executeTribeTradeLogic(makeResources(), { goods: 2 }, { food: 3 }, tribe, 12);
+    const result = executeTribeTradeLogic(makeResources(), { wealth: 2 }, { food: 3 }, tribe, 12);
     expect(result.tradeTurn).toBe(12);
   });
 
   it('increments tradeHistoryCount', () => {
     const tribe = makeTribe({ tradeHistoryCount: 4 });
-    const result = executeTribeTradeLogic(makeResources(), { goods: 2 }, { food: 3 }, tribe, 5);
+    const result = executeTribeTradeLogic(makeResources(), { wealth: 2 }, { food: 3 }, tribe, 5);
     expect(result.newTradeHistoryCount).toBe(5);
   });
 
   it('fair trade produces positive dispositionDelta', () => {
     const tribe = makeTribe({ disposition: 60 });
-    // goods: value=2, food: value=1.5 (no multiplier) — roughly fair
-    const result = executeTribeTradeLogic(makeResources(), { goods: 2 }, { food: 4 }, tribe, 1);
+    // wealth: value=1.0, food: value=0.5 (no multiplier); give 2 wealth (~2.0 value), get 4 food (~2.0 value) — fair
+    const result = executeTribeTradeLogic(makeResources(), { wealth: 2 }, { food: 4 }, tribe, 1);
     expect(result.dispositionDelta).toBeGreaterThan(0);
   });
 
   it('does not mutate input resources', () => {
     const tribe = makeTribe();
-    const resources = makeResources({ goods: 10 });
-    const originalGoods = resources.goods;
-    executeTribeTradeLogic(resources, { goods: 5 }, { food: 8 }, tribe, 1);
-    expect(resources.goods).toBe(originalGoods);
+    const resources = makeResources({ wealth: 10 });
+    const originalWealth = resources.wealth;
+    executeTribeTradeLogic(resources, { wealth: 5 }, { food: 8 }, tribe, 1);
+    expect(resources.wealth).toBe(originalWealth);
   });
 });

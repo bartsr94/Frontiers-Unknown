@@ -30,8 +30,8 @@ function makeSettlement(cattle = 0, buildings: BuiltBuilding[] = []): Settlement
     buildings,
     populationCount: 0,
     resources: {
-      food: 0, cattle, goods: 0, steel: 0,
-      lumber: 0, stone: 0, medicine: 0, gold: 0, horses: 0,
+      food: 0, cattle, wealth: 0, steel: 0,
+      lumber: 0, stone: 0, medicine: 0, horses: 0,
     },
   } as unknown as Settlement;
 }
@@ -84,7 +84,7 @@ describe('emptyResourceStock', () => {
 
   it('returns an object with all 9 resource keys', () => {
     const stock = emptyResourceStock();
-    const keys = ['food', 'cattle', 'goods', 'steel', 'lumber', 'stone', 'medicine', 'gold', 'horses'];
+    const keys = ['food', 'cattle', 'wealth', 'steel', 'lumber', 'stone', 'medicine', 'horses'];
     for (const key of keys) {
       expect(stock).toHaveProperty(key);
     }
@@ -95,12 +95,11 @@ describe('emptyResourceStock', () => {
 
 describe('addResourceStocks', () => {
   it('sums matching fields from both stocks', () => {
-    const a = { ...emptyResourceStock(), food: 30, gold: 10 };
-    const b = { ...emptyResourceStock(), food: 20, goods: 5 };
+    const a = { ...emptyResourceStock(), food: 30, wealth: 10 };
+    const b = { ...emptyResourceStock(), food: 20, wealth: 5 };
     const result = addResourceStocks(a, b);
     expect(result.food).toBe(50);
-    expect(result.gold).toBe(10);
-    expect(result.goods).toBe(5);
+    expect(result.wealth).toBe(15);
   });
 
   it('does not mutate either input', () => {
@@ -123,10 +122,10 @@ describe('addResourceStocks', () => {
 
 describe('clampResourceStock', () => {
   it('raises negative values to 0', () => {
-    const stock = { ...emptyResourceStock(), food: -10, gold: -5 };
+    const stock = { ...emptyResourceStock(), food: -10, wealth: -5 };
     const result = clampResourceStock(stock);
     expect(result.food).toBe(0);
-    expect(result.gold).toBe(0);
+    expect(result.wealth).toBe(0);
   });
 
   it('leaves positive values unchanged', () => {
@@ -211,31 +210,31 @@ describe('calculateProduction — farmers with Tilled Fields', () => {
 });
 
 describe('calculateProduction — traders', () => {
-  it('produces 1 goods per trader in spring (×1.0)', () => {
+  it('produces 1 wealth per trader in spring (×1.0)', () => {
     const people = makePopulation(['trader']);
     const result = calculateProduction(people, makeSettlement(), 'spring');
-    expect(result.goods).toBe(1);
+    expect(result.wealth).toBe(1);
   });
 
-  it('applies the summer goods multiplier (×1.3), floors result', () => {
+  it('applies no seasonal multiplier to wealth — 3 traders in summer still yield 3', () => {
     const people = makePopulation(['trader', 'trader', 'trader']);
     const result = calculateProduction(people, makeSettlement(), 'summer');
-    // Math.floor(3 * 1.3) = Math.floor(3.9) = 3
-    expect(result.goods).toBe(3);
+    // wealth is not seasonally scaled: Math.floor(3 * 1.0) = 3
+    expect(result.wealth).toBe(3);
   });
 
-  it('applies the winter goods multiplier (×0.7), floors result', () => {
+  it('applies no seasonal multiplier to wealth — 3 traders in winter still yield 3', () => {
     const people = makePopulation(['trader', 'trader', 'trader']);
     const result = calculateProduction(people, makeSettlement(), 'winter');
-    // Math.floor(3 * 0.7) = Math.floor(2.1) = 2
-    expect(result.goods).toBe(2);
+    // wealth is not seasonally scaled: Math.floor(3 * 1.0) = 3
+    expect(result.wealth).toBe(3);
   });
 
   it('non-producing roles contribute 0', () => {
     const people = makePopulation(['guard', 'craftsman', 'healer', 'unassigned']);
     const result = calculateProduction(people, makeSettlement(), 'spring');
     expect(result.food).toBe(0);
-    expect(result.goods).toBe(0);
+    expect(result.wealth).toBe(0);
   });
 });
 
@@ -272,7 +271,7 @@ describe('calculateProduction — empty settlement', () => {
     const people = new Map<string, Person>();
     const result = calculateProduction(people, makeSettlement(0), 'summer');
     expect(result.food).toBe(0);
-    expect(result.goods).toBe(0);
+    expect(result.wealth).toBe(0);
   });
 });
 
@@ -438,18 +437,18 @@ describe('calculateProduction — guard produces nothing', () => {
 // ─── Specialisation roles ─────────────────────────────────────────────────────
 
 describe('calculateProduction — blacksmith (smithy)', () => {
-  it('with a smithy: produces 2 steel + 1 goods in spring', () => {
+  it('with a smithy: produces 2 steel + 1 wealth in spring', () => {
     const map = new Map([['p0', makePerson('blacksmith')]]);
     const result = calculateProduction(map, makeSettlement(0, [makeBuilding('smithy')]), 'spring');
     expect(result.steel).toBe(2);
-    expect(result.goods).toBe(1);
+    expect(result.wealth).toBe(1);
   });
 
-  it('without a smithy: produces 0 steel and 0 goods', () => {
+  it('without a smithy: produces 0 steel and 0 wealth', () => {
     const map = new Map([['p0', makePerson('blacksmith')]]);
     const result = calculateProduction(map, makeSettlement(), 'spring');
     expect(result.steel).toBe(0);
-    expect(result.goods).toBe(0);
+    expect(result.wealth).toBe(0);
   });
 
   it('steel is not seasonally scaled (autumn ×1.6 has no effect on steel)', () => {
@@ -460,42 +459,41 @@ describe('calculateProduction — blacksmith (smithy)', () => {
     expect(autumn.steel).toBe(2);
   });
 
-  it('goods ARE scaled by the goods seasonal multiplier (summer ×1.3)', () => {
-    // 2 blacksmiths → personGoods = 2; Math.floor(2 * 1.3) = 2
-    // Use 4 so the rounding is visible: Math.floor(4 * 1.3) = 5
+  it('wealth from smithy bonus is not seasonally scaled (summer ×1.3 has no effect)', () => {
+    // 4 blacksmiths × smithy 1 wealth bonus = 4 wealth; no seasonal multiplier
     const map = new Map(
       Array.from({ length: 4 }, (_, i) => [`p${i}`, makePerson('blacksmith')])
     );
     const summer = calculateProduction(map, makeSettlement(0, [makeBuilding('smithy')]), 'summer');
-    expect(summer.goods).toBe(5); // Math.floor(4 * 1.3)
+    expect(summer.wealth).toBe(4);
   });
 });
 
 describe('calculateProduction — tailor (tannery)', () => {
-  it('with a tannery: produces 3 goods in spring', () => {
+  it('with a tannery: produces 3 wealth in spring', () => {
     const map = new Map([['p0', makePerson('tailor')]]);
     const result = calculateProduction(map, makeSettlement(0, [makeBuilding('tannery')]), 'spring');
-    expect(result.goods).toBe(3);
+    expect(result.wealth).toBe(3);
   });
 
-  it('without a tannery: produces 0 goods', () => {
+  it('without a tannery: produces 0 wealth', () => {
     const map = new Map([['p0', makePerson('tailor')]]);
     const result = calculateProduction(map, makeSettlement(), 'spring');
-    expect(result.goods).toBe(0);
+    expect(result.wealth).toBe(0);
   });
 });
 
 describe('calculateProduction — brewer (brewery)', () => {
-  it('with a brewery: produces 2 goods in spring', () => {
+  it('with a brewery: produces 2 wealth in spring', () => {
     const map = new Map([['p0', makePerson('brewer')]]);
     const result = calculateProduction(map, makeSettlement(0, [makeBuilding('brewery')]), 'spring');
-    expect(result.goods).toBe(2);
+    expect(result.wealth).toBe(2);
   });
 
-  it('without a brewery: produces 0 goods', () => {
+  it('without a brewery: produces 0 wealth', () => {
     const map = new Map([['p0', makePerson('brewer')]]);
     const result = calculateProduction(map, makeSettlement(), 'spring');
-    expect(result.goods).toBe(0);
+    expect(result.wealth).toBe(0);
   });
 });
 
@@ -590,12 +588,12 @@ describe('calculateProduction — hunter', () => {
     expect(calculateProduction(map, makeSettlement(0, [makeBuilding('hunters_lodge')]), 'spring').food).toBe(3);
   });
 
-  it("hound_pens roleProductionBonus adds 2 food and 1 goods per hunter", () => {
-    // Good combat: base 2 food; hound_pens bonus: +2 food, +1 goods → food 4, goods 1 in spring
+  it("hound_pens roleProductionBonus adds 2 food and 1 wealth per hunter", () => {
+    // Good combat: base 2 food; hound_pens bonus: +2 food, +1 wealth → food 4, wealth 1 in spring
     const map = new Map([['p0', makeHunter(30)]]);
     const result = calculateProduction(map, makeSettlement(0, [makeBuilding('hound_pens')]), 'spring');
     expect(result.food).toBe(4);
-    expect(result.goods).toBe(1);
+    expect(result.wealth).toBe(1);
   });
 });
 

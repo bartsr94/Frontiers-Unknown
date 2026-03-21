@@ -1015,6 +1015,8 @@ export default function PersonDetail({ personId, onClose, onNavigate, onOpenFami
           const claimedDef = claimedBuilding ? BUILDING_CATALOG[claimedBuilding.defId] : null;
           const currentYear   = gameState?.currentYear ?? 1;
           const showExpectation = !person.claimedBuildingId && person.age >= 18 && currentYear >= 5;
+          const household = person.householdId ? gameState?.households.get(person.householdId) : null;
+          const householdWealth = household?.householdWealth ?? 0;
           if (claimedBuilding && claimedDef) {
             return (
               <>
@@ -1026,6 +1028,9 @@ export default function PersonDetail({ personId, onClose, onNavigate, onOpenFami
                       {getBuildingDisplayName(claimedBuilding.defId, claimedBuilding.style)}
                     </div>
                     <div className="text-stone-500">Private dwelling</div>
+                    {householdWealth > 0 && (
+                      <div className="text-stone-400 mt-0.5">Household savings: {householdWealth}⚖</div>
+                    )}
                   </div>
                 </div>
               </>
@@ -1040,6 +1045,9 @@ export default function PersonDetail({ personId, onClose, onNavigate, onOpenFami
                   <div>
                     <div className="text-stone-400">Living communally</div>
                     <div className="text-amber-600 mt-0.5">Seeking a home of their own</div>
+                    {householdWealth > 0 && (
+                      <div className="text-stone-400 mt-0.5">Household savings: {householdWealth}⚖</div>
+                    )}
                   </div>
                 </div>
               </>

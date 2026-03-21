@@ -136,7 +136,18 @@ export type ConsequenceType =
    * `params.level` = `'contact'` (sets contactEstablished) | `'diplomacy'` (also sets diplomacyOpened).
    * `params.tribeId` (optional) = explicit tribe ID if not derivable from `target`.
    */
-  | 'establish_tribe_relations';
+  | 'establish_tribe_relations'
+  /**
+   * Player-driven Company quota export. Updates `quotaContributedWealth` and deducts from
+   * `settlement.resources.wealth` based on the export mode.
+   * `value` = `'full'` | `'exceed'` | `'all_available'` | `'none'`
+   * - `'full'`          → export `computeYearlyQuota(year).wealth`
+   * - `'exceed'`        → export `floor(quota × 1.25)`
+   * - `'all_available'` → export whatever settlement wealth currently exists
+   * - `'none'`          → export nothing
+   * Deduction is clamped to available wealth; no negative balances.
+   */
+  | 'contribute_quota_wealth';
 
 // ─── Event Category ──────────────────────────────────────────────────────────
 

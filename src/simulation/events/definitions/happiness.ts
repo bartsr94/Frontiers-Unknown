@@ -119,7 +119,7 @@ export const HAPPINESS_EVENTS: GameEvent[] = [
           'all in this together. It costs resources, but it buys goodwill.',
         consequences: [
           { type: 'modify_resource', target: 'food', value: -4 },
-          { type: 'modify_resource', target: 'goods', value: -2 },
+          { type: 'modify_resource', target: 'wealth', value: -2 },
           { type: 'reset_low_morale', target: '', value: 0 },
         ],
       },
@@ -169,12 +169,12 @@ export const HAPPINESS_EVENTS: GameEvent[] = [
     choices: [
       {
         id: 'material_incentive',
-        label: 'Compensate them materially — gold, rations, a promise of better shelter.',
+        label: 'Compensate them materially — wealth, rations, a promise of better shelter.',
         description:
           'This buys time, not loyalty. But time is what you need to fix the ' +
           'underlying problems.',
         consequences: [
-          { type: 'modify_resource', target: 'gold', value: -5 },
+          { type: 'modify_resource', target: 'wealth', value: -5 },
           { type: 'modify_resource', target: 'food', value: -5 },
           { type: 'reset_low_morale', target: '', value: 0 },
         ],

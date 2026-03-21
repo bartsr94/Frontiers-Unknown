@@ -82,11 +82,11 @@ export const EXPEDITION_EVENTS: GameEvent[] = [
           attemptLabel: 'Search the ruins systematically',
         },
         onSuccess: [
-          { type: 'modify_resource', target: 'goods', value: 2 },
+          { type: 'modify_resource', target: 'wealth', value: 2 },
           { type: 'modify_standing', target: 'company', value: 1 },
         ],
         onFailure: [
-          { type: 'modify_resource', target: 'goods', value: 1 },
+          { type: 'modify_resource', target: 'wealth', value: 1 },
         ],
       },
       {
@@ -97,7 +97,7 @@ export const EXPEDITION_EVENTS: GameEvent[] = [
           'carved blocks, metal fittings — and leaves before the site draws anything ' +
           'else to it.',
         consequences: [
-          { type: 'modify_resource', target: 'goods', value: 3 },
+          { type: 'modify_resource', target: 'wealth', value: 3 },
           { type: 'modify_expedition_resource', target: 'food', value: -1 },
         ],
       },
@@ -207,7 +207,7 @@ export const EXPEDITION_EVENTS: GameEvent[] = [
         consequences: [
           { type: 'modify_standing', target: 'company', value: 2 },
           { type: 'modify_disposition', target: '{_tribeId}', value: -20 },
-          { type: 'modify_resource', target: 'goods', value: 2 },
+          { type: 'modify_resource', target: 'wealth', value: 2 },
         ],
       },
       {
@@ -705,7 +705,7 @@ export const EXPEDITION_EVENTS: GameEvent[] = [
           'something back at the settlement.',
         consequences: [
           { type: 'modify_expedition_resource', target: 'goods', value: -2 },
-          { type: 'modify_resource', target: 'goods', value: 3 },
+          { type: 'modify_resource', target: 'wealth', value: 3 },
           { type: 'modify_standing', target: 'company', value: 1 },
         ],
       },
@@ -840,7 +840,7 @@ export const EXPEDITION_EVENTS: GameEvent[] = [
           attemptLabel: 'Break the ambush by force',
         },
         onSuccess: [
-          { type: 'modify_resource', target: 'goods', value: 1 },
+          { type: 'modify_resource', target: 'wealth', value: 1 },
         ],
         onFailure: [
           { type: 'wound_person', target: '{leader}', value: 25 },

@@ -33,8 +33,8 @@ describe('getShelterCapacity', () => {
     expect(getShelterCapacity([])).toBe(0);
   });
 
-  it('returns camp capacity (15)', () => {
-    expect(getShelterCapacity([camp])).toBe(15);
+  it('returns camp capacity (20)', () => {
+    expect(getShelterCapacity([camp])).toBe(20);
   });
 
   it('returns longhouse capacity (30) when longhouse replaces camp', () => {
@@ -42,8 +42,8 @@ describe('getShelterCapacity', () => {
   });
 
   it('sums capacities from all buildings', () => {
-    // camp(15) + granary(0) + healers_hut(0) = 15
-    expect(getShelterCapacity([camp, granary, healersHut])).toBe(15);
+    // camp(20) + granary(0) + healers_hut(0) = 20
+    expect(getShelterCapacity([camp, granary, healersHut])).toBe(20);
   });
 });
 
@@ -105,11 +105,11 @@ describe('getOvercrowdingRatio', () => {
   });
 
   it('returns ratio of pop / capacity', () => {
-    expect(getOvercrowdingRatio(10, [camp])).toBeCloseTo(10 / 15);
+    expect(getOvercrowdingRatio(10, [camp])).toBeCloseTo(10 / 20);
   });
 
   it('returns > 1.0 when overcrowded', () => {
-    expect(getOvercrowdingRatio(20, [camp])).toBeGreaterThan(1.0);
+    expect(getOvercrowdingRatio(25, [camp])).toBeGreaterThan(1.0);
   });
 });
 

@@ -35,7 +35,7 @@ export const HOUSEHOLD_EVENTS: GameEvent[] = [
           'The goods change hands. She joins the settlement as a thrall — ' +
           'landless, without formal standing, but under your roof and protection.',
         consequences: [
-          { type: 'modify_resource', target: 'goods', value: -5 },
+          { type: 'modify_resource', target: 'wealth', value: -5 },
           {
             type: 'add_person',
             target: 'thrall_woman',
@@ -141,7 +141,7 @@ export const HOUSEHOLD_EVENTS: GameEvent[] = [
           'The goods change hands. The women nod and say nothing more. ' +
           'You notice the household is quieter in the following weeks — in a good way.',
         consequences: [
-          { type: 'modify_resource', target: 'goods', value: -4 },
+          { type: 'modify_resource', target: 'wealth', value: -4 },
           { type: 'modify_opinion', target: '{spokeswoman}', value: 8 },
         ],
       },
@@ -152,7 +152,7 @@ export const HOUSEHOLD_EVENTS: GameEvent[] = [
           'You sit with {spokeswoman.first} for an hour. She is shrewder than ' +
           'you gave her credit for. You reach a working arrangement.',
         consequences: [
-          { type: 'modify_resource', target: 'goods', value: -2 },
+          { type: 'modify_resource', target: 'wealth', value: -2 },
           { type: 'modify_opinion', target: '{spokeswoman}', value: 4 },
         ],
         skillCheck: {
@@ -296,7 +296,7 @@ export const HOUSEHOLD_EVENTS: GameEvent[] = [
           'by extension, the settlement.',
         consequences: [
           { type: 'modify_opinion', target: '{bondedA}', value: 10 },
-          { type: 'modify_resource', target: 'goods', value: 2 },
+          { type: 'modify_resource', target: 'wealth', value: 2 },
         ],
       },
       {

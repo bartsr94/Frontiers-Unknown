@@ -131,9 +131,9 @@ export interface GameStore {
   assignKethThara: (personId: string) => void;
   /** Execute a barter trade with an external tribe (management phase only). */
   executeTrade: (tribeId: string, offer: TradeOffer, requested: TradeOffer) => void;
-  /** Contribute gold and/or goods toward the Company's annual quota. */
-  contributeToQuota: (gold: number, goods: number) => void;
-  /** Convert goods to gold for Company export (management phase only). 4 goods → 1 gold; amount rounded to nearest multiple of 4. */
+  /** Contribute wealth toward the Company's annual quota. */
+  contributeToQuota: (wealth: number) => void;
+  /** @deprecated The goods→gold export conversion has been replaced by the unified wealth system. Internal use only. */
   exportGoodsToCompany: (amount: number) => void;
   /** Update per-resource reserve floors. Surplus = stock − floor; household purchases blocked if any required material is below its floor. */
   setEconomyReserves: (reserves: Partial<ResourceStock>) => void;
@@ -288,6 +288,14 @@ function applyDawnResultToState(state: GameState, dawnResult: DawnResult): GameS
     allBuildings = allBuildings.filter(b => b.defId !== removedId);
   }
   allBuildings = [...allBuildings, ...dawnResult.completedBuildings];
+  // Apply neglected flags from building maintenance pass.
+  if (dawnResult.neglectedBuildingIds && dawnResult.neglectedBuildingIds.length > 0) {
+    const neglectedSet = new Set(dawnResult.neglectedBuildingIds);
+    allBuildings = allBuildings.map(b => {
+      if (neglectedSet.has(b.instanceId)) return b.neglected ? b : { ...b, neglected: true };
+      return b.neglected ? { ...b, neglected: false } : b;
+    });
+  }
 
   // Merge household updates (changes, new, dissolved).
   const households = new Map(state.households);
@@ -295,10 +303,7 @@ function applyDawnResultToState(state: GameState, dawnResult: DawnResult): GameS
   for (const [id, h] of dawnResult.newHouseholds) households.set(id, h);
   for (const id of dawnResult.dissolvedHouseholdIds) households.delete(id);
 
-  // Apply wage distribution: credits to household gold (already done inside processDawn
-  // for convenience); deduct any self-funded gold from settlement resources for year 11+.
-  const wageGoldDeduction = dawnResult.wageResult?.settlementGoldSpent ?? 0;
-  const lastPayrollShortfall = dawnResult.wageResult?.payrollShortfall ?? false;
+  // Wealth generation is handled inside processDawn (household deltas applied in-line).
 
   // Assign completed dwellings to households that don't have one.
   const {
@@ -335,10 +340,6 @@ function applyDawnResultToState(state: GameState, dawnResult: DawnResult): GameS
       resources: (() => {
         // Start from the private-build-adjusted resources (material deductions already applied).
         const base = dawnResult.updatedResourcesAfterPrivateBuild ?? state.settlement.resources;
-        // Apply wage gold deduction (year 11+ self-funded payroll).
-        if (wageGoldDeduction > 0) {
-          return { ...base, gold: Math.max(0, base.gold - wageGoldDeduction) };
-        }
         return base;
       })(),
     },
@@ -398,7 +399,7 @@ function applyDawnResultToState(state: GameState, dawnResult: DawnResult): GameS
     factions: dawnResult.updatedFactions,
     lastSettlementMorale: dawnResult.settlementMorale,
     lowMoraleTurns: dawnResult.newLowMoraleTurns,
-    lastPayrollShortfall,
+    lastPayrollShortfall: false,
     massDesertionWarningFired: shouldFireDesertion
       ? true
       : dawnResult.newLowMoraleTurns === 0
@@ -623,7 +624,7 @@ export const useGameStore = create<GameStore>((set, get) => {
           }
           // Tag leftover gifts so the resource-consolidation loop below can credit them.
           (em as any)._returnedGifts = em.giftsRemaining;
-          return { ...em, status: 'completed' as const, giftsRemaining: { gold: 0, goods: 0, food: 0 } };
+          return { ...em, status: 'completed' as const, giftsRemaining: { wealth: 0, food: 0 } };
         }
         return em;
       });
@@ -632,12 +633,11 @@ export const useGameStore = create<GameStore>((set, get) => {
       let settlementResourcesAfterReturns = { ...stateAfterDrain.settlement.resources };
       for (const em of updatedEmissaries) {
         if (em.status === 'completed' && (em as any)._returnedGifts) {
-          const rg = (em as any)._returnedGifts as { gold: number; goods: number; food: number };
+          const rg = (em as any)._returnedGifts as { wealth: number; food: number };
           settlementResourcesAfterReturns = {
             ...settlementResourcesAfterReturns,
-            gold:  (settlementResourcesAfterReturns.gold  ?? 0) + rg.gold,
-            goods: (settlementResourcesAfterReturns.goods ?? 0) + rg.goods,
-            food:  (settlementResourcesAfterReturns.food  ?? 0) + rg.food,
+            wealth: (settlementResourcesAfterReturns.wealth ?? 0) + rg.wealth,
+            food:   (settlementResourcesAfterReturns.food   ?? 0) + rg.food,
           };
         }
       }
@@ -758,6 +758,14 @@ export const useGameStore = create<GameStore>((set, get) => {
         const fundingEndsEv = getEventById('eco_company_funding_ends');
         if (fundingEndsEv) {
           happinessBoundEvents.push({ ...fundingEndsEv, boundActors: {} } as BoundEvent);
+        }
+      }
+
+      // Annual export reckoning — fires each Autumn from year 11 onward.
+      if (dawnResult.shouldFireAnnualExportEvent) {
+        const exportEv = getEventById('co_annual_export');
+        if (exportEv) {
+          happinessBoundEvents.push({ ...exportEv, boundActors: {} } as BoundEvent);
         }
       }
 
@@ -926,16 +934,9 @@ export const useGameStore = create<GameStore>((set, get) => {
         updatedCompany = applyQuotaResult(gameState.company, duskResult.quotaStatus);
       }
       if (duskResult.resetQuotaContributions) {
-        // Apply the annual goods-export standing bonus before resetting the counter.
-        const exportBonus = Math.floor(updatedCompany.exportedGoodsThisYear / 10);
         updatedCompany = {
           ...updatedCompany,
-          quotaContributedGold: 0,
-          quotaContributedGoods: 0,
-          exportedGoodsThisYear: 0,
-          standing: exportBonus > 0
-            ? clamp(updatedCompany.standing + exportBonus, 0, 100)
-            : updatedCompany.standing,
+          quotaContributedWealth: 0,
         };
         // Increment yearsActive each Spring transition.
         updatedCompany = { ...updatedCompany, yearsActive: updatedCompany.yearsActive + 1 };
@@ -1211,22 +1212,19 @@ export const useGameStore = create<GameStore>((set, get) => {
       });
     },
 
-    contributeToQuota(gold, goods) {
+    contributeToQuota(wealth) {
       const { gameState, currentPhase } = get();
       if (!gameState || currentPhase !== 'management') return;
       const { company, settlement } = gameState;
-      const actualGold  = Math.min(Math.max(0, gold),  settlement.resources.gold);
-      const actualGoods = Math.min(Math.max(0, goods), settlement.resources.goods);
-      if (actualGold === 0 && actualGoods === 0) return;
+      const actualWealth = Math.min(Math.max(0, wealth), settlement.resources.wealth);
+      if (actualWealth === 0) return;
       const updatedResources: ResourceStock = {
         ...settlement.resources,
-        gold:  settlement.resources.gold  - actualGold,
-        goods: settlement.resources.goods - actualGoods,
+        wealth: settlement.resources.wealth - actualWealth,
       };
       const updatedCompany: CompanyRelation = {
         ...company,
-        quotaContributedGold:  company.quotaContributedGold  + actualGold,
-        quotaContributedGoods: company.quotaContributedGoods + actualGoods,
+        quotaContributedWealth: company.quotaContributedWealth + actualWealth,
       };
       set({
         gameState: {
@@ -1251,32 +1249,9 @@ export const useGameStore = create<GameStore>((set, get) => {
       });
     },
 
-    exportGoodsToCompany(amount) {
-      const { gameState, currentPhase } = get();
-      if (!gameState || currentPhase !== 'management') return;
-      const goods = gameState.settlement.resources.goods;
-      if (goods < 4) return;
-      // Round down to the nearest multiple of 4 (4 goods → 1 gold).
-      const goodsUsed = Math.min(Math.floor(amount / 4) * 4, Math.floor(goods / 4) * 4);
-      if (goodsUsed <= 0) return;
-      const goldEarned = goodsUsed / 4;
-      set({
-        gameState: {
-          ...gameState,
-          company: {
-            ...gameState.company,
-            exportedGoodsThisYear: gameState.company.exportedGoodsThisYear + goodsUsed,
-          },
-          settlement: {
-            ...gameState.settlement,
-            resources: {
-              ...gameState.settlement.resources,
-              goods: gameState.settlement.resources.goods - goodsUsed,
-              gold:  gameState.settlement.resources.gold  + goldEarned,
-            },
-          },
-        },
-      });
+    exportGoodsToCompany(_amount) {
+      // No-op: goods→gold conversion removed in the wealth system.
+      // Kept for interface compatibility; UI should not call this.
     },
 
     performCraft(recipeId) {
@@ -1549,8 +1524,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       // Deduct provisions from settlement resources.
       const newResources = { ...gameState.settlement.resources };
       newResources.food = Math.max(0, newResources.food - params.provisions.food);
-      newResources.goods = Math.max(0, (newResources.goods ?? 0) - (params.provisions.goods ?? 0));
-      newResources.gold = Math.max(0, newResources.gold - (params.provisions.gold ?? 0));
+      newResources.wealth = Math.max(0, (newResources.wealth ?? 0) - ((params.provisions.goods ?? 0) + (params.provisions.gold ?? 0)));
       newResources.medicine = Math.max(0, (newResources.medicine ?? 0) - (params.provisions.medicine ?? 0));
       // Set all party members to 'away'.
       const newPeople = new Map(gameState.people);
@@ -1599,9 +1573,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         dispatchedTurn: gameState.turnNumber,
       });
       const newResources = { ...gameState.settlement.resources };
-      newResources.gold  = Math.max(0, (newResources.gold  ?? 0) - (params.packedGifts.gold  ?? 0));
-      newResources.goods = Math.max(0, (newResources.goods ?? 0) - (params.packedGifts.goods ?? 0));
-      newResources.food  = Math.max(0, (newResources.food  ?? 0) - (params.packedGifts.food  ?? 0));
+      newResources.wealth = Math.max(0, (newResources.wealth ?? 0) - (params.packedGifts.wealth ?? 0));
+      newResources.food   = Math.max(0, (newResources.food   ?? 0) - (params.packedGifts.food   ?? 0));
       const newPeople = new Map(gameState.people);
       const p = newPeople.get(params.emissaryId);
       if (p) newPeople.set(params.emissaryId, { ...p, role: 'away' });
@@ -1635,18 +1608,16 @@ export const useGameStore = create<GameStore>((set, get) => {
       );
 
       // Compute gift consumption: tally offered_gifts actions.
-      const giftsSpent = { gold: 0, goods: 0, food: 0 };
+      const giftsSpent = { wealth: 0, food: 0 };
       for (const action of actions) {
         if (action.type === 'offer_gifts') {
-          giftsSpent.gold  += action.giftsOffered?.gold  ?? 0;
-          giftsSpent.goods += action.giftsOffered?.goods ?? 0;
-          giftsSpent.food  += action.giftsOffered?.food  ?? 0;
+          giftsSpent.wealth += action.giftsOffered?.wealth ?? 0;
+          giftsSpent.food   += action.giftsOffered?.food   ?? 0;
         }
       }
       const remaining = {
-        gold:  Math.max(0, (emissary.giftsRemaining.gold  ?? 0) - giftsSpent.gold),
-        goods: Math.max(0, (emissary.giftsRemaining.goods ?? 0) - giftsSpent.goods),
-        food:  Math.max(0, (emissary.giftsRemaining.food  ?? 0) - giftsSpent.food),
+        wealth: Math.max(0, (emissary.giftsRemaining.wealth ?? 0) - giftsSpent.wealth),
+        food:   Math.max(0, (emissary.giftsRemaining.food   ?? 0) - giftsSpent.food),
       };
 
       // Update emissary state: transition to returning.
@@ -1661,9 +1632,8 @@ export const useGameStore = create<GameStore>((set, get) => {
       newTribes.set(tribe.id, result.updatedTribe);
 
       const newResources = { ...gameState.settlement.resources };
-      if (result.resourcesGained.food)  newResources.food  = (newResources.food  ?? 0) + result.resourcesGained.food;
-      if (result.resourcesGained.goods) newResources.goods = (newResources.goods ?? 0) + result.resourcesGained.goods;
-      if (result.resourcesGained.gold)  newResources.gold  = (newResources.gold  ?? 0) + result.resourcesGained.gold;
+      if (result.resourcesGained.food)  newResources.food   = (newResources.food   ?? 0) + result.resourcesGained.food;
+      if (result.resourcesGained.wealth) newResources.wealth = (newResources.wealth ?? 0) + result.resourcesGained.wealth;
 
       const updated: GameState = {
         ...gameState,

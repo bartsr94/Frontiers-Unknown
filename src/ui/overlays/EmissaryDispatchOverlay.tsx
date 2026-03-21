@@ -5,7 +5,7 @@
  *   - A known clan to visit (pre-selected when opened from TribeInfoCard)
  *   - The emissary (settler with best bargaining skill listed first)
  *   - Mission type (open_relations / gift_giving / request_food / request_goods)
- *   - Pack gifts: gold, goods, food sliders (0-based; pulled from settlement)
+ *   - Pack gifts: wealth, food sliders (0-based; pulled from settlement)
  *
  * Dispatch is gated on: management phase, contactEstablished tribe, emissary
  * available (role !== 'away'), and no existing emissary at that tribe.
@@ -116,9 +116,8 @@ export default function EmissaryDispatchOverlay({ initialTribeId, initialMission
   const [tribeId, setTribeId]     = useState<string>(initialTribeId ?? '');
   const [emissaryId, setEmissaryId] = useState<string>('');
   const [mission, setMission]     = useState<EmissaryMissionType>(initialMission ?? 'open_relations');
-  const [giftGold, setGiftGold]   = useState(0);
-  const [giftGoods, setGiftGoods] = useState(0);
-  const [giftFood, setGiftFood]   = useState(0);
+  const [giftWealth, setGiftWealth] = useState(0);
+  const [giftFood, setGiftFood]     = useState(0);
 
   if (!gameState) return null;
 
@@ -140,8 +139,7 @@ export default function EmissaryDispatchOverlay({ initialTribeId, initialMission
   const resolvedEmissary   = gameState.people.get(resolvedEmissaryId) ?? null;
 
   const resources  = gameState.settlement.resources;
-  const maxGold    = resources.gold  ?? 0;
-  const maxGoods   = resources.goods ?? 0;
+  const maxWealth  = resources.wealth ?? 0;
   const maxFood    = Math.min(resources.food ?? 0, 20); // cap at 20 to avoid starving settlement
 
   // Travel time preview.
@@ -180,7 +178,7 @@ export default function EmissaryDispatchOverlay({ initialTribeId, initialMission
       tribeId,
       emissaryId: resolvedEmissaryId,
       missionType: mission,
-      packedGifts: { gold: giftGold, goods: giftGoods, food: giftFood },
+      packedGifts: { wealth: giftWealth, food: giftFood },
       travelOneWay: travelTurns ?? 4,
       dispatchedTurn: gameState!.turnNumber,
     });
@@ -281,10 +279,9 @@ export default function EmissaryDispatchOverlay({ initialTribeId, initialMission
             <label className="text-stone-400 uppercase text-[10px] tracking-wide block">
               Pack Gifts <span className="text-stone-600 normal-case text-[10px]">(optional)</span>
             </label>
-            <ResourceSlider label="Gold"  value={giftGold}  max={maxGold}  onChange={setGiftGold} />
-            <ResourceSlider label="Goods" value={giftGoods} max={maxGoods} onChange={setGiftGoods} />
-            <ResourceSlider label="Food"  value={giftFood}  max={maxFood}  onChange={setGiftFood} />
-            {(giftGold > 0 || giftGoods > 0 || giftFood > 0) && selectedTribe && (
+            <ResourceSlider label="Wealth" value={giftWealth} max={maxWealth} onChange={setGiftWealth} />
+            <ResourceSlider label="Food"   value={giftFood}   max={maxFood}   onChange={setGiftFood} />
+            {(giftWealth > 0 || giftFood > 0) && selectedTribe && (
               <p className="text-stone-500 text-[11px]">
                 These gifts are reserved at dispatch; your emissary decides how much to offer during the session.
               </p>

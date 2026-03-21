@@ -20,22 +20,21 @@ export type { SkillCheckResult, DeferredEventEntry, BoundEvent } from '../events
 
 /**
  * The resource types tracked by the settlement economy.
- * Food, cattle, and goods are the primary early-game resources; the rest unlock
+ * Food, cattle, and wealth are the primary early-game resources; the rest unlock
  * as the settlement grows and trade relationships develop.
  *
  * cattle  — herd animals; produce a food bonus each season (1 food per 2 cattle)
- * goods   — an abstraction of manufactured and acquired trade goods
+ * wealth  — accumulated material value: tools, cloth, pots, trade credit (replaces gold + goods)
  * horses  — mounts and draft animals; distinct from cattle (acquired, not farmed)
  */
 export type ResourceType =
   | 'food'
   | 'cattle'
-  | 'goods'
+  | 'wealth'
   | 'steel'
   | 'lumber'
   | 'stone'
   | 'medicine'
-  | 'gold'
   | 'horses';
 
 /** A complete snapshot of the settlement's current resource stockpile. */
@@ -68,10 +67,8 @@ export interface CompanyRelation {
    * At 0: Company formally abandons the settlement.
    */
   standing: number;
-  /** Gold required to meet the current annual quota. Increases over time. */
-  annualQuotaGold: number;
-  /** Trade goods required to meet the current annual quota. Increases over time. */
-  annualQuotaGoods: number;
+  /** Wealth required to meet the current annual quota. Increases from year 11. */
+  annualQuotaWealth: number;
   /**
    * Number of consecutive annual quotas missed. Resets to 0 on a successful year.
    * Drive the Company's escalating consequences.
@@ -81,15 +78,16 @@ export interface CompanyRelation {
   supportLevel: CompanySupportLevel;
   /** How many in-game years the Company expedition has been active in the region. */
   yearsActive: number;
-  /** Gold contributed toward the current year's quota so far. Resets each Winter-end. */
-  quotaContributedGold: number;
-  /** Trade goods contributed toward the current year's quota so far. Resets each Winter-end. */
-  quotaContributedGoods: number;
+  /** Wealth contributed toward the current year's quota so far. Resets each Spring. */
+  quotaContributedWealth: number;
   /**
-   * Goods exported to the Company this calendar year (resets each Spring).
-   * Every 10 goods exported adds +1 to Company standing.
+   * Multiplier (0.0–1.0) applied to every annual supply delivery, set once at game
+   * start from the settlement's founding location along the Kethani River.
+   *
+   * kethani_mouth = 1.0 (full delivery) → kethani_headwaters = 0.15 (barely any).
+   * Existing saves default to 1.0 so they don't suddenly lose supply.
    */
-  exportedGoodsThisYear: number;
+  locationSupplyModifier: number;
 }
 
 // ─── External Tribes ──────────────────────────────────────────────────────────
@@ -104,7 +102,7 @@ export type TribeTrait =
   | 'desperate';
 
 /** Resources or concessions a tribe wants from the player settlement. */
-export type TribeDesire = 'steel' | 'medicine' | 'alliance' | 'men' | 'territory' | 'trade' | 'food' | 'gold' | 'lumber';
+export type TribeDesire = 'steel' | 'medicine' | 'alliance' | 'men' | 'territory' | 'trade' | 'food' | 'wealth' | 'lumber';
 
 /** Resources or concessions a tribe can offer in trade or alliance. */
 export type TribeOffering =
@@ -233,12 +231,28 @@ export interface Household {
   buildingSlots: (string | null)[];
 
   /**
-   * Private household treasury, accumulated from annual wage disbursements.
+   * Private household treasury, accumulated from per-job wealth generation.
    * Spent autonomously on private construction when an ambition is active.
    * Transfers to the surviving household on marriage merge.
    * Old saves: defaults to 0.
    */
-  householdGold: number;
+  householdWealth: number;
+
+  /**
+   * Sub-integer fractional wealth carry-forward.
+   * Roles with fractional WEALTH_YIELD (e.g. gather_food = 0.1) accumulate
+   * here across seasons; whole units are transferred to householdWealth each dawn.
+   * Old saves: defaults to 0.
+   */
+  wealthAccumulator: number;
+
+  /**
+   * Consecutive seasons this household has been unable to pay dwelling
+   * maintenance. Resets to 0 when maintenance is paid. At 2+ the dwelling
+   * is at risk of a forced downgrade event.
+   * Old saves: defaults to 0.
+   */
+  wealthMaintenanceDebt: number;
 }
 
 // ─── Settlement Culture ────────────────────────────────────────────────────────
@@ -510,8 +524,7 @@ export type EmissaryMissionType =
   | 'request_goods';   // Ask for a goods grant from the tribe
 
 export interface EmissaryGiftBundle {
-  gold: number;
-  goods: number;
+  wealth: number;
   food: number;
 }
 
@@ -589,6 +602,8 @@ export type BuildingId =
   | 'bathhouse_grand'
   // ── Maritime & Exploration ────────────────────────────────────────────────
   | 'dock'
+  // ── Industry (expansions) ────────────────────────────────────────────────
+  | 'pottery'           // enables advanced construction and bathhouse
   // ── Farms & Fields expansion (household, additive) ──────────────────────
   | 'barns_storehouses'  // T2 — extends 'fields'
   | 'farmstead'          // T3
@@ -657,6 +672,12 @@ export interface BuiltBuilding {
    * Checked against BuildingDef.workerSlots before new assignments are accepted.
    */
   assignedWorkerIds: string[];
+  /**
+   * When true, the building's maintenance cost went unpaid this season.
+   * Neglected buildings do not apply roleProductionBonus, skillGrowth, or
+   * fertilityBonus. Clears automatically when wealth is available.
+   */
+  neglected?: boolean;
 }
 
 /** An in-progress construction project. */
@@ -806,6 +827,17 @@ export interface EventRecord {
 
 // ─── Game Configuration ───────────────────────────────────────────────────────
 
+/** The five canonical settlement locations along the Kethani River. */
+export const KETHANI_LOCATIONS = [
+  'kethani_mouth',
+  'kethani_lowlands',
+  'kethani_midreach',
+  'kethani_uplands',
+  'kethani_headwaters',
+] as const;
+
+export type KethaniLocationId = typeof KETHANI_LOCATIONS[number];
+
 /**
  * Immutable configuration set at game start.
  * Persisted in GameState so saves can be inspected without re-running setup.
@@ -821,10 +853,20 @@ export interface GameConfig {
   /** Which location on the regional map the settlement is founded on. */
   startingLocation: LocationId;
   /**
-   * When true, three founding Sauromatian women (ages 18, 22, 26) are added to
-   * the initial settlers. This enables mixed-marriage and genetics testing from
-   * turn one. The women's ethnic group is derived from the first selected tribe;
-   * falls back to kiswani_riverfolk if no tribes are selected.
+   * Three stackable companion choices made during the intro sequence.
+   * Replaces the old includeSauromatianWomen toggle.
+   */
+  companionChoices?: {
+    /** 2–3 Imanian wives of existing settlers. Households form on day 1. */
+    imanianWives: boolean;
+    /** 3 mixed-heritage Shackle Station locals (Kiswani/Imanian bloodline). */
+    townbornAuxiliaries: boolean;
+    /** 2–3 pure Sauromatian women arranged through a tribal intermediary. */
+    wildbornWomen: boolean;
+  };
+  /**
+   * @deprecated Use companionChoices.wildbornWomen instead.
+   * Kept for backwards compatibility with existing tests and old saves.
    */
   includeSauromatianWomen?: boolean;
   /**

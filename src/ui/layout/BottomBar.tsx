@@ -14,7 +14,7 @@ import { getHappinessLabel, getHappinessColor, getSettlementMoraleLabel } from '
 
 // Display only the six resources shown in the bottom bar summary strip.
 const BOTTOM_BAR_KEYS: ReadonlySet<ResourceType> = new Set(
-  ['food', 'cattle', 'goods', 'gold', 'lumber', 'stone', 'medicine', 'steel', 'horses'] as const,
+  ['food', 'cattle', 'wealth', 'lumber', 'stone', 'medicine', 'steel', 'horses'] as const,
 );
 const PILLS = ALL_RESOURCES.filter(r => BOTTOM_BAR_KEYS.has(r.key));
 

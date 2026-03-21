@@ -45,7 +45,9 @@ export function createHousehold(options: CreateHouseholdOptions): Household {
     productionBuildingIds: [],
     isAutoNamed: options.isAutoNamed ?? true,
     buildingSlots: Array(9).fill(null) as (string | null)[],
-    householdGold: 0,
+    householdWealth: 0,
+    wealthAccumulator: 0,
+    wealthMaintenanceDebt: 0,
   };
 }
 
@@ -444,7 +446,7 @@ export function mergeHouseholds(
   }
 
   // Pool the dissolved household's savings into the surviving one.
-  updatedDest = { ...updatedDest, householdGold: updatedDest.householdGold + source.householdGold };
+  updatedDest = { ...updatedDest, householdWealth: updatedDest.householdWealth + source.householdWealth };
   updatedHouseholds.set(destId, updatedDest);
   updatedHouseholds.delete(sourceId);
 

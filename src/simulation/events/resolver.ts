@@ -32,6 +32,7 @@ import type {
 import type { GameState, ResourceType, EventRecord, ReligiousPolicy } from '../turn/game-state';
 import type { Person, EthnicGroup, ReligionId, SocialStatus, CultureId, WorkRole, HouseholdRole, TraitId } from '../population/person';
 import type { HouseholdTradition } from '../turn/game-state';
+import { computeYearlyQuota } from '../economy/company';
 import {
   getDerivedSkill,
   DERIVED_SKILL_IDS,
@@ -776,6 +777,30 @@ function applyConsequence(
           : { ...tribe, contactEstablished: true };
       tribes.set(tribeId, updated);
       return { ...state, tribes };
+    }
+
+    case 'contribute_quota_wealth': {
+      const mode = consequence.value as 'full' | 'exceed' | 'all_available' | 'none';
+      const quota = computeYearlyQuota(state.currentYear);
+      let contributionAmount = 0;
+      switch (mode) {
+        case 'full':          contributionAmount = quota.wealth; break;
+        case 'exceed':        contributionAmount = Math.floor(quota.wealth * 1.25); break;
+        case 'all_available': contributionAmount = state.settlement.resources.wealth; break;
+        case 'none':          contributionAmount = 0; break;
+      }
+      const actual = Math.min(contributionAmount, state.settlement.resources.wealth);
+      return {
+        ...state,
+        settlement: {
+          ...state.settlement,
+          resources: { ...state.settlement.resources, wealth: state.settlement.resources.wealth - actual },
+        },
+        company: {
+          ...state.company,
+          quotaContributedWealth: state.company.quotaContributedWealth + actual,
+        },
+      };
     }
 
     // Exhaustiveness guard — compile error if a new ConsequenceType is added without a handler.

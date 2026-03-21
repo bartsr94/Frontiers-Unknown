@@ -29,8 +29,7 @@ export const COMPANY_EVENTS: GameEvent[] = [
         description: 'No reason to refuse a gift from your patron — for now.',
         consequences: [
           { type: 'modify_resource', target: 'food', value: 15 },
-          { type: 'modify_resource', target: 'gold', value: 10 },
-          { type: 'modify_resource', target: 'goods', value: 5 },
+          { type: 'modify_resource', target: 'wealth', value: 15 },
         ],
       },
     ],
@@ -103,8 +102,7 @@ export const COMPANY_EVENTS: GameEvent[] = [
         description: 'Cooperation looks better in quarterly reports.',
         consequences: [
           { type: 'modify_resource', target: 'food',  value: 10 },
-          { type: 'modify_resource', target: 'gold',  value: 5  },
-          { type: 'modify_resource', target: 'goods', value: 3  },
+          { type: 'modify_resource', target: 'wealth',  value: 8  },
           {
             type: 'add_person',
             target: 'company_factor',
@@ -119,7 +117,7 @@ export const COMPANY_EVENTS: GameEvent[] = [
         description: 'Less scrutiny. Possibly fewer endorsements.',
         consequences: [
           { type: 'modify_resource', target: 'food',  value: 10 },
-          { type: 'modify_resource', target: 'gold',  value: 5  },
+          { type: 'modify_resource', target: 'wealth',  value: 5  },
           { type: 'modify_standing', target: 'company', value: -3 },
         ],
       },
@@ -262,6 +260,46 @@ export const COMPANY_EVENTS: GameEvent[] = [
         label: 'Accept the situation. Build something that needs no patron.',
         description: 'The Company was never truly an ally. Perhaps this is better.',
         consequences: [{ type: 'modify_standing', target: 'company', value: -100 }],
+      },
+    ],
+  },
+  {
+    id: 'co_annual_export',
+    title: 'The Year-End Reckoning',
+    category: 'company',
+    isDeferredOutcome: true,
+    prerequisites: [],
+    weight: 1,
+    cooldown: 0,
+    isUnique: false,
+    description:
+      "The Ansberry Company's factor arrives as the harvest season closes, ledger in hand. " +
+      "The year's trading accounts fall due. Your settlement's production has been assessed. " +
+      "How much wealth do you commit to the Company's export shipment?",
+    choices: [
+      {
+        id: 'send_full',
+        label: 'Send the full quota.',
+        description: 'Meet your contractual obligation. The Company expects no less.',
+        consequences: [{ type: 'contribute_quota_wealth', target: 'company', value: 'full' }],
+      },
+      {
+        id: 'send_exceed',
+        label: "Exceed the quota — send 125% and earn the Company's favour.",
+        description: 'A costly gesture, but one that builds lasting credit.',
+        consequences: [{ type: 'contribute_quota_wealth', target: 'company', value: 'exceed' }],
+      },
+      {
+        id: 'send_all',
+        label: 'Send everything we have.',
+        description: 'Strip the treasury. The settlement suffers, but the Company is paid.',
+        consequences: [{ type: 'contribute_quota_wealth', target: 'company', value: 'all_available' }],
+      },
+      {
+        id: 'send_nothing',
+        label: 'Send nothing this year.',
+        description: 'Withhold the shipment entirely. The consequences will follow.',
+        consequences: [{ type: 'contribute_quota_wealth', target: 'company', value: 'none' }],
       },
     ],
   },

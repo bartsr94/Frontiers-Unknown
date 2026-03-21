@@ -22,6 +22,7 @@ import {
   calculateProduction,
   calculateConsumption,
   addResourceStocks,
+  calculateWealthGeneration,
 } from '../economy/resources';
 import { processPregnancies, attemptConception } from '../genetics/fertility';
 import { generateName } from '../population/naming';
@@ -50,6 +51,7 @@ import {
   getSkillGrowthBonuses,
   hasBuilding,
   getBuildingFertilityBonus,
+  applyBuildingMaintenance,
 } from '../buildings/building-effects';
 import { calculateSpoilage } from '../economy/spoilage';
 import {
@@ -59,8 +61,7 @@ import {
   applyQuotaResult,
   computeAnnualDelivery,
 } from '../economy/company';
-import { distributeHouseholdWages, processPrivateBuilding, replaceDeadHouseholdBuilders } from '../economy/private-economy';
-import type { WageResult } from '../economy/private-economy';
+import { processPrivateBuilding, replaceDeadHouseholdBuilders, applyDwellingMaintenance } from '../economy/private-economy';
 import { applyOpinionDrift, applyCourtshipOpinionDrift, applySharedRoleOpinionDrift, decayOpinions, decayOpinionModifiers, initializeBaselineOpinions, initializeFamilyOpinions, adjustOpinion } from '../population/opinions';
 import { processNamedRelationships } from '../population/named-relationships';
 import { canMarry, performMarriage } from '../population/marriage';
@@ -275,10 +276,26 @@ export interface DawnResult {
   privateBuildLogEntries: ActivityLogEntry[];
   /** Settlement resources after private-build material deductions. */
   updatedResourcesAfterPrivateBuild: ResourceStock;
-  /** Wage distribution result for this Spring (null in non-Spring turns). */
-  wageResult: WageResult | null;
+  /** @deprecated Always null; wealth generation is handled in-line. */
+  wageResult: null;
   /** True when year === 10 and season === 'spring'; triggers the funding-ends notification event. */
   shouldFireFundingEndsEvent: boolean;
+  /**
+   * Instance IDs of buildings that could not pay their maintenance cost this season
+   * and were marked neglected. The store can use this to surface UI warnings.
+   */
+  neglectedBuildingIds: string[];
+  /**
+   * Instance IDs of dwellings whose owning household has been in maintenance debt
+   * for 2 or more consecutive seasons (downgrade event should be queued).
+   */
+  atRiskDwellingIds: string[];
+  /**
+   * When true, the store should inject `co_annual_export` into pendingEvents so
+   * the player resolves their quota contribution before the Autumn dusk check runs.
+   * Only set when currentSeason === 'autumn' and currentYear ≥ 11.
+   */
+  shouldFireAnnualExportEvent: boolean;
 }
 
 /** Data returned by processDusk(). The store applies these to GameState. */
@@ -1448,6 +1465,19 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
 
   const creoleEmerged = newLanguageDiversityTurns >= 20 && state.culture.languageDiversityTurns < 20;
 
+  // 9.5. Settlement building maintenance — deduct maintenanceCost from settlement resources
+  //       and mark buildings neglected if they cannot pay.
+  const currentBuildingsForMaintenance = [
+    ...state.settlement.buildings,
+    ...constructionResult.completedBuildings,
+  ];
+  const maintenanceResult = applyBuildingMaintenance(
+    currentBuildingsForMaintenance,
+    state.settlement.resources,
+  );
+  // currentBuildings now carries neglected flags — used by private build and downstream.
+  const buildingsAfterMaintenance = maintenanceResult.updatedBuildings;
+
   // 9.7. Trait-driven event deck shaping.
   const traitCategoryBoosts = computeTraitCategoryBoosts(updatedPeople);
 
@@ -1470,13 +1500,11 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     people: updatedPeople,
     settlement: {
       ...state.settlement,
-      buildings: [
-        ...state.settlement.buildings,
-        ...constructionResult.completedBuildings,
-      ],
+      resources: maintenanceResult.updatedResources,
+      buildings: buildingsAfterMaintenance,
     },
   });
-  // Merge household gold updates from the private build pass.
+  // Merge household wealth updates from the private build pass.
   for (const [hhId, updatedHh] of privateBuildResult.updatedHouseholds) {
     if (updatedHh !== updatedHouseholds.get(hhId)) {
       updatedHouseholds.set(hhId, updatedHh);
@@ -1489,43 +1517,65 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     if (p) updatedPeople.set(personId, { ...p, role: 'builder', roleAssignedTurn: state.turnNumber });
   }
 
-  // 9.8. Company spring delivery and household wage distribution.
-  let springProduction = production;
-  let wageResult: WageResult | null = null;
+  // 9.65. Dwelling maintenance — deduct seasonal cost from household wealthSavings;
+  //        increment wealthMaintenanceDebt counter for households that cannot pay.
+  const dwellingMaintenanceResult = applyDwellingMaintenance(
+    updatedHouseholds,
+    buildingsAfterMaintenance,
+  );
+  for (const [hhId, updatedHh] of dwellingMaintenanceResult.updatedHouseholds) {
+    if (updatedHh !== updatedHouseholds.get(hhId)) {
+      updatedHouseholds.set(hhId, updatedHh);
+    }
+  }
+
+  // 9.8. Company spring delivery and household wealth generation.
+  let seasonalProduction = production;
+
+  // 9.6. Wealth generation — every season. Fractional per-person yields are
+  //      accumulated in household.wealthAccumulator; whole units are transferred
+  //      to householdWealth each dawn. Settlement tax delta is floored to keep
+  //      the resource stock as an integer.
+  const wealthGen = calculateWealthGeneration(updatedPeople, happinessMultipliers);
+  for (const [hhId, delta] of wealthGen.householdDeltas) {
+    const hh = updatedHouseholds.get(hhId);
+    if (hh) {
+      const newAcc    = (hh.wealthAccumulator ?? 0) + delta;
+      const wholeUnits = Math.floor(newAcc);
+      updatedHouseholds.set(hhId, {
+        ...hh,
+        householdWealth: hh.householdWealth + wholeUnits,
+        wealthAccumulator: newAcc - wholeUnits,
+      });
+    }
+  }
+  const settlementWealthGained = Math.floor(wealthGen.settlementDelta);
+  if (settlementWealthGained > 0) {
+    seasonalProduction = addResourceStocks(seasonalProduction, {
+      food: 0, cattle: 0, wealth: settlementWealthGained, steel: 0,
+      lumber: 0, stone: 0, medicine: 0, horses: 0,
+    });
+  }
 
   if (state.currentSeason === 'spring') {
-    // Add company supply delivery to production for this turn.
+    // Add company supply delivery to production (spring only).
+    // Scale each value by locationSupplyModifier — settlements further from
+    // Company territory receive proportionally less aid each year.
     const delivery = computeAnnualDelivery(state.company.supportLevel, state.currentYear);
+    const modifier = state.company.locationSupplyModifier;
     if (Object.keys(delivery).length > 0) {
       const deliveryAsStock = {
-        food: delivery.food ?? 0,
-        goods: delivery.goods ?? 0,
-        gold: delivery.gold ?? 0,
-        medicine: delivery.medicine ?? 0,
-        cattle: delivery.cattle ?? 0,
-        steel: delivery.steel ?? 0,
-        lumber: delivery.lumber ?? 0,
-        stone: delivery.stone ?? 0,
-        horses: delivery.horses ?? 0,
+        food:     Math.floor((delivery.food     ?? 0) * modifier),
+        wealth:   Math.floor((delivery.wealth   ?? 0) * modifier),
+        medicine: Math.floor((delivery.medicine ?? 0) * modifier),
+        cattle:   Math.floor((delivery.cattle   ?? 0) * modifier),
+        steel:    Math.floor((delivery.steel    ?? 0) * modifier),
+        lumber:   Math.floor((delivery.lumber   ?? 0) * modifier),
+        stone:    Math.floor((delivery.stone    ?? 0) * modifier),
+        horses:   Math.floor((delivery.horses   ?? 0) * modifier),
       };
-      springProduction = addResourceStocks(production, deliveryAsStock);
+      seasonalProduction = addResourceStocks(seasonalProduction, deliveryAsStock);
     }
-
-    // Distribute wages to households.
-    const wages = distributeHouseholdWages(
-      updatedPeople,
-      state.currentYear,
-      state.settlement.resources.gold,
-    );
-    if (wages.householdDeltas.size > 0) {
-      for (const [hhId, delta] of wages.householdDeltas) {
-        const hh = updatedHouseholds.get(hhId);
-        if (hh) {
-          updatedHouseholds.set(hhId, { ...hh, householdGold: hh.householdGold + delta });
-        }
-      }
-    }
-    wageResult = wages;
   }
 
   // Determine whether to inject the year-10 funding-ends event (fires once, spring of year 10).
@@ -1535,9 +1585,18 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     state.currentYear === 10 &&
     !fundingEndsAlreadyFired;
 
+  // Determine whether to inject the annual export reckoning event in Autumn (year ≥ 11).
+  const annualExportAlreadyFiredThisYear = state.eventHistory.some(
+    e => e.eventId === 'co_annual_export' && e.turnNumber >= state.turnNumber - 5,
+  );
+  const shouldFireAnnualExportEvent =
+    state.currentSeason === 'autumn' &&
+    state.currentYear >= 11 &&
+    !annualExportAlreadyFiredThisYear;
+
   return {
     updatedPeople,
-    production: springProduction,
+    production: seasonalProduction,
     consumption,
     populationCount: updatedPeople.size,
     births,
@@ -1587,11 +1646,14 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     newBirths,
     pendingApprenticeshipEvents: apprenticeshipResult.pendingApprenticeshipEvents,
     newApprenticeshipEntries: apprenticeshipResult.logEntries,
-    wageResult,
+    wageResult: null,
     shouldFireFundingEndsEvent,
     privateProjects: privateBuildResult.newProjects,
     privateBuildLogEntries: privateBuildResult.logEntries,
     updatedResourcesAfterPrivateBuild: privateBuildResult.updatedResources,
+    neglectedBuildingIds: maintenanceResult.neglectedIds,
+    atRiskDwellingIds: dwellingMaintenanceResult.atRiskBuildingIds,
+    shouldFireAnnualExportEvent,
   };
 }
 
@@ -1624,8 +1686,7 @@ export function processDusk(state: GameState, _season: Season): DuskResult {
   if (state.currentSeason === 'autumn') {
     const quota = computeYearlyQuota(state.currentYear);
     const contribution = {
-      gold: state.company.quotaContributedGold,
-      goods: state.company.quotaContributedGoods,
+      wealth: state.company.quotaContributedWealth,
     };
     const qStatus = checkQuotaStatus(contribution, quota);
     const updatedCompany = applyQuotaResult(state.company, qStatus);

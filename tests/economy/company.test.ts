@@ -16,13 +16,11 @@ import type { CompanyRelation } from '../../src/simulation/turn/game-state';
 function makeCompany(overrides: Partial<CompanyRelation> = {}): CompanyRelation {
   return {
     standing: 60,
-    annualQuotaGold: 0,
-    annualQuotaGoods: 0,
+    annualQuotaWealth: 0,
     consecutiveFailures: 0,
     supportLevel: 'standard',
     yearsActive: 1,
-    quotaContributedGold: 0,
-    quotaContributedGoods: 0,
+    quotaContributedWealth: 0,
     ...overrides,
   };
 }
@@ -30,30 +28,26 @@ function makeCompany(overrides: Partial<CompanyRelation> = {}): CompanyRelation 
 // ─── computeYearlyQuota ───────────────────────────────────────────────────────
 
 describe('computeYearlyQuota', () => {
-  it('returns 0/0 during grace period (years 1–3)', () => {
+  it('returns 0/0 during grace period (years 1–10)', () => {
     for (let y = 1; y <= QUOTA_GRACE_YEARS; y++) {
       const q = computeYearlyQuota(y);
-      expect(q.gold).toBe(0);
-      expect(q.goods).toBe(0);
+      expect(q.wealth).toBe(0);
     }
   });
 
-  it('year 4: gold=7, goods=11', () => {
-    const q = computeYearlyQuota(4);
-    expect(q.gold).toBe(7);
-    expect(q.goods).toBe(11);
+  it('year 11: wealth=15', () => {
+    const q = computeYearlyQuota(11);
+    expect(q.wealth).toBe(15);
   });
 
-  it('year 6: gold=11, goods=17', () => {
-    const q = computeYearlyQuota(6);
-    expect(q.gold).toBe(11);
-    expect(q.goods).toBe(17);
+  it('year 13: wealth=25', () => {
+    const q = computeYearlyQuota(13);
+    expect(q.wealth).toBe(25);
   });
 
-  it('year 10: gold=19, goods=29', () => {
-    const q = computeYearlyQuota(10);
-    expect(q.gold).toBe(19);
-    expect(q.goods).toBe(29);
+  it('year 17: wealth=45', () => {
+    const q = computeYearlyQuota(17);
+    expect(q.wealth).toBe(45);
   });
 });
 
@@ -61,45 +55,40 @@ describe('computeYearlyQuota', () => {
 
 describe('checkQuotaStatus', () => {
   it('returns exceeded during grace period (quota = 0)', () => {
-    expect(checkQuotaStatus({ gold: 0, goods: 0 }, { gold: 0, goods: 0 })).toBe('exceeded');
+    expect(checkQuotaStatus({ wealth: 0 }, { wealth: 0 })).toBe('exceeded');
   });
 
   it('returns exceeded when contribution ≥ 110%', () => {
-    const quota = computeYearlyQuota(4); // gold=7, goods=11
-    // Exact value = 7 + 11/2 = 12.5; 110% = 13.75 gold-equiv
-    expect(checkQuotaStatus({ gold: 14, goods: 0 }, quota)).toBe('exceeded');
+    const quota = computeYearlyQuota(11); // wealth=15
+    // 110% = 16.5; contribute 17
+    expect(checkQuotaStatus({ wealth: 17 }, quota)).toBe('exceeded');
   });
 
   it('returns met within ±10% of requirement', () => {
-    const quota = computeYearlyQuota(4);
-    // Exactly 100%: 7 gold + 11 goods → 7 + 5.5 = 12.5 value
-    expect(checkQuotaStatus({ gold: 7, goods: 11 }, quota)).toBe('met');
+    const quota = computeYearlyQuota(11); // wealth=15
+    expect(checkQuotaStatus({ wealth: 15 }, quota)).toBe('met');
   });
 
   it('returns met at 90% threshold', () => {
-    const quota = computeYearlyQuota(4); // required gold=7, goods=11 → value=12.5
-    // 90% = 11.25 gold-equiv; give 12 gold → 12/12.5 = 0.96 → 'met'
-    expect(checkQuotaStatus({ gold: 12, goods: 0 }, quota)).toBe('met');
-    // 88% = 11.0 gold-equiv: 10 gold + 2 goods = 10+1 = 11 → partial
-    expect(checkQuotaStatus({ gold: 10, goods: 2 }, quota)).toBe('partial');
+    const quota = computeYearlyQuota(11); // wealth=15; 90% = 13.5
+    expect(checkQuotaStatus({ wealth: 14 }, quota)).toBe('met');
+    expect(checkQuotaStatus({ wealth: 13 }, quota)).toBe('partial');
   });
 
   it('returns partial when 50–89% delivered', () => {
-    const quota = computeYearlyQuota(4); // required = 12.5
-    // 60% = 7.5 gold-equiv
-    expect(checkQuotaStatus({ gold: 7, goods: 1 }, quota)).toBe('partial');
+    const quota = computeYearlyQuota(11); // wealth=15; 60% = 9
+    expect(checkQuotaStatus({ wealth: 9 }, quota)).toBe('partial');
   });
 
   it('returns failed when < 50% delivered', () => {
-    const quota = computeYearlyQuota(4); // required = 12.5
-    // 49% = 6.125
-    expect(checkQuotaStatus({ gold: 6, goods: 0 }, quota)).toBe('failed');
+    const quota = computeYearlyQuota(11); // wealth=15; 49% = 7.35
+    expect(checkQuotaStatus({ wealth: 7 }, quota)).toBe('failed');
   });
 
-  it('allows overpaying goods to cover gold shortfall', () => {
-    const quota = computeYearlyQuota(4); // gold=7, goods=11; value=12.5
-    // Pay 0 gold + 25 goods → 12.5 value → exactly met
-    expect(checkQuotaStatus({ gold: 0, goods: 25 }, quota)).toBe('met');
+  it('allows overpaying to cover the full quota in wealth', () => {
+    const quota = computeYearlyQuota(11); // wealth=15
+    // Give exactly the required amount
+    expect(checkQuotaStatus({ wealth: 15 }, quota)).toBe('met');
   });
 });
 
@@ -197,10 +186,10 @@ describe('applyQuotaResult', () => {
 // ─── getCompanySupplyDelivery ─────────────────────────────────────────────────
 
 describe('getCompanySupplyDelivery', () => {
-  it('full_support delivers food, gold, goods, medicine', () => {
+  it('full_support delivers food, wealth, medicine', () => {
     const d = getCompanySupplyDelivery('full_support');
     expect(d.food).toBeGreaterThan(0);
-    expect(d.gold).toBeGreaterThan(0);
+    expect(d.wealth).toBeGreaterThan(0);
     expect(d.medicine).toBeGreaterThan(0);
   });
 
