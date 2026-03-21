@@ -8,30 +8,31 @@
 ## Table of Contents
 
 1. [Overview](#1-overview)
-2. [Quick Reference](#2-quick-reference)
-3. [Turn Structure & Seasons](#3-turn-structure--seasons)
-4. [Population, Genetics & Inheritance](#4-population-genetics--inheritance)
-5. [Heritage, Bloodlines & Culture](#5-heritage-bloodlines--culture)
-6. [Language Acquisition](#6-language-acquisition)
-7. [Religion](#7-religion)
-8. [Cultural Identity Pressure](#8-cultural-identity-pressure)
-9. [Households](#9-households)
-10. [Opinions & Opinion Modifiers](#10-opinions--opinion-modifiers)
-11. [Ambitions & Autonomous Events](#11-ambitions--autonomous-events)
-12. [Named Relationships, Schemes & Factions](#12-named-relationships-schemes--factions)
-13. [Skills & Apprenticeships](#13-skills--apprenticeships)
-14. [Events](#14-events)
-15. [Economy](#15-economy)
-16. [Settlement Buildings & Construction](#16-settlement-buildings--construction)
-17. [Private Dwellings & Worker Slots](#17-private-dwellings--worker-slots)
-18. [Immigration & Prosperity](#18-immigration--prosperity)
-19. [Happiness, Morale & Desertion](#19-happiness-morale--desertion)
-20. [Sauromatian Courtship](#20-sauromatian-courtship)
-21. [Diplomacy & External Tribes](#21-diplomacy--external-tribes)
-22. [Portraits & Character Display](#22-portraits--character-display)
-23. [Systems Interconnection](#23-systems-interconnection)
-24. [Glossary](#24-glossary)
-25. [Expeditions](#25-expeditions)
+2. [Starting Your Expedition](#2-starting-your-expedition)
+3. [Quick Reference](#3-quick-reference)
+4. [Turn Structure & Seasons](#4-turn-structure--seasons)
+5. [Population, Genetics & Inheritance](#5-population-genetics--inheritance)
+6. [Heritage, Bloodlines & Culture](#6-heritage-bloodlines--culture)
+7. [Language Acquisition](#7-language-acquisition)
+8. [Religion](#8-religion)
+9. [Cultural Identity Pressure](#9-cultural-identity-pressure)
+10. [Households](#10-households)
+11. [Opinions & Opinion Modifiers](#11-opinions--opinion-modifiers)
+12. [Ambitions & Autonomous Events](#12-ambitions--autonomous-events)
+13. [Named Relationships, Schemes & Factions](#13-named-relationships-schemes--factions)
+14. [Skills & Apprenticeships](#14-skills--apprenticeships)
+15. [Events](#15-events)
+16. [Economy](#16-economy)
+17. [Settlement Buildings & Construction](#17-settlement-buildings--construction)
+18. [Private Dwellings & Worker Slots](#18-private-dwellings--worker-slots)
+19. [Immigration & Prosperity](#19-immigration--prosperity)
+20. [Happiness, Morale & Desertion](#20-happiness-morale--desertion)
+21. [Sauromatian Courtship](#21-sauromatian-courtship)
+22. [Diplomacy & External Tribes](#22-diplomacy--external-tribes)
+23. [Portraits & Character Display](#23-portraits--character-display)
+24. [Systems Interconnection](#24-systems-interconnection)
+25. [Glossary](#25-glossary)
+26. [Expeditions](#26-expeditions)
 
 ---
 
@@ -51,30 +52,135 @@ Palusteria is a slow-burn colony simulation set in a fictional ancient world. Yo
 
 ---
 
-## 2. Quick Reference
+## 2. Starting Your Expedition
 
-### Resources (9 types)
+The **Intro Sequence** is a five-step wizard that appears when you begin a new game. It replaces the old single-page setup form and covers settlement name, difficulty, founding companion composition, and starting location.
+
+### Step 0 — Preamble
+
+Full-screen prologue with three narrative paragraphs setting the scene. Two buttons:
+
+- **Begin the Expedition** — continues to Step 1.
+- **Skip Intro** (small, muted) — calls `newGame()` immediately with the skip defaults listed below.
+
+### Step 1 — The Charter
+
+Set the settlement name (default: `"Kethani Post"`) and difficulty.
+
+| Difficulty | Label | Effect |
+|---|---|---|
+| `easy` | The Company Is Patient | Slower quota ramp; generous annual ship deliveries |
+| `normal` | By the Book | Standard quota schedule; Company watches but does not hover |
+| `hard` | The Inspector Watches | Quota begins in year 5; every failure costs standing |
+
+### Step 2 — Your Companions
+
+Three independent stackable toggles. Any combination (including all three together) is valid. A live headcount at the bottom of the screen updates as toggles change.
+
+#### Card A — Imanian Wives (default: off)
+
+Adds 2–3 Imanian women, each pre-married to a specific founding man. Households form automatically on day 1. Each wife has a 30% chance of arriving with a young child (age 2–6).
+
+- **Profile:** female · age matched to husband ±3 years (range 20–38) · pure Imanian genetics · `imanian_orthodox` · `founding_member` status · Imanian language 1.0 (no Tradetalk)
+- **Starting opinion toward husband:** +50
+- **GameConfig:** `companionChoices.imanianWives`
+
+Effects: raises starting Imanian cultural blend; married men are unavailable for new courtship; if a child arrives the settlement has a non-working dependent from turn 1.
+
+#### Card B — Townborn Auxiliaries (default: off)
+
+Adds 3 mixed-heritage people raised around Company settlements. They know both Imanian customs and the local Sauromatian world.
+
+- **Profile:** mixed sex (2F + 1M, or 1F + 2M) · age 16–30 · Imanian bloodline 20–50% + Kiswani Riverfolk remainder · `newcomer` status
+- **Languages:** Imanian 0.5–0.7 · Tradetalk 0.7–0.9 (strong) · Kiswani 0.8–1.0 (near-native)
+- **Religion:** 60% `imanian_orthodox` / 40% `sacred_wheel` per person
+- **GameConfig:** `companionChoices.townbornAuxiliaries`
+
+Effects: immediate Tradetalk bridge; lowers starting Imanian blend; their children drift nativeward faster. **Supply bonus:** +0.10 to the Company supply modifier at `kethani_uplands` and `kethani_headwaters`.
+
+#### Card C — Wildborn Sauromatian Women (default: off)
+
+Adds 3 pure Sauromatian women arranged through a tribal intermediary. Their ethnic group and Tradetalk fluency depend on the chosen location.
+
+- **Profile:** female · age 18–30 · pure Sauromatian bloodline · `sacred_wheel` · `newcomer` status · `extendedFertility: true` · `genderRatioModifier: 0.14`
+- **Languages:** native tongue 1.0 · Tradetalk at location-scaled fluency (see table)
+- **GameConfig:** `companionChoices.wildbornWomen`
+
+Effects: Sacred Wheel religion active from turn 1 → religious tension with orthodox men; strong female birth skew; high long-term fertility from extended fertility.
+
+**Wildborn ethnic group and Tradetalk fluency by location:**
+
+| Location | Ethnic group | Tradetalk fluency |
+|---|---|---|
+| `kethani_mouth` | `kiswani_riverfolk` | 0.35 |
+| `kethani_lowlands` | `kiswani_riverfolk` or `hanjoda_bloodmoon` (60/40 RNG) | 0.25 |
+| `kethani_midreach` | `hanjoda_stormcaller` or `hanjoda_bloodmoon` (50/50 RNG) | 0.15 |
+| `kethani_uplands` | `hanjoda_stormcaller` | 0.05 |
+| `kethani_headwaters` | `hanjoda_stormcaller` | 0.0 — no shared language |
+
+### Step 3 — Your Destination
+
+Choose one of five points along the Kethani River. The choice sets starting resources and the Company supply modifier. For Wildborn companions, it also determines their ethnic group (see table above).
+
+| Location | `LocationId` | Supply modifier | Starting resource adjustment |
+|---|---|---|---|
+| The Kethani Mouth | `kethani_mouth` | ×1.0 | Standard |
+| The Kethani Lowlands | `kethani_lowlands` | ×0.85 | +5 food |
+| The Kethani Midreach | `kethani_midreach` | ×0.60 | Standard |
+| The Kethani Uplands | `kethani_uplands` | ×0.35 | +10 lumber, −5 food |
+| The Kethani Headwaters | `kethani_headwaters` | ×0.15 | +5 stone, −10 food, −5 lumber |
+
+The supply modifier scales the annual Company ship delivery (see §16 Economy). Townborn Auxiliaries add +0.10 to the modifier at the two westernmost locations. At `kethani_headwaters` the Company can barely reach you; self-sufficiency is essential from the start.
+
+### Step 4 — Ready to Depart
+
+Summary screen showing the full roster (name, sex, age, role, language note), settlement configuration, a cultural blend forecast bar, and the effective Company supply note. Click **Begin the Expedition** to call `newGame()`. A **Back** button returns to Step 3.
+
+### Skip Intro Defaults
+
+When **Skip Intro** is clicked on Step 0, `newGame()` is called immediately with:
+
+| Field | Default | Reason |
+|---|---|---|
+| Settlement name | `"Kethani Post"` | Lore-accurate |
+| Difficulty | `normal` | Standard conditions |
+| Starting location | `kethani_mouth` | Closest to Company; all systems active |
+| Imanian Wives | `false` | Clean roster; no pre-formed households |
+| Townborn Auxiliaries | `false` | No extra language complexity |
+| Wildborn Women | `true` | Sacred Wheel + cultural drift active from turn 1 |
+
+### Camp Capacity
+
+The starting `camp` building holds **20 people** — enough to house all 10 founding settlers plus all three companion groups simultaneously (combined maximum of approximately 22 people).
+
+---
+
+## 3. Quick Reference
+
+### Resources (8 types)
 
 | Resource | Notes |
 |----------|-------|
 | `food` | Primary survival resource. Consumed each season. |
 | `cattle` | Herd animals. Every 2 cattle → +1 food per season passively. Stable halves winter spoilage. |
-| `goods` | Manufactured and traded items. **Not** `trade_goods`. Used for Company quota and barter. |
-| `steel` | Produced by blacksmiths at the Smithy. High value trade good. |
+| `wealth` | Accumulated material value — tools, cloth, pots, trade credit. Generated every season by all working roles; split at source: 70% flows to the worker's household (`householdWealth`), 30% is settlement tax. Primary quota currency. Spoils at 1%/season. |
+| `steel` | Produced by blacksmiths at the Smithy. High-value trade good. |
 | `lumber` | Gathered by Lumberjacks or extracted from surrounding terrain. Required for most construction. |
 | `stone` | Quarried. Required for advanced construction. |
 | `medicine` | Made at Healer's Hut via crafting. Reduces mortality. |
-| `gold` | Primary quota currency. Acquired via trade and crafting. |
 | `horses` | Acquired via trade only. Distinct from cattle. Influence combat and diplomacy options. |
 
 ### Seasons & Production Modifiers
 
-| Season | Food production | Goods production | Notes |
-|--------|----------------|-----------------|-------|
-| Spring | ×1.0 | ×1.0 | Annual Company ship arrives. |
-| Summer | ×1.2 | ×1.3 | Peak production. |
-| Autumn | ×1.6 | ×1.0 | Quota checked at end of Autumn. |
-| Winter | ×0.4 | ×0.7 | Hardship season. Spoilage worst. |
+Wealth generation has **no seasonal modifier** — every role produces the same wealth yield year-round.
+Food production is seasonally scaled. Stone and lumber (gather roles) are also unmodified.
+
+| Season | Food production | Notes |
+|--------|----------------|-------|
+| Spring | ×1.0 | Annual Company ship arrives. |
+| Summer | ×1.2 | Peak food production. |
+| Autumn | ×1.6 | `co_annual_export` event fires (year ≥ 11). |
+| Winter | ×0.4 | Hardship season. Spoilage worst. |
 
 ### Turn Phase Flow
 
@@ -108,9 +214,10 @@ idle ──► startTurn() ──► processDawn() ──► draw events
 | | `fields` | Tilled Fields; +2 food/turn bonus for farmers. Without it, farmers work like foragers. |
 | | `stable` | 2 herder slots. Halves cattle winter spoilage. |
 | | `mill` | 2 miller slots. Multiplies grain output. |
-| Industry | `workshop` | Enables `craft_lumber_to_goods` recipe. |
-| | `smithy` | 2 blacksmith slots. Steel + goods production. |
-| | `tannery` | 2 tailor slots. Goods production. |
+| Industry | `workshop` | General crafting. `craftsman` role generates 2 wealth/season. |
+| | `pottery` | Pottery Kiln. Required by `compound` and `bathhouse`. 1 craftsman slot. |
+| | `smithy` | 2 blacksmith slots. Steel production + 3 wealth/season per blacksmith. |
+| | `tannery` | 2 tailor slots. 3 wealth/season per tailor. |
 | | `trading_post` | Required for tribe barter and Trading Post events. |
 | Social & health | `healers_hut` | Enables medicine crafting. Required for `healer` earned trait. |
 | | `gathering_hall` | Reduces language drift multiplier. |
@@ -123,11 +230,11 @@ idle ──► startTurn() ──► processDawn() ──► draw events
 | Social amenities | `bathhouse` | 1 attendant slot. Happiness + fertility bonuses. Enables immigration event. |
 | | `bathhouse_improved` | Upgraded bathhouse chain tier 2. Requires `bathhouse`. |
 | | `bathhouse_grand` | Upgraded bathhouse chain tier 3. Requires `bathhouse_improved`. |
-| Building chains *(household, additive — see §16)* | `barns_storehouses` · `farmstead` · `grain_silo` | Agriculture chain T2–T4 (extends `fields`). Cumulative +6 food/farmer. |
+| Building chains *(household, additive — see §17)* | `barns_storehouses` · `farmstead` · `grain_silo` | Agriculture chain T2–T4 (extends `fields`). Cumulative +6 food/farmer. |
 | | `cattle_pen` · `meadow` · `cattle_ranch` · `stock_farm` | Cattle Pastures chain T1–T4. Herder role; cattle + food yield. |
-| | `orchard` · `berry_grove` · `beekeeper` · `grand_orchard` | Orchard chain T1–T4. Farmer role; food + goods yield. |
-| Building chains *(communal, upgrade/replace — see §16)* | `logging_camp` · `charcoal_burners` · `wood_pasture` · `sawmill` | Forestry chain T1–T4. Lumberjack role; lumber (+ goods at T2+). |
-| | `hunters_lodge` · `hound_pens` · `hunting_towers` · `hunting_reserve` | Hunting chain T1–T4. Hunter role; food (+ goods at T2+) + defence bonus. |
+| | `orchard` · `berry_grove` · `beekeeper` · `grand_orchard` | Orchard chain T1–T4. Farmer role; food + wealth yield. |
+| Building chains *(communal, upgrade/replace — see §17)* | `logging_camp` · `charcoal_burners` · `wood_pasture` · `sawmill` | Forestry chain T1–T4. Lumberjack role; lumber (+ wealth at T2+). |
+| | `hunters_lodge` · `hound_pens` · `hunting_towers` · `hunting_reserve` | Hunting chain T1–T4. Hunter role; food (+ wealth at T2+) + defence bonus. |
 | | `stone_quarry` · `ore_mine` · `large_quarry` · `shaft_mine` | Quarry chain T1–T4. Quarrier role; stone (+ steel at T2+). |
 | | `infirmary` · `hospital` · `grand_hospital` | Hospice chain T2–T4 (extends `healers_hut`). Healer role; improved mortality + fertility. |
 
@@ -139,7 +246,7 @@ idle ──► startTurn() ──► processDawn() ──► draw events
 | `gather_food` | Forager. Base 1 food/turn, scales with `plants` skill. No building required. Founding role. |
 | `gather_stone` | Quarrier. Scales with `custom` skill. No seasonal modifier. |
 | `gather_lumber` | Lumberjack. Scales with `custom` skill. No seasonal modifier. |
-| `trader` | Generates gold and goods from trade activity. |
+| `trader` | Generates wealth via trade activity (yield: 3/season — highest base rate). |
 | `guard` | Produces nothing; provides settlement defence. |
 | `craftsman` | General production for the workshop. |
 | `healer` | Works at Healer's Hut. |
@@ -148,7 +255,7 @@ idle ──► startTurn() ──► processDawn() ──► draw events
 | `brewer` | Works at Brewery (2 slots). |
 | `miller` | Works at Mill (2 slots). |
 | `herder` | Works at Stable (2 slots). |
-| `hunter` | Hunts for food using `combat` skill. Base 1–3 food/season (like `gather_food`). Hunting chain buildings add goods; defence bonus at higher tiers. Trainable trade. |
+| `hunter` | Hunts for food using `combat` skill. Base 1–3 food/season (like `gather_food`). Generates 2 wealth/season. Hunting chain buildings add wealth at T2+; defence bonus at higher tiers. Trainable trade. |
 | `bathhouse_attendant` | Works at Bathhouse. Enables happiness + fertility bonuses. |
 | `priest_solar` | Orthodox minister. Annual Company standing bonus. |
 | `wheel_singer` | Sacred Wheel practitioner. Per-turn fertility bonus. |
@@ -161,7 +268,7 @@ idle ──► startTurn() ──► processDawn() ──► draw events
 
 ---
 
-## 3. Turn Structure & Seasons
+## 4. Turn Structure & Seasons
 
 Each "turn" represents one season (spring, summer, autumn, or winter). Four turns complete one in-game year.
 
@@ -181,9 +288,12 @@ Each "turn" represents one season (spring, summer, autumn, or winter). Four turn
 13. Process identity pressure (cultural blend zone → Company/tribe pressure counters)
 14. Apply happiness tracking (compute scores, update multipliers, flag desertion candidates)
 15. Process apprenticeships (Phase A cleanup, Phase B progress, Phase C formation every 8 turns)
-16. Autonomous private building pass — households spend gold savings on private construction (`processPrivateBuilding`, step 9.7.5)
-17. Spring payroll — household wages distributed (`distributeHouseholdWages`; Company-funded years 1–10; drawn from settlement gold year 11+)
-18. Draw events (eligible events weighted by trait boosts, cooldowns, and prerequisites)
+16. Apply building maintenance — settlement pays `maintenanceCost` from `settlement.resources.wealth` for each built building; unpaid buildings gain `neglected: true` (bonuses suspended)
+17. **Wealth generation** — `calculateWealthGeneration()`: each person's `WEALTH_YIELD[role]` × happiness multiplier × trade-training bonus; 70% flows to their household's `householdWealth`, 30% settles as settlement tax
+18. Apply dwelling maintenance — each household's `householdWealth` pays `DWELLING_MAINTENANCE[tier]` per season; `wealthMaintenanceDebt` increments if unpaid (at 2+ a downgrade event is queued)
+19. Autonomous private building pass — households spend household wealth on private construction (`processPrivateBuilding`, step 9.7.5)
+20. Company supply delivery (Spring only) — food, wealth, and medicine from the Company ship, scaled by `locationSupplyModifier` and `supportLevel`
+21. Draw events (eligible events weighted by trait boosts, cooldowns, and prerequisites)
 
 *Expedition processing (advance travel, hex entry checks, inject expedition events) runs in the store after `processDawn` returns, before the management phase.*
 
@@ -201,7 +311,7 @@ Each "turn" represents one season (spring, summer, autumn, or winter). Four turn
 
 ---
 
-## 4. Population, Genetics & Inheritance
+## 5. Population, Genetics & Inheritance
 
 ### People
 
@@ -242,7 +352,7 @@ Sauromatian women may carry `extendedFertility = true`. This extends their ferti
 
 ---
 
-## 5. Heritage, Bloodlines & Culture
+## 6. Heritage, Bloodlines & Culture
 
 ### The Blend Scale
 
@@ -271,7 +381,7 @@ Cultural drift rate is multiplied by `happinessDriftCoefficient(score)` — rang
 
 ---
 
-## 6. Language Acquisition
+## 7. Language Acquisition
 
 ### Languages in Play
 
@@ -300,7 +410,7 @@ If two people share no language with fluency ≥ 0.30, their baseline opinion st
 
 ---
 
-## 7. Religion
+## 8. Religion
 
 ### The Three Faiths
 
@@ -349,7 +459,7 @@ Under `orthodox_enforced`, it is 0.
 
 ---
 
-## 8. Cultural Identity Pressure
+## 9. Cultural Identity Pressure
 
 ### The Five Blend Zones
 
@@ -381,7 +491,7 @@ The Settlement view shows an `IdentityScale` widget — a five-zone colour bar (
 
 ---
 
-## 9. Households
+## 10. Households
 
 ### Structure
 
@@ -409,7 +519,7 @@ The *Keth-Thara* is a Sauromatian cultural duty fulfilled by young men (age 16�
 
 ---
 
-## 10. Opinions & Opinion Modifiers
+## 11. Opinions & Opinion Modifiers
 
 ### The Score
 
@@ -464,7 +574,7 @@ When an event resolves with multiple bound actors, a `+2 "Shared: {event title}"
 
 ---
 
-## 11. Ambitions & Autonomous Events
+## 12. Ambitions & Autonomous Events
 
 Every person can hold one ambition at a time. An ambition has a type, an intensity (0–1.0), and optionally a target person.
 
@@ -508,7 +618,7 @@ A progress bar shows the exact intensity, with a `title` tooltip showing the per
 
 ---
 
-## 12. Named Relationships, Schemes & Factions
+## 13. Named Relationships, Schemes & Factions
 
 ### Named Relationships
 
@@ -563,7 +673,7 @@ The **Community** view (🏛) shows:
 
 ---
 
-## 13. Skills & Apprenticeships
+## 14. Skills & Apprenticeships
 
 ### Base Skills (6)
 
@@ -632,7 +742,7 @@ On graduation (progress = 1.0), the apprentice receives a permanent `tradeTraini
 
 ---
 
-## 14. Events
+## 15. Events
 
 ### Event Anatomy
 
@@ -683,29 +793,73 @@ The Expedition Council (up to 7 members) provides advice during events. Each adv
 
 ---
 
-## 15. Economy
+## 16. Economy
+
+### Wealth Generation
+
+Every working settler generates wealth each season. Wealth is split at source:
+- **70%** flows into the household's `householdWealth` treasury
+- **30%** is settlement tax, added to `settlement.resources.wealth`
+
+**`WEALTH_YIELD` per role (units/season):**
+
+| Role | Yield | Role | Yield |
+|------|-------|------|-------|
+| `gather_food` | 0.1 *(fractional — accumulates ~10 seasons to 1 unit)* | | |
+| `farmer` | 1 | `guard` | 1 |
+| `gather_stone` | 1 | `gather_lumber` | 1 |
+| `healer` | 2 | `craftsman` | 2 |
+| `herder` | 2 | `miller` | 2 |
+| `hunter` | 2 | `brewer` | 2 |
+| `bathhouse_attendant` | 2 | | |
+| `trader` | 3 | `blacksmith` | 3 |
+| `tailor` | 3 | | |
+| `priest_solar` | 1 | `wheel_singer` | 1 |
+| `voice_of_wheel` | 1 | `keth_thara` | 1 |
+| `builder` | 1 | | |
+| `away`, `unassigned`, `child` | 0 | | |
+
+Yield is multiplied by the happiness multiplier and `1 + tradeTraining[role] / 100`. Roles not in this table generate 0.
 
 ### Company Quota
 
-The Company expects annual gold and goods deliveries, starting in year 4.
+Years 1–10 are a **grace/investment phase** — no quota is expected. From year 11 onward, the Ansberry Company demands annual wealth deliveries.
 
 **Quota formula:**
-- `quotaGold = 5 + (year − 3) × 2`
-- `quotaGoods = 8 + (year − 3) × 3`
-- Years 1–3: no quota. 1 gold = 2 goods exchange rate applies.
 
-Quota is checked at the end of **Autumn** each year. Results:
+```
+year ≤ 10 → quota = 0
+year N ≥ 11 → quota = 10 + (N − 10) × 5
+```
 
-| Status | Standing effect |
-|--------|----------------|
-| `exceeded` | +Standing bonus |
-| `met` | No change |
-| `partial` | −Standing |
-| `failed` | −Standing; consecutive failure counter increments |
+| Year | Wealth quota |
+|------|-------------|
+| 11 | 15 |
+| 12 | 20 |
+| 13 | 25 |
+| 15 | 35 |
+| 20 | 60 |
 
-Consecutive failures trigger escalating consequences via `CompanySupportLevel`: `full_support` → `standard` → `reduced` → `minimal` → `abandoned`.
+Each Autumn of year ≥ 11, the **`co_annual_export`** event ("The Year-End Reckoning") fires. The player decides how much to send:
 
-**Annual ship** arrives each Spring. Base supply delivery scales with `supportLevel`. Optional settler and goods requests cost standing.
+| Choice | Condition | `quotaStatus` | Standing |
+|--------|-----------|---------------|---------|
+| Send the full quota | `wealth ≥ quota` | `met` | +3 |
+| Exceed the quota (125%) | `wealth ≥ quota × 1.25` | `exceeded` | +8 |
+| Send everything we have | `0 < wealth < quota` | `partial` | −10 |
+| Send nothing | Always available | `failed` | −15 |
+
+Consecutive failures escalate `CompanySupportLevel`: `full_support` → `standard` → `reduced` → `minimal` → `abandoned`.
+
+**Annual ship** arrives each Spring. Delivers resources scaled by `locationSupplyModifier` and `supportLevel`:
+
+| Support level | Delivery |
+|--------------|---------|
+| `full_support` | 15 food, 12 wealth, 5 medicine |
+| `standard` | 10 food, 7 wealth |
+| `reduced` | 5 food, 3 wealth |
+| `minimal` | 2 food |
+| `abandoned` | Nothing |
 
 ### Tribe Trade
 
@@ -719,46 +873,87 @@ The trade interface is locked without a Trading Post. TradeView shows the locked
 
 | Recipe | Requirements | Input | Output |
 |--------|-------------|-------|--------|
-| `craft_lumber_to_goods` | Workshop | 3 lumber | 4 goods |
-| `craft_cattle_slaughter` | None | 2 cattle | 3 food + 1 goods |
-| `craft_medicine_prep` | Healer's Hut | 3 food + 2 goods | 4 medicine |
-| `craft_goods_to_gold` | None | 5 goods | 2 gold |
+| `craft_cattle_slaughter` | None | 2 cattle | 3 food |
+| `craft_horse_breeding` | Stable | 2 horses + 4 food | 1 horse |
+| `craft_medicine_prep` | Healer's Hut | 3 food + 2 wealth | 4 medicine |
+| `craft_boat` | Dock | 15 lumber | 1 boat (+1 `boatsInPort`) |
 
 ### Spoilage
 
 Runs at dawn each turn. Rates:
 - `food`: 5%/season (Summer ×1.5; Granary halves this)
 - `cattle`: 3%/season (Winter ×2; Stable halves this)
-- `medicine` / `goods`: 1–2%/season
+- `medicine`: 2%/season
+- `wealth`: 1%/season (no seasonal modifier; no building mitigation)
 
 Spoilage < 1 unit is ignored (no fractional loss).
 
+### Building Maintenance
+
+Each season, every built building deducts its `maintenanceCost` from `settlement.resources`. Key costs:
+
+| Building | wealth/season | Other |
+|----------|--------------|-------|
+| `camp`, `fields`, `palisade`, dwellings | 0 | — |
+| `longhouse` / `roundhouse` | 1 | — |
+| `great_hall`, `trading_post` | 2 | — |
+| `granary`, `workshop`, `smithy`, `tannery`, `brewery`, `mill`, `healers_hut`, `gathering_hall`, `clan_lodge`, `pottery` | 1 | — |
+| `stable` | 0 | 1 lumber/season |
+| `bathhouse` | 2 | 1 stone/season |
+
+If the settlement cannot pay a building's maintenance that season, the building is marked `neglected: true`. Neglected buildings do not apply `roleProductionBonus`, `skillGrowth`, or `fertilityBonus` effects. The neglected flag clears automatically when wealth is available the following season.
+
 ### Private Economy
 
-#### Company Payroll (years 1–10)
+#### Household Wealth
 
-Each Spring during years 1–10, the Company provides:
-- **Settlement base allowance:** 10 gold added directly to settlement resources.
-- **Worker payroll:** 1 gold per employed adult (age ≥ 16; role ≠ `unassigned`/`away`/`keth_thara`; status ≠ `thrall`) deposited directly into the employing household's treasury (`householdGold`).
+Each household accumulates `householdWealth` from the per-session wealth generation pass (70% of each member's yield). Transfers to the surviving household on marriage merge.
 
-In **year 11+** the Company stops all gold transfers. Each Spring, `distributeHouseholdWages` draws from `settlement.resources.gold` instead. If funds are short, households receive a pro-rata share and employed adults suffer a **−5 purpose happiness** penalty (`lastPayrollShortfall = true`). The Economy tab shows a red warning when this occurs.
+#### Dwelling Maintenance
 
-**Transition event:** `eco_company_funding_ends` fires as a notification in Spring of year 10 (no choices — pure warning).
+Private dwellings drain from household wealth each season:
 
-#### Goods Export
+| Dwelling tier | Household wealth / season |
+|--------------|--------------------------|
+| `wattle_hut` | 0 — basic survival, free |
+| `cottage` | 1 |
+| `homestead` | 2 |
+| `compound` | 4 |
 
-`exportGoodsToCompany(amount)` store action (Economy tab, management phase only):
-- **Rate:** 4 goods → 1 gold
-- **Standing bonus:** +1 per 10 goods exported per year (`CompanyRelation.exportedGoodsThisYear`)
-- Primary self-funded gold source after year 10; active blacksmiths/brewers/tailors generate the goods needed to sustain payroll.
+If a household cannot pay for 2 consecutive seasons (`wealthMaintenanceDebt ≥ 2`), a downgrade event fires.
+
+#### Autonomous Private Building (`processPrivateBuilding`)
+
+Runs each dawn at step 9.7.5. Households with sufficient wealth commission private construction without player approval. Two paths:
+
+- **Path A — no dwelling:** When a household has no dwelling, a `wattle_hut` is commissioned automatically once wealth is sufficient — **no ambition required**. Basic shelter is treated as a necessity.
+- **Path B — upgrade or specialist building:** Driven by a `seek_better_housing` or `seek_production_building` ambition on the household head or senior wife. Dwelling upgrades target exactly the next tier up; specialist builds target the role-matching building from `ROLE_TO_BUILDING`.
+
+A `hasActiveProject` guard prevents duplicate commissions. All required materials are checked against `settlement.economyReserves` floors before purchase.
+
+**Private wealth costs (key examples):**
+
+| Building | Wealth cost |
+|----------|------------|
+| `wattle_hut` | 1 |
+| `cottage` | 3 |
+| `homestead` | 6 |
+| `compound` | 12 |
+| `fields` | 2 |
+| `stable` | 4 |
+| `smithy` | 5 |
+
+**`ROLE_TO_BUILDING` specialist mapping:** `farmer` → `fields`, `blacksmith` → `smithy`, `brewer` → `brewery`, `tailor` → `tannery`, `miller` → `mill`, `herder` → `stable`.
 
 #### Reserve Floors
 
 `settlement.economyReserves: Partial<ResourceStock>` — per-resource minimum floors set in the **Economy tab**. Household purchases are blocked if any required material is below its floor. **Surplus** = `max(0, current − floor)`. Low floors give households more purchasing latitude; high floors protect communal production.
 
-#### Household Treasury (`householdGold`)
+#### Company Funding Ends Event
 
-Each household accumulates gold from company payroll and self-funded wages. On marriage, the dissolved household's gold transfers to the surviving household. Households spend their treasury via `processPrivateBuilding` (see §17).
+`eco_company_funding_ends` fires in Spring of year 10 as a warning — no choices, pure notification. Starting year 11, the settlement must self-fund all operations from settlement wealth.
+
+## 17. Settlement Buildings & Construction
 
 ### Construction Mechanics
 
@@ -822,11 +1017,11 @@ Seven expandable production chains add 26 buildings to the catalogue. Each chain
 - Higher tiers always `requires` the previous tier first.
 - Quarry T2+ (`ore_mine`) produce steel in addition to stone.
 - Hunting buildings add a defence bonus and combat skill growth for hunters.
-- Orchard workers use the `farmer` role; buildings produce both food and goods.
+- Orchard workers use the `farmer` role; buildings produce food and generate wealth like all farmer roles.
 
 ---
 
-## 17. Private Dwellings & Worker Slots
+## 18. Private Dwellings & Worker Slots
 
 ### Dwelling Tiers
 
@@ -866,32 +1061,13 @@ Five production buildings enforce `workerSlots` limits per `workerRole`. The `fi
 | `brewery` | `brewer` | 2 |
 | `bathhouse` | `bathhouse_attendant` | 1 |
 
-### Autonomous Private Building (`processPrivateBuilding`)
+### Autonomous Private Building
 
-Runs each dawn at step 9.7.5. Households with saved gold can commission private construction projects without player approval. Two paths:
-
-- **Path A — no dwelling:** When a household has no dwelling, a `wattle_hut` is commissioned automatically once gold is sufficient — **no ambition required**. Basic shelter is treated as a necessity.
-- **Path B — upgrade or specialist building:** Driven by a `seek_better_housing` or `seek_production_building` ambition on the household head or senior wife. Dwelling upgrades target exactly the next tier up; specialist builds target the role-matching building from `ROLE_TO_BUILDING`.
-
-A `hasActiveProject` guard prevents duplicate commissions. All required materials are checked against `settlement.economyReserves` floors before purchase.
-
-**Private gold costs (key examples):**
-
-| Building | Gold cost |
-|----------|-----------|
-| `wattle_hut` | 1 |
-| `cottage` | 3 |
-| `homestead` | 6 |
-| `compound` | 12 |
-| `fields` | 2 |
-| `stable` | 4 |
-| `smithy` | 5 |
-
-**`ROLE_TO_BUILDING` specialist mapping:** `farmer` → `fields`, `blacksmith` → `smithy`, `brewer` → `brewery`, `tailor` → `tannery`, `miller` → `mill`, `herder` → `stable`.
+See **§16 Economy — Private Economy** for full details. Households spend `householdWealth` to commission private construction without player approval. `compound` and `bathhouse` both require a `pottery` building as a prerequisite.
 
 ---
 
-## 18. Immigration & Prosperity
+## 19. Immigration & Prosperity
 
 ### Prosperity Score
 
@@ -901,8 +1077,7 @@ A `hasActiveProject` guard prevents duplicate commissions. All required material
 prosperityScore =
   buildings.length × 3
   + floor(food / 15)
-  + floor(goods / 8)
-  + gold × 2
+  + floor(wealth / 3)
   + floor(populationCount / 5)
 ```
 
@@ -931,7 +1106,7 @@ Sauromatian women receive enhanced happiness from the bathhouse (+8/+12/+16 by t
 
 ---
 
-## 19. Happiness, Morale & Desertion
+## 20. Happiness, Morale & Desertion
 
 ### Happiness Score
 
@@ -1001,7 +1176,7 @@ Guards, `away`, and `keth_thara` roles always produce at ×1.0 regardless of hap
 
 ---
 
-## 20. Sauromatian Courtship
+## 21. Sauromatian Courtship
 
 ### Overview
 
@@ -1036,7 +1211,7 @@ The typical Sauromatian courtship arc:
 
 ---
 
-## 21. Diplomacy & External Tribes
+## 22. Diplomacy & External Tribes
 
 ### Tribe Data Model
 
@@ -1050,7 +1225,7 @@ Each neighbouring tribe has:
 
 ### Trade
 
-Full barter UI available in the **Trade** view once a Trading Post is built and contact is established. Trades affect tribe disposition based on fairness (see §15 Economy).
+Full barter UI available in the **Trade** view once a Trading Post is built and contact is established. Trades affect tribe disposition based on fairness (see §16 Economy).
 
 ### Diplomacy View & Hex Map
 
@@ -1061,15 +1236,15 @@ The **Diplomacy** view shows the Known Clans panel (left) and an interactive hex
 - `diplomacyOpened: true` — formal relations established. Required for trade and alliance events.
 - `territoryQ: number | null` / `territoryR: number | null` — hex coordinates of the tribe's territory centre.
 
-The **"Send Expedition"** button at the bottom of the Known Clans panel opens `ExpeditionDispatchOverlay`. See §25 for the full expedition system.
+The **"Send Expedition"** button at the bottom of the Known Clans panel opens `ExpeditionDispatchOverlay`. See §26 for the full expedition system.
 
 ### Identity Pressure & Tribes
 
-Each turn in a cultural pressure zone, tribe dispositions shift in response to the settlement's blend position (see §8). Tribes respond to how Imanian or Sauromatian your settlement appears.
+Each turn in a cultural pressure zone, tribe dispositions shift in response to the settlement's blend position (see §9). Tribes respond to how Imanian or Sauromatian your settlement appears.
 
 ---
 
-## 22. Portraits & Character Display
+## 23. Portraits & Character Display
 
 ### Portrait System
 
@@ -1104,7 +1279,7 @@ If no photo portrait asset exists for a category/stage/variant combination, `Por
 
 ---
 
-## 23. Systems Interconnection
+## 24. Systems Interconnection
 
 Everything in Palusteria feeds into everything else. The key dependency chains:
 
@@ -1126,9 +1301,9 @@ Everything in Palusteria feeds into everything else. The key dependency chains:
 | Buildings | Spoilage mitigation, skill growth bonuses, immigration events, worker slot enforcement, dwelling happiness |
 | Company standing | Support level → annual supply delivery, event injection (`rel_company_concern_letter`) |
 | Expedition travel | Tribe contact (`contactEstablished`); hex visibility (fog → scouted → visited); expedition events injected into settlement queue |
-| Household gold (`householdGold`) | Autonomous private building; `seek_better_housing` / `seek_production_building` ambition fulfillment |
+| Household wealth (`householdWealth`) | Autonomous private building; `seek_better_housing` / `seek_production_building` ambition fulfillment |
 | Settlement `economyReserves` | Surplus available for household purchases; player control over household autonomy |
-| Goods export | Settlement gold income (year 11+); Company standing bonus |
+| Annual export event (`co_annual_export`) | Company standing; `CompanySupportLevel`; annual supply delivery |
 
 **Critical feedback loops:**
 1. **Happiness → culture → identity pressure → Company standing** — unhappy settlers assimilate slower, which may help or hurt depending on the blend direction.
@@ -1138,7 +1313,7 @@ Everything in Palusteria feeds into everything else. The key dependency chains:
 
 ---
 
-## 24. Glossary
+## 25. Glossary
 
 | Term | Definition |
 |------|-----------|
@@ -1169,16 +1344,16 @@ Everything in Palusteria feeds into everything else. The key dependency chains:
 | **Founding member** | A `SocialStatus`. The 6–8 people who begin the game. |
 | **Hex Map** | The 21×21 axial hex grid of the Ashmark region. Settlement at `(10, 10)`. Explored through expeditions. |
 | **Hidden Wheel** | `syncretic_hidden_wheel` — an emergent syncretic faith. Forms after 20 turns of mixed Orthodox/Wheel presence. |
-| **Household gold** | `householdGold: number` on `Household`. Accumulated from Company payroll (years 1–10) or wage distributions. Spent autonomously on private buildings. |
+| **Household wealth** | `householdWealth: number` on `Household`. Accumulated from per-job wealth generation (70% share). Spent autonomously on private buildings. Transfers to the surviving household on marriage merge. |
 | **Identity pressure** | `companyPressureTurns` / `tribalPressureTurns` counters that track how long the blend has been outside the safe zone. |
 | **Keth-Thara** | A Sauromatian cultural duty role for young men (age 16–24). Fulfils `seek_cultural_duty`. |
 | **Low morale turns** | `lowMoraleTurns` on `GameState`. Increments when settlement morale < −20. Gates crisis events. |
 | **Mentor** | A named relationship that alone can generate `scheme_tutor_person` without any trait. |
 | **Nemesis** | A named relationship formed at sustained low opinion (≤ −50). Alone generates `scheme_undermine_person`. |
 | **Opinion modifier** | A timed, decaying delta on a person's opinion of another. Separate from the permanent `relationships` map. |
-| **Payroll shortfall** | `lastPayrollShortfall = true` when year 11+ wages cannot be fully paid from settlement gold. Triggers a −5 purpose happiness penalty for employed adults. |
+| **`wealthMaintenanceDebt`** | Counter on `Household`. Increments each season a household cannot pay dwelling maintenance. At 2+ a forced downgrade event is queued. |
 | **Primary culture** | The highest-weighted culture in a person's drift map, or `settlement_native` if none exceeds 50%. |
-| **Prosperity score** | A computed number gating immigration events: `buildings×3 + floor(food/15) + floor(goods/8) + gold×2 + floor(pop/5)`. |
+| **Prosperity score** | A computed number gating immigration events: `buildings×3 + floor(food/15) + floor(wealth/3) + floor(pop/5)`. |
 | **Reserve floors** | `settlement.economyReserves: Partial<ResourceStock>`. Per-resource minimum thresholds set in the Economy tab. Surplus = current − floor; household purchases are blocked if any required material is below its floor. |
 | **RNG** | Seeded pseudo-random number generator (`createRNG(seed)` in `src/utils/rng.ts`). All randomness flows through this. Never use `Math.random()`. |
 | **Safe zone** | Cultural blend range 0.25–0.65 where neither Company standing nor tribe dispositions are affected by identity pressure. |
@@ -1194,7 +1369,7 @@ Everything in Palusteria feeds into everything else. The key dependency chains:
 
 ---
 
-## 25. Expeditions
+## 26. Expeditions
 
 ### Overview
 
