@@ -48,6 +48,7 @@ export function createHousehold(options: CreateHouseholdOptions): Household {
     householdWealth: 0,
     wealthAccumulator: 0,
     wealthMaintenanceDebt: 0,
+    specialty: null,
   };
 }
 

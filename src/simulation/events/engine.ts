@@ -147,7 +147,16 @@ export type ConsequenceType =
    * - `'none'`          → export nothing
    * Deduction is clamped to available wealth; no negative balances.
    */
-  | 'contribute_quota_wealth';
+  | 'contribute_quota_wealth'
+  /**
+   * Transfers wealth from an actor's household treasury to the settlement's wealth stockpile.
+   * Models a character donating private savings to fund a civic project.
+   * `target` = slot token for the donor (e.g. `'{patron}'`).
+   * `value` = integer amount to transfer (clamped to available household wealth).
+   * The donor's `householdWealth` is reduced; `settlement.resources.wealth` is increased by
+   * the same amount.
+   */
+  | 'donate_to_settlement';
 
 // ─── Event Category ──────────────────────────────────────────────────────────
 

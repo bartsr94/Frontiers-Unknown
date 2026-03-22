@@ -72,8 +72,8 @@ describe('ROLE_TO_BUILDING', () => {
   it('maps brewer to brewery', () => {
     expect(ROLE_TO_BUILDING.brewer).toBe('brewery');
   });
-  it('maps tailor to tannery', () => {
-    expect(ROLE_TO_BUILDING.tailor).toBe('tannery');
+  it('tailor is not in ROLE_TO_BUILDING (uses chains instead)', () => {
+    expect(ROLE_TO_BUILDING.tailor).toBeUndefined();
   });
   it('maps miller to mill', () => {
     expect(ROLE_TO_BUILDING.miller).toBe('mill');
@@ -383,8 +383,9 @@ describe('processPrivateBuilding', () => {
     expect(result.newProjects).toHaveLength(0);
   });
 
-  it('skips household whose head has an unrelated ambition type', () => {
-    // Household already has a wattle_hut → falls into Path B, where seek_council produces no building.
+  it('commissions production building via Path C even when leader has an unrelated ambition', () => {
+    // Path C fires unconditionally for production-role members once the household has a dwelling,
+    // regardless of what ambition (if any) the leader holds.
     const existingWattle = {
       instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
     } as GameState['settlement']['buildings'][number];
@@ -400,7 +401,9 @@ describe('processPrivateBuilding', () => {
       [existingWattle],
     );
     const result = processPrivateBuilding(state);
-    expect(result.newProjects).toHaveLength(0);
+    // Farmer with a wattle_hut now commissions fields via Path C
+    expect(result.newProjects).toHaveLength(1);
+    expect(result.newProjects[0]!.defId).toBe('fields');
   });
 
   // ── seek_better_housing ─────────────────────────────────────────────────────
@@ -493,8 +496,11 @@ describe('processPrivateBuilding', () => {
     expect(result.newProjects[0]!.defId).toBe('cottage');
   });
 
-  it('does not start housing project if already at compound tier', () => {
-    const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'));
+  it('does not start any project for a non-production role at compound tier when food is sufficient', () => {
+    // guard has no ROLE_TO_BUILDING or chain mapping; compound is the top housing tier.
+    // Path C has nothing to build. Food is plentiful so Path D (food-security bypass) also
+    // does not fire → no project should start.
+    const person = makePersonWithAmbition('p1', 'h1', makeAmbition('seek_better_housing'), 'guard');
     const compoundBuilding = {
       instanceId: 'compound_0', defId: 'compound', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
     } as GameState['settlement']['buildings'][number];
@@ -507,7 +513,7 @@ describe('processPrivateBuilding', () => {
     const state = makeState(
       new Map([['h1', hh]]),
       new Map([['p1', person]]),
-      { lumber: 50, wealth: 10 },
+      { lumber: 50, wealth: 10, food: 100, stone: 30 }, // plenty of all resources — Path D stays silent
       {},
       [compoundBuilding],
     );
@@ -607,6 +613,324 @@ describe('processPrivateBuilding', () => {
     );
     const result = processPrivateBuilding(state);
     expect(result.updatedResources.lumber).toBe(15);
+    expect(result.newProjects).toHaveLength(0);
+  });
+
+  // ── Path D: food-security bypass ───────────────────────────────────────────
+
+  it('Path D: forager household commissions fields when food is low', () => {
+    // A gather_food (forager) household has no food production buildings.
+    // With food=3 and 1 person, foodPerPerson=3 < 6 → Path D fires.
+    const existingWattle = {
+      instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    const person = makePerson('p1', 'h1', { role: 'gather_food' });
+    const hh = makeHousehold('h1', {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 5,
+      buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
+    });
+    const state = makeState(
+      new Map([['h1', hh]]), new Map([['p1', person]]),
+      { food: 3, lumber: 10 }, // food low (3/1=3 < 6)
+      {},
+      [existingWattle],
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(1);
+    expect(result.newProjects[0]!.defId).toBe('fields');
+  });
+
+  it('Path D: guard household commissions fields when food is critically low', () => {
+    // Guard role has no production mapping; but when food is scarce any household
+    // without food infrastructure should build fields.
+    const existingWattle = {
+      instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    const person = makePerson('p1', 'h1', { role: 'guard' });
+    const hh = makeHousehold('h1', {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 10,
+      buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
+    });
+    const state = makeState(
+      new Map([['h1', hh]]), new Map([['p1', person]]),
+      { food: 2, lumber: 20 }, // food critically low
+      {},
+      [existingWattle],
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(1);
+    expect(result.newProjects[0]!.defId).toBe('fields');
+  });
+
+  it('Path D: does not fire when food is sufficient', () => {
+    // food=60, 1 person → 60 per person, well above threshold. No project.
+    const existingWattle = {
+      instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    const person = makePerson('p1', 'h1', { role: 'gather_food' });
+    const hh = makeHousehold('h1', {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 5,
+      buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
+    });
+    const state = makeState(
+      new Map([['h1', hh]]), new Map([['p1', person]]),
+      { food: 60, lumber: 50, stone: 30 }, // all resources plentiful — no pressure
+      {},
+      [existingWattle],
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(0);
+  });
+
+  it('Path D: does not fire when household already has a food production building', () => {
+    // Household has wattle_hut + fields already; food is low but they're covered.
+    const existingWattle = {
+      instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    const existingFields = {
+      instanceId: 'fields_0', defId: 'fields', builtTurn: 2, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    const person = makePerson('p1', 'h1', { role: 'gather_food' });
+    const hh = makeHousehold('h1', {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 5,
+      buildingSlots: ['wattle_hut_0', 'fields_0', ...Array(7).fill(null)],
+    });
+    const state = makeState(
+      new Map([['h1', hh]]), new Map([['p1', person]]),
+      { food: 2, lumber: 20, stone: 30 }, // food low but household is already equipped; stone/lumber fine
+      {},
+      [existingWattle, existingFields],
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(0);
+  });
+
+  // ── Path D: lumber-pressure bypass ─────────────────────────────────────────
+
+  it('Path D lumber: commissions woodcutter_hut when lumber is low', () => {
+    const existingWattle = {
+      instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    const person = makePerson('p1', 'h1', { role: 'gather_food' });
+    const hh = makeHousehold('h1', {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 5,
+      buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
+    });
+    // lumber=5, 1 person → 5 < LUMBER_LOW_PER_PERSON(8) → fires
+    const state = makeState(
+      new Map([['h1', hh]]), new Map([['p1', person]]),
+      { food: 30, lumber: 5, stone: 30 },
+      {},
+      [existingWattle],
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(1);
+    expect(result.newProjects[0]!.defId).toBe('woodcutter_hut');
+  });
+
+  it('Path D lumber: auto-assigns an eligible member to gather_lumber when woodcutter_hut is commissioned', () => {
+    const existingWattle = {
+      instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    // p1 is the head → picked as builder and excluded from auto-role
+    // p2 (gather_food) is the candidate who gets reassigned to gather_lumber
+    const p1 = makePerson('p1', 'h1', { role: 'gather_food' });
+    const p2 = makePerson('p2', 'h1', { role: 'gather_food' });
+    const hh = makeHousehold('h1', {
+      headId: 'p1', memberIds: ['p1', 'p2'], householdWealth: 5,
+      buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
+    });
+    // lumber=5, 2 people → 2.5/person < LUMBER_LOW_PER_PERSON(8) → fires; cost=3, surplus=5 → affordable
+    const state = makeState(
+      new Map([['h1', hh]]), new Map([['p1', p1], ['p2', p2]]),
+      { food: 30, lumber: 5, stone: 30 },
+      {},
+      [existingWattle],
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.autoRoleAssignments).toHaveLength(1);
+    expect(result.autoRoleAssignments[0]!.personId).toBe('p1');
+    expect(result.autoRoleAssignments[0]!.newRole).toBe('gather_lumber');
+  });
+
+  it('Path D lumber: does not fire when lumber is sufficient', () => {
+    const existingWattle = {
+      instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    const person = makePerson('p1', 'h1', { role: 'gather_food' });
+    const hh = makeHousehold('h1', {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 5,
+      buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
+    });
+    // lumber=20 per person → well above threshold
+    const state = makeState(
+      new Map([['h1', hh]]), new Map([['p1', person]]),
+      { food: 30, lumber: 20, stone: 30 },
+      {},
+      [existingWattle],
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(0);
+  });
+
+  it('Path D lumber: does not fire when household already has a lumber-producing building', () => {
+    const existingWattle = {
+      instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    const existingHut = {
+      instanceId: 'woodcutter_hut_0', defId: 'woodcutter_hut', builtTurn: 2, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    const person = makePerson('p1', 'h1', { role: 'gather_lumber' });
+    const hh = makeHousehold('h1', {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 5,
+      buildingSlots: ['wattle_hut_0', 'woodcutter_hut_0', ...Array(7).fill(null)],
+    });
+    const state = makeState(
+      new Map([['h1', hh]]), new Map([['p1', person]]),
+      { food: 30, lumber: 2, stone: 30 }, // low lumber but already equipped
+      {},
+      [existingWattle, existingHut],
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(0);
+  });
+
+  it('Path D lumber: does not assign role when member is already gather_lumber', () => {
+    const existingWattle = {
+      instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    // Two members: p1 is gather_lumber already, p2 is gather_food
+    const p1 = makePerson('p1', 'h1', { role: 'gather_lumber' });
+    const p2 = makePerson('p2', 'h1', { role: 'gather_food' });
+    const hh = makeHousehold('h1', {
+      headId: 'p1', memberIds: ['p1', 'p2'], householdWealth: 5,
+      buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
+    });
+    // lumber=5, 2 people → 2.5/person < 8 → fires; cost=3, surplus=5 → affordable
+    const state = makeState(
+      new Map([['h1', hh]]), new Map([['p1', p1], ['p2', p2]]),
+      { food: 30, lumber: 5, stone: 30 },
+      {},
+      [existingWattle],
+    );
+    const result = processPrivateBuilding(state);
+    // Building should still be commissioned (no lumber building yet)
+    expect(result.newProjects).toHaveLength(1);
+    expect(result.newProjects[0]!.defId).toBe('woodcutter_hut');
+    // But no autoRoleAssignment because someone is already gather_lumber
+    expect(result.autoRoleAssignments).toHaveLength(0);
+  });
+
+  // ── Path D: stone-pressure bypass ──────────────────────────────────────────
+
+  it('Path D stone: commissions stone_pit when stone is low', () => {
+    const existingWattle = {
+      instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    const person = makePerson('p1', 'h1', { role: 'gather_food' });
+    const hh = makeHousehold('h1', {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 5,
+      buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
+    });
+    // stone=2, 1 person → 2 < STONE_LOW_PER_PERSON(5) → fires
+    const state = makeState(
+      new Map([['h1', hh]]), new Map([['p1', person]]),
+      { food: 30, lumber: 20, stone: 2 },
+      {},
+      [existingWattle],
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(1);
+    expect(result.newProjects[0]!.defId).toBe('stone_pit');
+  });
+
+  it('Path D stone: auto-assigns an eligible member to gather_stone when stone_pit is commissioned', () => {
+    const existingWattle = {
+      instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    // p1 is the head → picked as builder and excluded from auto-role
+    // p2 (unassigned) is the candidate who gets reassigned to gather_stone
+    const p1 = makePerson('p1', 'h1', { role: 'unassigned' });
+    const p2 = makePerson('p2', 'h1', { role: 'unassigned' });
+    const hh = makeHousehold('h1', {
+      headId: 'p1', memberIds: ['p1', 'p2'], householdWealth: 5,
+      buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
+    });
+    // lumber=20 (10/person ≥ 8 → no D-lumber); stone=2 (1/person < 5 → D-stone fires)
+    // stone_pit costs {lumber: 5}, surplus=20 → affordable
+    const state = makeState(
+      new Map([['h1', hh]]), new Map([['p1', p1], ['p2', p2]]),
+      { food: 30, lumber: 20, stone: 2 },
+      {},
+      [existingWattle],
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.autoRoleAssignments).toHaveLength(1);
+    expect(result.autoRoleAssignments[0]!.personId).toBe('p1');
+    expect(result.autoRoleAssignments[0]!.newRole).toBe('gather_stone');
+  });
+
+  it('Path D stone: does not fire when stone is sufficient', () => {
+    const existingWattle = {
+      instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    const person = makePerson('p1', 'h1', { role: 'gather_food' });
+    const hh = makeHousehold('h1', {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 5,
+      buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
+    });
+    const state = makeState(
+      new Map([['h1', hh]]), new Map([['p1', person]]),
+      { food: 30, lumber: 20, stone: 20 }, // stone 20 per person >> threshold
+      {},
+      [existingWattle],
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(0);
+  });
+
+  it('Path D stone: does not fire when household already has a stone-producing building', () => {
+    const existingWattle = {
+      instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    const existingPit = {
+      instanceId: 'stone_pit_0', defId: 'stone_pit', builtTurn: 2, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    const person = makePerson('p1', 'h1', { role: 'gather_stone' });
+    const hh = makeHousehold('h1', {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 5,
+      buildingSlots: ['wattle_hut_0', 'stone_pit_0', ...Array(7).fill(null)],
+    });
+    const state = makeState(
+      new Map([['h1', hh]]), new Map([['p1', person]]),
+      { food: 30, lumber: 20, stone: 1 }, // low stone but already equipped
+      {},
+      [existingWattle, existingPit],
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(0);
+  });
+
+  it('Path D: empty autoRoleAssignments when no resource pressure', () => {
+    const existingWattle = {
+      instanceId: 'wattle_hut_0', defId: 'wattle_hut', builtTurn: 1, style: null, ownerHouseholdId: 'h1',
+    } as GameState['settlement']['buildings'][number];
+    // Household has a dwelling (slot 0 non-null) so Path A doesn't fire.
+    // Guard role has no production-chain mapping so Path C doesn't fire.
+    // No ambition, all resources above thresholds → Path D doesn't fire.
+    const person = makePerson('p1', 'h1', { role: 'guard' });
+    const hh = makeHousehold('h1', {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 5,
+      buildingSlots: ['wattle_hut_0', ...Array(8).fill(null)],
+    });
+    const state = makeState(
+      new Map([['h1', hh]]), new Map([['p1', person]]),
+      { food: 50, lumber: 50, stone: 30 },
+      {},
+      [existingWattle],
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.autoRoleAssignments).toHaveLength(0);
     expect(result.newProjects).toHaveLength(0);
   });
 
@@ -776,7 +1100,7 @@ describe('processPrivateBuilding', () => {
     const state = makeState(
       new Map([['h1', hh]]),
       new Map([['p1', head]]),
-      { lumber: 20 },
+      { lumber: 20, stone: 30 },
       {},
       [existingWattle, existingFields, existingOrchard],
     );
@@ -1233,5 +1557,509 @@ describe('getNextHouseholdProductionTarget', () => {
   it('guard returns null (no production chain defined)', () => {
     const guard = makePerson('p1', 'hh1', { role: 'guard' });
     expect(getNextHouseholdProductionTarget(guard, makeSlottedHH('hh1'), [])).toBeNull();
+  });
+
+  // ── Agriculture chain: multi-tier skill-gated progression ─────────────────
+
+  it('farmer: fields owned + plants=30 (Good) → targets barns_storehouses (agriculture T2)', () => {
+    const farmer = {
+      ...makePerson('p1', 'hh1', { role: 'farmer' }),
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 30 },
+    } as unknown as Person;
+    const hh = makeSlottedHH('hh1', [null, 'fi', null, null, null, null, null, null, null]);
+    expect(getNextHouseholdProductionTarget(farmer, hh, [makeBuilding('fields', 'fi')])).toBe('barns_storehouses');
+  });
+
+  it('farmer: plants=26 exactly (Good threshold) + fields → barns_storehouses beats orchard T1', () => {
+    // Agriculture T2 threshold=26 is now reached — the agriculture chain is tried
+    // first in declaration order, so barns_storehouses wins before orchard T1 (threshold=0).
+    const farmer = {
+      ...makePerson('p1', 'hh1', { role: 'farmer' }),
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 26 },
+    } as unknown as Person;
+    const hh = makeSlottedHH('hh1', [null, 'fi', null, null, null, null, null, null, null]);
+    expect(getNextHouseholdProductionTarget(farmer, hh, [makeBuilding('fields', 'fi')])).toBe('barns_storehouses');
+  });
+
+  it('farmer: fields + barns_storehouses owned, plants=50 (VG) → targets farmstead (agriculture T3)', () => {
+    const farmer = {
+      ...makePerson('p1', 'hh1', { role: 'farmer' }),
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 50 },
+    } as unknown as Person;
+    const hh = makeSlottedHH('hh1', [null, 'fi', 'bs', null, null, null, null, null, null]);
+    const buildings = [makeBuilding('fields', 'fi'), makeBuilding('barns_storehouses', 'bs')];
+    expect(getNextHouseholdProductionTarget(farmer, hh, buildings)).toBe('farmstead');
+  });
+
+  it('farmer: agriculture T1+T2+T3 owned, plants=65 (EX) → targets grain_silo (agriculture T4)', () => {
+    const farmer = {
+      ...makePerson('p1', 'hh1', { role: 'farmer' }),
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 65 },
+    } as unknown as Person;
+    const hh = makeSlottedHH('hh1', [null, 'fi', 'bs', 'fm', null, null, null, null, null]);
+    const buildings = [
+      makeBuilding('fields', 'fi'),
+      makeBuilding('barns_storehouses', 'bs'),
+      makeBuilding('farmstead', 'fm'),
+    ];
+    expect(getNextHouseholdProductionTarget(farmer, hh, buildings)).toBe('grain_silo');
+  });
+
+  it('farmer: full agriculture chain owned, plants=65 → targets orchard T1 (next chain)', () => {
+    const farmer = {
+      ...makePerson('p1', 'hh1', { role: 'farmer' }),
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 65 },
+    } as unknown as Person;
+    const hh = makeSlottedHH('hh1', [null, 'fi', 'bs', 'fm', 'gs', null, null, null, null]);
+    const buildings = [
+      makeBuilding('fields', 'fi'),
+      makeBuilding('barns_storehouses', 'bs'),
+      makeBuilding('farmstead', 'fm'),
+      makeBuilding('grain_silo', 'gs'),
+    ];
+    expect(getNextHouseholdProductionTarget(farmer, hh, buildings)).toBe('orchard');
+  });
+
+  // ── Herder: pastoralism chain ──────────────────────────────────────────────
+
+  it('herder: no buildings → targets cattle_pen (pastoralism T1)', () => {
+    const herder = makePerson('p1', 'hh1', { role: 'herder' });
+    expect(getNextHouseholdProductionTarget(herder, makeSlottedHH('hh1'), [])).toBe('cattle_pen');
+  });
+
+  it('herder: cattle_pen owned, animals=30 → targets meadow (pastoralism T2)', () => {
+    const herder = {
+      ...makePerson('p1', 'hh1', { role: 'herder' }),
+      skills: { animals: 30, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+    } as unknown as Person;
+    const hh = makeSlottedHH('hh1', [null, 'cp', null, null, null, null, null, null, null]);
+    expect(getNextHouseholdProductionTarget(herder, hh, [makeBuilding('cattle_pen', 'cp')])).toBe('meadow');
+  });
+
+  it('herder: cattle_pen + meadow owned, animals=50 → targets cattle_ranch (pastoralism T3)', () => {
+    const herder = {
+      ...makePerson('p1', 'hh1', { role: 'herder' }),
+      skills: { animals: 50, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+    } as unknown as Person;
+    const hh = makeSlottedHH('hh1', [null, 'cp', 'md', null, null, null, null, null, null]);
+    const buildings = [makeBuilding('cattle_pen', 'cp'), makeBuilding('meadow', 'md')];
+    expect(getNextHouseholdProductionTarget(herder, hh, buildings)).toBe('cattle_ranch');
+  });
+
+  it('herder: full pastoralism chain owned (animals=65) → falls through to stable (ROLE_TO_BUILDING)', () => {
+    // All 4 pastoralism tiers owned; chain exhausted → herder is not in the
+    // no-fallback list, so ROLE_TO_BUILDING.herder = 'stable' is returned.
+    const herder = {
+      ...makePerson('p1', 'hh1', { role: 'herder' }),
+      skills: { animals: 65, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+    } as unknown as Person;
+    const hh = makeSlottedHH('hh1', [null, 'cp', 'md', 'cr', 'sf', null, null, null, null]);
+    const buildings = [
+      makeBuilding('cattle_pen', 'cp'),
+      makeBuilding('meadow', 'md'),
+      makeBuilding('cattle_ranch', 'cr'),
+      makeBuilding('stock_farm', 'sf'),
+    ];
+    expect(getNextHouseholdProductionTarget(herder, hh, buildings)).toBe('stable');
+  });
+
+  // ── Hunter: hunting chain + ROLE_TO_BUILDING fallback ─────────────────────
+
+  it('hunter: no buildings → targets hunters_lodge (hunting T1)', () => {
+    const hunter = makePerson('p1', 'hh1', { role: 'hunter' });
+    expect(getNextHouseholdProductionTarget(hunter, makeSlottedHH('hh1'), [])).toBe('hunters_lodge');
+  });
+
+  it('hunter: hunters_lodge owned, combat=30 (Good) → targets hound_pens (hunting T2)', () => {
+    const hunter = {
+      ...makePerson('p1', 'hh1', { role: 'hunter' }),
+      skills: { animals: 25, bargaining: 25, combat: 30, custom: 25, leadership: 25, plants: 25 },
+    } as unknown as Person;
+    const hh = makeSlottedHH('hh1', [null, 'hl', null, null, null, null, null, null, null]);
+    expect(getNextHouseholdProductionTarget(hunter, hh, [makeBuilding('hunters_lodge', 'hl')])).toBe('hound_pens');
+  });
+
+  it('hunter: hunters_lodge owned, combat=25 (T2 gated) → falls through to smokehouse (ROLE_TO_BUILDING)', () => {
+    // Hunting T2 requires combat≥26; hunter is not in the no-fallback list,
+    // so ROLE_TO_BUILDING.hunter = 'smokehouse' is returned as the supplement target.
+    const hunter = makePerson('p1', 'hh1', { role: 'hunter' });
+    const hh = makeSlottedHH('hh1', [null, 'hl', null, null, null, null, null, null, null]);
+    expect(getNextHouseholdProductionTarget(hunter, hh, [makeBuilding('hunters_lodge', 'hl')])).toBe('smokehouse');
+  });
+
+  // ── Healer: healing chain ─────────────────────────────────────────────────
+
+  it('healer: no buildings → targets healers_hut (healing T1)', () => {
+    const healer = makePerson('p1', 'hh1', { role: 'healer' });
+    expect(getNextHouseholdProductionTarget(healer, makeSlottedHH('hh1'), [])).toBe('healers_hut');
+  });
+
+  it('healer: healers_hut owned, plants=30 → targets herb_garden (healing T2)', () => {
+    const healer = {
+      ...makePerson('p1', 'hh1', { role: 'healer' }),
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 30 },
+    } as unknown as Person;
+    const hh = makeSlottedHH('hh1', [null, 'hh', null, null, null, null, null, null, null]);
+    expect(getNextHouseholdProductionTarget(healer, hh, [makeBuilding('healers_hut', 'hh')])).toBe('herb_garden');
+  });
+});
+
+// ─── processPrivateBuilding: later-stage chain progression ───────────────────
+//
+// These tests simulate what the private-build engine sees at different points
+// in the mid/late game, when a household already has some completed production
+// buildings and the engine must detect the correct next tier to commission.
+//
+// Each test constructs a GameState snapshot representing a specific settlement
+// age (post-T1, post-T2, etc.) and verifies that Path C fires correctly.
+
+describe('processPrivateBuilding — chain progression simulations', () => {
+  const EMPTY: ResourceStock = {
+    food: 0, cattle: 0, wealth: 0, steel: 0,
+    lumber: 0, stone: 0, medicine: 0, horses: 0,
+  };
+
+  /** Build a worker person with a specific role and optional skill overrides. */
+  function makeWorker(
+    id: string,
+    hhId: string,
+    role: Person['role'],
+    skillOverrides: Partial<{ animals: number; bargaining: number; combat: number; custom: number; leadership: number; plants: number }> = {},
+  ): Person {
+    return {
+      id,
+      householdId: hhId,
+      age: 28,
+      role,
+      socialStatus: 'settler',
+      sex: 'male',
+      traits: [],
+      religion: 'imanian_orthodox',
+      heritage: {
+        bloodline: [{ group: 'imanian', fraction: 1.0 }],
+        primaryCulture: 'imanian',
+        culturalFluency: new Map(),
+      },
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25, ...skillOverrides },
+      tradeTraining: {},
+      apprenticeship: null,
+      portraitVariant: 1,
+      opinionSustainedSince: {},
+      activeScheme: null,
+      ambition: null,
+      lowHappinessTurns: 0,
+      relationships: new Map(),
+      opinionModifiers: [],
+      traitExpiry: {},
+    } as unknown as Person;
+  }
+
+  /** Build a household stub with the given building slots (index 0 = dwelling). */
+  function makeHH(
+    id: string,
+    slots: (string | null)[],
+    opts: { headId?: string; memberIds?: string[]; householdWealth?: number } = {},
+  ): Household {
+    return {
+      id,
+      name: `HH ${id}`,
+      tradition: 'imanian',
+      headId: opts.headId ?? null,
+      seniorWifeId: null,
+      memberIds: opts.memberIds ?? [],
+      ashkaMelathiBonds: [],
+      foundedTurn: 0,
+      dwellingBuildingId: null,
+      productionBuildingIds: [],
+      specialty: null,
+      isAutoNamed: true,
+      buildingSlots: slots,
+      householdWealth: opts.householdWealth ?? 20,
+    };
+  }
+
+  /** Build a minimal GameState for the private-build engine. */
+  function makeWorld(
+    households: Map<string, Household>,
+    people: Map<string, Person>,
+    buildings: GameState['settlement']['buildings'],
+    resources: Partial<ResourceStock> = {},
+  ): GameState {
+    return {
+      households,
+      people,
+      settlement: {
+        resources: { ...EMPTY, ...resources },
+        buildings,
+        constructionQueue: [],
+        economyReserves: {},
+      } as unknown as GameState['settlement'],
+      turnNumber: 10,
+    } as unknown as GameState;
+  }
+
+  /** Convenience: build a BuiltBuilding stub owned by a household. */
+  function built(defId: string, instanceId: string, hhId: string): GameState['settlement']['buildings'][number] {
+    return {
+      instanceId,
+      defId,
+      builtTurn: 1,
+      style: null,
+      ownerHouseholdId: hhId,
+      claimedByPersonIds: [],
+      assignedWorkerIds: [],
+    } as unknown as GameState['settlement']['buildings'][number];
+  }
+
+  // ── Path C fires for the correct T2 target when T1 is already in slot ──────
+
+  it('Path C: farmer with fields in slot (plants=30) → commissions barns_storehouses (T2)', () => {
+    // barns_storehouses: privateWealthCost=4, cost={lumber:8, stone:4}
+    const person = makeWorker('p1', 'hh1', 'farmer', { plants: 30 });
+    const hh = makeHH('hh1', ['wattle_0', 'fi_1', null, null, null, null, null, null, null], {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 10,
+    });
+    const state = makeWorld(
+      new Map([['hh1', hh]]),
+      new Map([['p1', person]]),
+      [built('wattle_hut', 'wattle_0', 'hh1'), built('fields', 'fi_1', 'hh1')],
+      { lumber: 30, stone: 20 },
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(1);
+    expect(result.newProjects[0]!.defId).toBe('barns_storehouses');
+  });
+
+  it('Path C: herder with cattle_pen in slot (animals=30) → commissions meadow (pastoralism T2)', () => {
+    // meadow: privateWealthCost=4, cost={lumber:8}
+    const person = makeWorker('p1', 'hh1', 'herder', { animals: 30 });
+    const hh = makeHH('hh1', ['wattle_0', 'cp_1', null, null, null, null, null, null, null], {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 10,
+    });
+    const state = makeWorld(
+      new Map([['hh1', hh]]),
+      new Map([['p1', person]]),
+      [built('wattle_hut', 'wattle_0', 'hh1'), built('cattle_pen', 'cp_1', 'hh1')],
+      { lumber: 20 },
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(1);
+    expect(result.newProjects[0]!.defId).toBe('meadow');
+  });
+
+  it('Path C: hunter with hunters_lodge in slot (combat=25) → commissions smokehouse (T2 gated, fallback)', () => {
+    // combat=25 < 26 → hound_pens (T2) is gated → falls through to smokehouse
+    // smokehouse: privateWealthCost=3, cost={lumber:8, stone:4}
+    const person = makeWorker('p1', 'hh1', 'hunter');  // combat=25 (default)
+    const hh = makeHH('hh1', ['wattle_0', 'hl_1', null, null, null, null, null, null, null], {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 10,
+    });
+    const state = makeWorld(
+      new Map([['hh1', hh]]),
+      new Map([['p1', person]]),
+      [built('wattle_hut', 'wattle_0', 'hh1'), built('hunters_lodge', 'hl_1', 'hh1')],
+      { lumber: 20, stone: 10 },
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(1);
+    expect(result.newProjects[0]!.defId).toBe('smokehouse');
+  });
+
+  // ── Multi-step progression: each completed tier unlocks the next ──────────
+  //
+  // Simulates a farming household being observed at three distinct moments in
+  // the mid-game: before T1, between T1 and T2, and between T2 and T3.
+  // The household leader has no ambition; only Path C is responsible.
+
+  it('farming household progresses T1→T2→T3 as each tier completes (plants=50, VG)', () => {
+    // plants=50 unlocks: T1(≥0) ✓, T2(≥26) ✓, T3(≥46) ✓, T4(≥63) ✗
+    const farmer = makeWorker('p1', 'hh1', 'farmer', { plants: 50 });
+    const RESOURCES = { lumber: 50, stone: 30 };
+
+    /** Run one processPrivateBuilding pass for a given set of completed production buildings. */
+    function runStage(productionBuildings: Array<{ defId: string; instanceId: string }>): string | null {
+      const slots: (string | null)[] = [
+        'wattle_0',
+        ...productionBuildings.map(b => b.instanceId),
+        ...Array(8 - productionBuildings.length).fill(null),
+      ];
+      const hh = makeHH('hh1', slots, { headId: 'p1', memberIds: ['p1'], householdWealth: 30 });
+      const allBuildings: GameState['settlement']['buildings'] = [
+        built('wattle_hut', 'wattle_0', 'hh1'),
+        ...productionBuildings.map(b => built(b.defId, b.instanceId, 'hh1')),
+      ];
+      const state = makeWorld(
+        new Map([['hh1', hh]]),
+        new Map([['p1', farmer]]),
+        allBuildings,
+        RESOURCES,
+      );
+      return processPrivateBuilding(state).newProjects[0]?.defId ?? null;
+    }
+
+    // Stage 1 (early game, ~turn 5): only the dwelling exists
+    expect(runStage([])).toBe('fields');
+
+    // Stage 2 (mid game, ~turn 10): fields built; skill unlocks T2
+    expect(runStage([{ defId: 'fields', instanceId: 'fi_1' }])).toBe('barns_storehouses');
+
+    // Stage 3 (mid game, ~turn 15): fields + barns built; skill unlocks T3
+    expect(runStage([
+      { defId: 'fields', instanceId: 'fi_1' },
+      { defId: 'barns_storehouses', instanceId: 'bs_2' },
+    ])).toBe('farmstead');
+  });
+
+  it('herder household progresses pastoralism T1→T2→T3 (animals=50, VG)', () => {
+    const herder = makeWorker('p1', 'hh1', 'herder', { animals: 50 });
+    const RESOURCES = { lumber: 50, stone: 20, wealth: 20 };
+
+    function runStage(productionBuildings: Array<{ defId: string; instanceId: string }>): string | null {
+      const slots: (string | null)[] = [
+        'wattle_0',
+        ...productionBuildings.map(b => b.instanceId),
+        ...Array(8 - productionBuildings.length).fill(null),
+      ];
+      const hh = makeHH('hh1', slots, { headId: 'p1', memberIds: ['p1'], householdWealth: 30 });
+      const allBuildings: GameState['settlement']['buildings'] = [
+        built('wattle_hut', 'wattle_0', 'hh1'),
+        ...productionBuildings.map(b => built(b.defId, b.instanceId, 'hh1')),
+      ];
+      const state = makeWorld(
+        new Map([['hh1', hh]]),
+        new Map([['p1', herder]]),
+        allBuildings,
+        RESOURCES,
+      );
+      return processPrivateBuilding(state).newProjects[0]?.defId ?? null;
+    }
+
+    expect(runStage([])).toBe('cattle_pen');
+    expect(runStage([{ defId: 'cattle_pen', instanceId: 'cp_1' }])).toBe('meadow');
+    expect(runStage([
+      { defId: 'cattle_pen', instanceId: 'cp_1' },
+      { defId: 'meadow', instanceId: 'md_2' },
+    ])).toBe('cattle_ranch');
+  });
+
+  // ── Multi-member household: non-head worker drives Path C ─────────────────
+
+  it('Path C finds production target from member when household head is a guard', () => {
+    // The head has role=guard (no production chain) but member p2 is a farmer.
+    // Path C scans all adults — the farmer member drives the commission.
+    const head = makeWorker('p1', 'hh1', 'guard');
+    const farmer = makeWorker('p2', 'hh1', 'farmer', { plants: 30 });
+    const hh = makeHH('hh1', ['wattle_0', 'fi_1', null, null, null, null, null, null, null], {
+      headId: 'p1', memberIds: ['p1', 'p2'], householdWealth: 10,
+    });
+    const state = makeWorld(
+      new Map([['hh1', hh]]),
+      new Map([['p1', head], ['p2', farmer]]),
+      [built('wattle_hut', 'wattle_0', 'hh1'), built('fields', 'fi_1', 'hh1')],
+      { lumber: 30, stone: 20 },
+    );
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(1);
+    expect(result.newProjects[0]!.defId).toBe('barns_storehouses');
+  });
+
+  it('blocks a new production chain when a wattle_hut household already uses both slots', () => {
+    const farmer = makeWorker('p1', 'hh1', 'blacksmith', { custom: 40 });
+    const hh = makeHH('hh1', ['wattle_0', 'fi_1', 'stable_1', null, null, null, null, null, null], {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 12,
+    });
+    const state = makeWorld(
+      new Map([['hh1', hh]]),
+      new Map([['p1', farmer]]),
+      [
+        built('wattle_hut', 'wattle_0', 'hh1'),
+        built('fields', 'fi_1', 'hh1'),
+        built('stable', 'stable_1', 'hh1'),
+      ],
+      { lumber: 30, stone: 20, steel: 20 },
+    );
+
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(0);
+  });
+
+  it('allows a chain upgrade even when all dwelling production slots are already occupied', () => {
+    const farmer = makeWorker('p1', 'hh1', 'farmer', { plants: 30 });
+    const hh = makeHH('hh1', ['wattle_0', 'fi_1', 'stable_1', null, null, null, null, null, null], {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 12,
+    });
+    const state = makeWorld(
+      new Map([['hh1', hh]]),
+      new Map([['p1', farmer]]),
+      [
+        built('wattle_hut', 'wattle_0', 'hh1'),
+        built('fields', 'fi_1', 'hh1'),
+        built('stable', 'stable_1', 'hh1'),
+      ],
+      { lumber: 30, stone: 20 },
+    );
+
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(1);
+    expect(result.newProjects[0]!.defId).toBe('barns_storehouses');
+  });
+
+  it('sets household specialty when commissioning the first production building', () => {
+    const farmer = makeWorker('p1', 'hh1', 'farmer', { plants: 25 });
+    const hh = makeHH('hh1', ['wattle_0', null, null, null, null, null, null, null, null], {
+      headId: 'p1', memberIds: ['p1'], householdWealth: 10,
+    });
+    const state = makeWorld(
+      new Map([['hh1', hh]]),
+      new Map([['p1', farmer]]),
+      [built('wattle_hut', 'wattle_0', 'hh1')],
+      { lumber: 20 },
+    );
+
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(1);
+    expect(result.newProjects[0]!.defId).toBe('fields');
+    expect(result.updatedHouseholds.get('hh1')!.specialty).toBe('food');
+  });
+
+  it('does not overwrite an existing household specialty when commissioning a later production building', () => {
+    const blacksmith = makeWorker('p1', 'hh1', 'blacksmith', { custom: 40 });
+    const hh = {
+      ...makeHH('hh1', ['wattle_0', null, null, null, null, null, null, null, null], {
+        headId: 'p1', memberIds: ['p1'], householdWealth: 10,
+      }),
+      specialty: 'food' as const,
+    };
+    const state = makeWorld(
+      new Map([['hh1', hh]]),
+      new Map([['p1', blacksmith]]),
+      [built('wattle_hut', 'wattle_0', 'hh1')],
+      { lumber: 20, steel: 20 },
+    );
+
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(1);
+    expect(result.newProjects[0]!.defId).toBe('smithy');
+    expect(result.updatedHouseholds.get('hh1')!.specialty).toBe('food');
+  });
+
+  it('applies the 1.5x out-of-specialty premium to wealth affordability', () => {
+    const blacksmith = makeWorker('p1', 'hh1', 'blacksmith', { custom: 40 });
+    const hh = {
+      ...makeHH('hh1', ['wattle_0', null, null, null, null, null, null, null, null], {
+        headId: 'p1', memberIds: ['p1'], householdWealth: 7,
+      }),
+      specialty: 'food' as const,
+    };
+    const state = makeWorld(
+      new Map([['hh1', hh]]),
+      new Map([['p1', blacksmith]]),
+      [built('wattle_hut', 'wattle_0', 'hh1')],
+      { lumber: 20, steel: 20 },
+    );
+
+    // smithy privateWealthCost = 5; out-of-specialty premium raises it to 8.
+    const result = processPrivateBuilding(state);
+    expect(result.newProjects).toHaveLength(0);
   });
 });

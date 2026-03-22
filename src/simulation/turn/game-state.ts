@@ -9,182 +9,21 @@
  *   genetics/traits → population/person → turn/game-state  ← you are here
  */
 
-import type { Person, Heritage, EthnicGroup, ReligionId, LanguageId, HouseholdRole, HouseholdTradition, WorkRole } from '../population/person';
+import type { Person, Heritage, ReligionId, LanguageId, HouseholdRole, HouseholdTradition, WorkRole } from '../population/person';
 import type { GameEvent, SkillCheckResult, DeferredEventEntry, BoundEvent } from '../events/engine';
+import type { ResourceType, ResourceStock, CompanySupportLevel, QuotaStatus, CompanyRelation } from '../economy/resource-types';
+import type { TribeTrait, TribeDesire, TribeOffering, ExternalTribe } from '../world/tribe-types';
+import type { LocationId, TerrainType, HexContentType, HexContent, HexCell, HexMap } from '../world/hex-types';
+import type { ExpeditionStatus, ExpeditionWaypoint, ExpeditionDeferredEvent, ExpeditionJournalEntry, Expedition, EmissaryMissionType, EmissaryGiftBundle, EmissarySessionAction, EmissaryDispatch } from '../world/expedition-types';
 
 // Re-export shared identity types so consumers only need one import path.
 export type { EthnicGroup, ReligionId, LanguageId, CultureId, HouseholdRole, HouseholdTradition } from '../population/person';
 export type { SkillCheckResult, DeferredEventEntry, BoundEvent } from '../events/engine';
-
-// ─── Economy ───────────────────────────────────────────────────────────────────
-
-/**
- * The resource types tracked by the settlement economy.
- * Food, cattle, and wealth are the primary early-game resources; the rest unlock
- * as the settlement grows and trade relationships develop.
- *
- * cattle  — herd animals; produce a food bonus each season (1 food per 2 cattle)
- * wealth  — accumulated material value: tools, cloth, pots, trade credit (replaces gold + goods)
- * horses  — mounts and draft animals; distinct from cattle (acquired, not farmed)
- */
-export type ResourceType =
-  | 'food'
-  | 'cattle'
-  | 'wealth'
-  | 'steel'
-  | 'lumber'
-  | 'stone'
-  | 'medicine'
-  | 'horses';
-
-/** A complete snapshot of the settlement's current resource stockpile. */
-export type ResourceStock = Record<ResourceType, number>;
-
-// ─── Company Relation ────────────────────────────────────────────────────────
-
-/** The Ansberry Company's current level of support for the settlement. */
-export type CompanySupportLevel =
-  | 'full_support'  // Consistent quota surplus — bonuses and priority supply
-  | 'standard'      // Default operating relationship
-  | 'reduced'       // One missed quota — reduced supply shipments
-  | 'minimal'       // Repeated failures — almost no support
-  | 'abandoned';    // Settlement written off — no further Company resources
-
-/**
- * The result of the annual autumn quota check.
- * Drives the Company's support-level escalation mechanics.
- */
-export type QuotaStatus = 'exceeded' | 'met' | 'partial' | 'failed';
-
-/**
- * All state related to the settlement's relationship with the Ansberry Company.
- * The Company is the player's primary external patron and demand source.
- */
-export interface CompanyRelation {
-  /**
-   * Overall standing score (0–100). Starts at 60.
-   * Above 80: bonuses and preferred supply. Below 40: inspector dispatched.
-   * At 0: Company formally abandons the settlement.
-   */
-  standing: number;
-  /** Wealth required to meet the current annual quota. Increases from year 11. */
-  annualQuotaWealth: number;
-  /**
-   * Number of consecutive annual quotas missed. Resets to 0 on a successful year.
-   * Drive the Company's escalating consequences.
-   */
-  consecutiveFailures: number;
-  /** Current support tier, determined by standing and failure history. */
-  supportLevel: CompanySupportLevel;
-  /** How many in-game years the Company expedition has been active in the region. */
-  yearsActive: number;
-  /** Wealth contributed toward the current year's quota so far. Resets each Spring. */
-  quotaContributedWealth: number;
-  /**
-   * Multiplier (0.0–1.0) applied to every annual supply delivery, set once at game
-   * start from the settlement's founding location along the Kethani River.
-   *
-   * kethani_mouth = 1.0 (full delivery) → kethani_headwaters = 0.15 (barely any).
-   * Existing saves default to 1.0 so they don't suddenly lose supply.
-   */
-  locationSupplyModifier: number;
-}
-
-// ─── External Tribes ──────────────────────────────────────────────────────────
-
-/** Behavioural trait of a neighbouring tribe, influencing its AI decision-making. */
-export type TribeTrait =
-  | 'warlike'
-  | 'peaceful'
-  | 'isolationist'
-  | 'trader'
-  | 'expansionist'
-  | 'desperate';
-
-/** Resources or concessions a tribe wants from the player settlement. */
-export type TribeDesire = 'steel' | 'medicine' | 'alliance' | 'men' | 'territory' | 'trade' | 'food' | 'wealth' | 'lumber';
-
-/** Resources or concessions a tribe can offer in trade or alliance. */
-export type TribeOffering =
-  | 'food'
-  | 'horses'
-  | 'furs'
-  | 'herbs'
-  | 'warriors'
-  | 'wives'
-  | 'knowledge'
-  | 'pearls'
-  | 'trade_goods'
-  | 'stone'
-  | 'steel';
-
-/**
- * A neighbouring Sauromatian tribe that exists in the region.
- * Tribes act autonomously — they raid, trade, migrate, and respond to world events.
- */
-export interface ExternalTribe {
-  /** Unique identifier. */
-  id: string;
-  /** Display name. */
-  name: string;
-  /** The ethnic subgroup this tribe belongs to. */
-  ethnicGroup: EthnicGroup;
-  /** Approximate population size. */
-  population: number;
-  /**
-   * Current disposition toward the player settlement: -100 (hostile) to +100 (allied).
-   * Starts near 0 and shifts based on player actions and random world events.
-   */
-  disposition: number;
-  /** Behavioural traits that influence the tribe's AI logic. */
-  traits: TribeTrait[];
-  /** What this tribe wants from the settlement (drives trade and diplomacy events). */
-  desires: TribeDesire[];
-  /** What this tribe can offer in exchange. */
-  offerings: TribeOffering[];
-  /**
-   * Internal stability (0.0–1.0). Low stability makes the tribe more prone to
-   * raiding, fragmentation, or accepting desperate bargains.
-   */
-  stability: number;
-  /** Whether the player has made first contact with this tribe. Required for direct trade. */
-  contactEstablished: boolean;
-  /** Turn number of the most recent completed trade. null if no trades yet. */
-  lastTradeTurn: number | null;
-  /** Cumulative completed trade count. Used for disposition bonuses. */
-  tradeHistoryCount: number;
-  /** Resources this tribe actively wants to buy (drives premium pricing). */
-  tradeDesires: ResourceType[];
-  /** Resources this tribe has available to sell. */
-  tradeOfferings: ResourceType[];
-  /**
-   * Whether an expedition has entered this tribe's territory hex. The tribe
-   * becomes visible in the Known Clans list as "Sighted" (with ??? name)
-   * but full details are hidden until contactEstablished is set.
-   */
-  sighted: boolean;
-  /**
-   * Whether formal diplomatic channels have been opened with this tribe (beyond
-   * mere first contact). Set by expedition events or the emissary system.
-   */
-  diplomacyOpened: boolean;
-  /**
-   * Turn on which the player last offered gifts to this tribe via the emissary
-   * system. Used for the diminishing-returns calculation (same year = ×0.5).
-   * null if no gifts have ever been given.
-   */
-  giftedTurns: number | null;
-  /**
-   * Axial q-coordinate of the hex this tribe's territory is centred on.
-   * null until the tribe appears on the hex map during world gen.
-   */
-  territoryQ: number | null;
-  /**
-   * Axial r-coordinate of the hex this tribe's territory is centred on.
-   * null until the tribe appears on the hex map during world gen.
-   */
-  territoryR: number | null;
-}
+// Domain types — defined in their home module, re-exported here for one-stop import.
+export type { ResourceType, ResourceStock, CompanySupportLevel, QuotaStatus, CompanyRelation } from '../economy/resource-types';
+export type { TribeTrait, TribeDesire, TribeOffering, ExternalTribe } from '../world/tribe-types';
+export type { LocationId, TerrainType, HexContentType, HexContent, HexCell, HexMap } from '../world/hex-types';
+export type { ExpeditionStatus, ExpeditionWaypoint, ExpeditionDeferredEvent, ExpeditionJournalEntry, Expedition, EmissaryMissionType, EmissaryGiftBundle, EmissarySessionAction, EmissaryDispatch } from '../world/expedition-types';
 
 // ─── Households ─────────────────────────────────────────────────────────────
 
@@ -253,7 +92,23 @@ export interface Household {
    * Old saves: defaults to 0.
    */
   wealthMaintenanceDebt: number;
+
+  /**
+   * The economic specialization this household has developed.
+   * Set to the category of the first production building they commission
+   * (food / industry / social). Out-of-specialty production buildings cost
+   * 1.5× wealth to reflect the additional setup overhead.
+   * null = no specialty yet (no production buildings owned).
+   * Old saves: defaults to null.
+   */
+  specialty: HouseholdSpecialty | null;
 }
+
+/**
+ * The economic specialisation a household has developed.
+ * Derived from the BuildingDef.category of the first production building commissioned.
+ */
+export type HouseholdSpecialty = 'food' | 'industry' | 'social';
 
 // ─── Settlement Culture ────────────────────────────────────────────────────────
 
@@ -342,229 +197,6 @@ export interface SettlementCulture {
   hiddenWheelEmerged: boolean;
 }
 
-// ─── Settlement ───────────────────────────────────────────────────────────────
-
-/**
- * A location identifier for the settlement on the regional map.
- * Will expand to a richer structured type when the map system is built in Phase 3.
- */
-export type LocationId = string;
-
-// ─── Hex Map ──────────────────────────────────────────────────────────────────
-
-/**
- * The terrain type of a hex cell. Determines travel speed and encounter risks.
- */
-export type TerrainType =
-  | 'plains'     // Open grassland. Fast: 4 hexes/season.
-  | 'forest'     // Dense woodland. 2 hexes/season.
-  | 'jungle'     // Thick growth. 1 hex/season.
-  | 'hills'      // Rough terrain. 1 hex/season.
-  | 'mountains'  // Near-impassable. 0.5 hexes/season (2 seasons/hex).
-  | 'river'      // Waterway. 6 hexes/season with boat; 1 on foot.
-  | 'wetlands'   // Marshes. 1 hex/season + disease risk.
-  | 'coast'      // Shore. 2 hexes/season.
-  | 'desert';    // Arid. 1 hex/season + 2× food cost.
-
-/**
- * What a hex can contain. One-time discoveries fire a unique event the first
- * time the hex is entered; recurring types roll every visit.
- */
-export type HexContentType =
-  // ── One-time discoveries ─────────────────────────────────────────────────
-  | 'ruins'              // Ancient structure — unique narrative event.
-  | 'landmark'           // Named geographic feature.
-  | 'resource_cache'     // One-time gather: food / stone / lumber / gold / medicine.
-  | 'hidden_shrine'      // Religious lore discovery.
-  | 'abandoned_camp'     // Previous settlers; possible supply cache.
-  | 'burial_ground'      // Sauromatian sacred site; disposition effects.
-  | 'fresh_water_spring' // Marks hex as reduced food-cost for future expeditions.
-  | 'old_road'           // Increases travel speed through adjacent hexes.
-  // ── Tribe territory ─────────────────────────────────────────────────────
-  | 'tribe_territory'    // Hex patrolled by a named tribe.
-  | 'tribe_outpost'      // Semi-permanent camp; higher encounter chance.
-  | 'tribe_settlement'   // Major settlement; guaranteed contact on entry.
-  // ── Recurring encounters ────────────────────────────────────────────────
-  | 'travellers'         // Passing strangers. Rolls each visit.
-  | 'animal_den'         // Wildlife. Rolls each visit.
-  | 'bandit_camp'        // Hostile non-tribal presence. Can be cleared.
-  | 'disease_vector'     // Wetland illness risk. Rolls each season spent here.
-  | 'weather_hazard';    // Exposed terrain risk. Season-dependent.
-
-/** A single point of interest within a hex cell. */
-export interface HexContent {
-  type: HexContentType;
-  /** For tribe_territory / tribe_outpost / tribe_settlement. */
-  tribeId?: string;
-  /** For resource_cache. */
-  resourceType?: ResourceType;
-  resourceAmount?: number;
-  /** True once the one-time discovery has been collected or the event has fired. */
-  discovered: boolean;
-  /** Custom label for landmarks, ruins, etc. */
-  label?: string;
-}
-
-/**
- * A single cell on the hex map. Uses axial coordinates (q, r).
- */
-export interface HexCell {
-  /** Axial column co-ordinate. */
-  q: number;
-  /** Axial row co-ordinate. */
-  r: number;
-  terrain: TerrainType;
-  /**
-   * Visibility state:
-   * 'fog'      — never visited; terrain unknown.
-   * 'scouted'  — adjacent reveal; terrain known, contents not.
-   * 'visited'  — expedition entered this hex.
-   * 'cleared'  — all one-time content exhausted; only recurring encounters remain.
-   */
-  visibility: 'fog' | 'scouted' | 'visited' | 'cleared';
-  contents: HexContent[];
-  /** Turn on which this hex was first physically entered. null if never visited. */
-  firstVisitedTurn: number | null;
-  /** Optional display label (landmarks, tribe territory, etc.). */
-  label?: string;
-}
-
-/**
- * The full hex map of the Ashmark. Cells are keyed by `"${q},${r}"` for O(1) lookup.
- * Serialised as `[string, HexCell][]` for JSON storage.
- */
-export interface HexMap {
-  width: number;
-  height: number;
-  cells: Map<string, HexCell>;
-  /** Axial co-ordinates of the player's settlement hex (always the centre cell). */
-  settlementQ: number;
-  settlementR: number;
-}
-
-// ─── Expedition ───────────────────────────────────────────────────────────────
-
-export type ExpeditionStatus =
-  | 'travelling'  // En route; processing each dawn.
-  | 'returning'   // Heading back to settlement.
-  | 'completed'   // Returned; outcome delivered.
-  | 'lost';       // All members dead or party collapsed.
-
-export interface ExpeditionWaypoint {
-  q: number;
-  r: number;
-  /** Estimated turn of arrival (informational only). */
-  estimatedArrivalTurn: number;
-}
-
-export interface ExpeditionDeferredEvent {
-  firesOnTurn: number;
-  eventId: string;
-  expeditionId: string;
-  boundActors: Record<string, string>;
-  expeditionContext: { expeditionId: string; hex: { q: number; r: number } };
-}
-
-export interface ExpeditionJournalEntry {
-  turn: number;
-  text: string;
-}
-
-export interface Expedition {
-  id: string;
-  /**
-   * Display name. Auto-generated as "{Leader}'s Expedition", "{Leader}'s Second
-   * Expedition", etc. Player can rename before dispatch.
-   */
-  name: string;
-  leaderId: string;
-  memberIds: string[];
-  /**
-   * Whether the party took a boat from the settlement pool.
-   * One boat is available from game start; more require a built dock.
-   */
-  hasBoat: boolean;
-  provisions: {
-    food: number;
-    goods: number;
-    gold: number;
-    medicine: number;
-  };
-  currentQ: number;
-  currentR: number;
-  /** Primary destination hex coordinates. */
-  destinationQ: number;
-  destinationR: number;
-  waypoints: ExpeditionWaypoint[];
-  visitedHexes: Array<{ q: number; r: number; turn: number }>;
-  status: ExpeditionStatus;
-  dispatchedTurn: number;
-  resolvedTurn: number | null;
-  /**
-   * Seasons of travel progress remaining before the party enters the next hex.
-   * Decrements by 1 each dawn. Enters next hex when it reaches 0.
-   */
-  travelProgress: number;
-  foodRemaining: number;
-  goodsRemaining: number;
-  goldRemaining: number;
-  medicineRemaining: number;
-  /** Set to `true` once the food-low warning event has been queued, so it fires only once. */
-  firedFoodLowWarning: boolean;
-  pendingExpeditionEvents: ExpeditionDeferredEvent[];
-  journal: ExpeditionJournalEntry[];
-}
-
-// ─── Emissary / Diplomacy ─────────────────────────────────────────────────────
-
-export type EmissaryMissionType =
-  | 'open_relations'   // Primary: sets diplomacyOpened on success
-  | 'gift_giving'      // Purely improve disposition; no strings attached
-  | 'request_food'     // Ask for a food grant from the tribe
-  | 'request_goods';   // Ask for a goods grant from the tribe
-
-export interface EmissaryGiftBundle {
-  wealth: number;
-  food: number;
-}
-
-export interface EmissarySessionAction {
-  type:
-    | 'offer_gifts'     // Expends from giftsRemaining; +disposition
-    | 'ask_food'        // Request food from tribe
-    | 'ask_goods'       // Request goods from tribe
-    | 'propose_trade'   // Sets diplomacyOpened; disposition-gated
-    | 'take_leave';     // Concludes the session
-  /** For offer_gifts: actual amounts the player chose to offer. */
-  giftsOffered?: Partial<EmissaryGiftBundle>;
-  /** For ask_food / ask_goods: how much was received. */
-  resourcesReceived?: Partial<ResourceStock>;
-  /** Net disposition change applied by this action. */
-  dispositionDelta: number;
-  /** Narrative line for the session log. */
-  logEntry: string;
-}
-
-export interface EmissaryDispatch {
-  id: string;
-  tribeId: string;
-  /** Person ID of the emissary. Their role is set to 'away' on dispatch. */
-  emissaryId: string;
-  missionType: EmissaryMissionType;
-  dispatchedTurn: number;
-  /** Turn on which the emissary arrives at the tribe. */
-  arrivalTurn: number;
-  /** Turn on which the emissary returns home. Set when the session ends. */
-  returnTurn: number | null;
-  status: 'travelling' | 'at_tribe' | 'returning' | 'completed';
-  /** Resources packed at dispatch (never changes after dispatch). */
-  packedGifts: EmissaryGiftBundle;
-  /** Resources still available to spend during the session. */
-  giftsRemaining: EmissaryGiftBundle;
-  /** Ordered list of actions taken during the diplomacy session. */
-  sessionActions: EmissarySessionAction[];
-}
-
 /**
  * All building types that can be constructed in the settlement.
  */
@@ -623,6 +255,8 @@ export type BuildingId =
   | 'charcoal_burners'   // T2
   | 'wood_pasture'       // T3
   | 'sawmill'            // T4
+  // ── Household lumber production (additive) ───────────────────────────────
+  | 'woodcutter_hut'     // T1 household logging
   // ── Hunting Grounds chain (communal, upgrade) ────────────────────────────
   | 'hunters_lodge'      // T1
   | 'hound_pens'         // T2
@@ -633,10 +267,22 @@ export type BuildingId =
   | 'ore_mine'           // T2
   | 'large_quarry'       // T3
   | 'shaft_mine'         // T4
-  // ── Hospice chain (communal, upgrade — extends healers_hut) ──────────────
-  | 'infirmary'          // T2
-  | 'hospital'           // T3
-  | 'grand_hospital';    // T4
+  // ── Household stone production (additive) ────────────────────────────────
+  | 'stone_pit'          // T1 household quarrying
+  // ── Hospice chain (communal — infirmary is now T1 after healers_hut split) ──
+  | 'infirmary'          // T1 (communal)
+  | 'hospital'           // T2
+  | 'grand_hospital'     // T3
+  // ── Healing chain (household — mirrors hospice at smaller scale) ────────────
+  | 'herb_garden'        // T2 household healing
+  | 'apothecary'         // T3 household healing
+  // ── Commerce chain (household) ───────────────────────────────────────────
+  | 'market_stall'       // T1 trader household building
+  | 'counting_house'     // T2
+  // ── Hunter companion (household, additive) ───────────────────────────────
+  | 'smokehouse'         // standalone hunter supplement
+  // ── Leatherwork expansion (household) ────────────────────────────────────
+  | 'dye_works';         // T2 tailor household upgrade
 
 /** Cultural style applied to buildings that have style variants. */
 export type BuildingStyle = 'imanian' | 'sauromatian';
@@ -1139,6 +785,23 @@ export interface GameState {
    * Serialised with GameState so settings survive save/load cycles.
    */
   debugSettings: DebugSettings;
+
+  // ─── Food & Famine (Phase 5.x) ────────────────────────────────────────────
+
+  /**
+   * Consecutive seasons where the settlement's raw food balance (production
+   * minus consumption, before clamping) would have gone negative.
+   * 0 = no famine. Incremented each season food falls short; reset to 0
+   * the first season food is no longer short.
+   */
+  famineStreak: number;
+
+  /**
+   * If > 0, the turn on which `malnourished` should be removed from all
+   * surviving persons (2 seasons after famine ends; 1 season if an
+   * apothecary building exists). 0 = no recovery pending.
+   */
+  famineRecoveryTurn: number;
 
   // ─── Happiness & Morale (Phase 5) ─────────────────────────────────────────
 

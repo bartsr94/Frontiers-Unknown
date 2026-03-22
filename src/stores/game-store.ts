@@ -11,7 +11,7 @@
  */
 
 import { create } from 'zustand';
-import { processDawn, processDusk } from '../simulation/turn/turn-processor';
+import { processDawn, processDusk, toGraveyardEntry } from '../simulation/turn/turn-processor';
 import type { DawnResult } from '../simulation/turn/turn-processor';
 import { createInitialState } from '../simulation/turn/initial-state';
 import { addResourceStocks, clampResourceStock, emptyResourceStock } from '../simulation/economy/resources';
@@ -38,7 +38,7 @@ import {
   applyDwellingClaims,
   findAvailableWorkerSlotIndex,
 } from '../simulation/buildings/construction';
-import { hasBuilding } from '../simulation/buildings/building-effects';
+import { hasBuilding, computeStorageCaps } from '../simulation/buildings/building-effects';
 import { BUILDING_CATALOG } from '../simulation/buildings/building-definitions';
 import type {
   GameState,
@@ -62,7 +62,7 @@ import type { BoundEvent } from '../simulation/events/engine';
 import { resolveActors } from '../simulation/events/actor-resolver';
 import type { DebugSettings } from '../simulation/turn/game-state';
 import { createExpedition, processExpeditions, discoverTribesFromExpedition } from '../simulation/world/expeditions';
-import type { DispatchExpeditionParams } from '../simulation/world/expeditions';
+import type { DispatchExpeditionParams, ExpeditionProcessResult } from '../simulation/world/expeditions';
 import {
   createEmissaryDispatch,
   emissaryTravelTime,
@@ -73,6 +73,162 @@ export type { DispatchEmissaryParams };
 
 // Re-export economy types consumed by UI components.
 export type { TradeOffer };
+
+// ─── Event assembly helper ────────────────────────────────────────────────────
+
+/**
+ * Assembles all programmatically-injected BoundEvents for the current turn.
+ *
+ * Covers: deferred events (including Hidden Wheel emergence at the front),
+ * scheme climaxes, faction demands, happiness crises, succession decisions,
+ * unwed-birth events, apprenticeship lifecycle, and expedition events.
+ *
+ * The caller appends randomly-drawn events after the returned slice.
+ */
+function buildInjectedEvents(
+  dawnResult: DawnResult,
+  expeditionResult: ExpeditionProcessResult,
+  state: GameState,
+  rng: ReturnType<typeof createRNG>,
+  deferredBoundEvents: BoundEvent[],
+  shouldFireDesertion: boolean,
+): BoundEvent[] {
+  // Deferred events come first; Hidden Wheel emergence is prepended to this slice.
+  const leading: BoundEvent[] = [...deferredBoundEvents];
+  if (dawnResult.shouldFireHiddenWheelEvent) {
+    const ev = getEventById('rel_hidden_wheel_emerges');
+    if (ev) leading.unshift({ ...ev, boundActors: {} } as BoundEvent);
+  }
+
+  // Scheme climax / notification events.
+  const schemeBoundEvents: BoundEvent[] = dawnResult.pendingSchemeEvents
+    .map(({ eventId, personId, targetId }) => {
+      const ev = getEventById(eventId);
+      if (!ev) return null;
+      const actorSlots = ev.actorRequirements ?? [];
+      const boundActors: Record<string, string> = {};
+      if (actorSlots[0]) boundActors[actorSlots[0].slot] = personId;
+      if (actorSlots[1]) boundActors[actorSlots[1].slot] = targetId;
+      return { ...ev, boundActors } as BoundEvent;
+    })
+    .filter((e): e is BoundEvent => e !== null);
+
+  // Faction demand / standoff events.
+  const factionBoundEvents: BoundEvent[] = dawnResult.pendingFactionEvents
+    .map(({ eventId }) => {
+      const ev = getEventById(eventId);
+      if (!ev) return null;
+      const actorSlots = ev.actorRequirements ?? [];
+      if (actorSlots.length === 0) return { ...ev, boundActors: {} } as BoundEvent;
+      const actors = resolveActors(actorSlots, state, rng);
+      return { ...ev, boundActors: actors ?? {} } as BoundEvent;
+    })
+    .filter((e): e is BoundEvent => e !== null);
+
+  // Happiness crisis events.
+  const happinessBoundEvents: BoundEvent[] = [];
+  for (const candidateId of dawnResult.desertionCandidateIds) {
+    const candidate = state.people.get(candidateId);
+    if (!candidate || candidate.lowHappinessTurns !== 3) continue;
+    const ev = getEventById('hap_settler_considers_leaving');
+    if (!ev) continue;
+    happinessBoundEvents.push({ ...ev, boundActors: { settler: candidateId } } as BoundEvent);
+  }
+  if (dawnResult.newLowMoraleTurns === 4) {
+    const ev = getEventById('hap_low_morale_warning');
+    if (ev) happinessBoundEvents.push({ ...ev, boundActors: {} } as BoundEvent);
+  }
+  if (shouldFireDesertion) {
+    const ev = getEventById('hap_desertion_imminent');
+    if (ev) {
+      const actorSlots = ev.actorRequirements ?? [];
+      const actors = actorSlots.length > 0 ? resolveActors(actorSlots, state, rng) : {};
+      happinessBoundEvents.push({ ...ev, boundActors: actors ?? {} } as BoundEvent);
+    }
+  }
+  if (dawnResult.newLowMoraleTurns === 8) {
+    const ev = getEventById('hap_company_happiness_inquiry');
+    if (ev) happinessBoundEvents.push({ ...ev, boundActors: {} } as BoundEvent);
+  }
+  if (dawnResult.shouldFireFundingEndsEvent) {
+    const ev = getEventById('eco_company_funding_ends');
+    if (ev) happinessBoundEvents.push({ ...ev, boundActors: {} } as BoundEvent);
+  }
+  if (dawnResult.shouldFireAnnualExportEvent) {
+    const ev = getEventById('co_annual_export');
+    if (ev) happinessBoundEvents.push({ ...ev, boundActors: {} } as BoundEvent);
+  }
+  if (dawnResult.newFamineStreak === 1) {
+    const ev = getEventById('fam_hunger_grips_settlement');
+    if (ev) happinessBoundEvents.push({ ...ev, boundActors: {} } as BoundEvent);
+  } else if (dawnResult.newFamineStreak === 2) {
+    const ev = getEventById('fam_families_consider_leaving');
+    if (ev) happinessBoundEvents.push({ ...ev, boundActors: {} } as BoundEvent);
+  } else if (dawnResult.newFamineStreak >= 3) {
+    const ev = getEventById('fam_famine_deepens');
+    if (ev) happinessBoundEvents.push({ ...ev, boundActors: {} } as BoundEvent);
+  }
+
+  // Sauromatian succession council decisions.
+  const successionBoundEvents: BoundEvent[] = dawnResult.pendingSauromatianCouncilEventHouseholdIds
+    .map(() => {
+      const ev = getEventById('hh_succession_council');
+      return ev ? ({ ...ev, boundActors: {} } as BoundEvent) : null;
+    })
+    .filter((e): e is BoundEvent => e !== null);
+
+  // Unwed-birth events for Sauromatian mothers.
+  const childBirthBoundEvents: BoundEvent[] = (dawnResult.newBirths ?? [])
+    .filter(birth => {
+      const mother = state.people.get(birth.motherId);
+      return (
+        mother !== undefined &&
+        mother.spouseIds.length === 0 &&
+        SAUROMATIAN_CULTURE_IDS.has(mother.heritage.primaryCulture)
+      );
+    })
+    .map(birth => {
+      const ev = getEventById('rel_child_outside_marriage');
+      if (!ev) return null;
+      const boundActors: Record<string, string> = { mother: birth.motherId };
+      if (birth.fatherId) boundActors['father'] = birth.fatherId;
+      return { ...ev, boundActors } as BoundEvent;
+    })
+    .filter((e): e is BoundEvent => e !== null);
+
+  // Apprenticeship formation + graduation events.
+  const apprenticeshipBoundEvents: BoundEvent[] = (dawnResult.pendingApprenticeshipEvents ?? [])
+    .map(({ eventId, masterId, apprenticeId }) => {
+      const ev = getEventById(eventId);
+      if (!ev) return null;
+      const actorSlots = ev.actorRequirements ?? [];
+      const boundActors: Record<string, string> = {};
+      if (actorSlots[0]) boundActors[actorSlots[0].slot] = masterId;
+      if (actorSlots[1]) boundActors[actorSlots[1].slot] = apprenticeId;
+      return { ...ev, boundActors } as BoundEvent;
+    })
+    .filter((e): e is BoundEvent => e !== null);
+
+  // Expedition events (hex discoveries, encounters, return report).
+  const expeditionBoundEvents: BoundEvent[] = (expeditionResult.pendingEventArgs ?? [])
+    .map(({ eventId, boundActors }) => {
+      const ev = getEventById(eventId);
+      if (!ev) return null;
+      return { ...ev, boundActors } as BoundEvent;
+    })
+    .filter((e): e is BoundEvent => e !== null);
+
+  return [
+    ...leading,
+    ...schemeBoundEvents,
+    ...factionBoundEvents,
+    ...happinessBoundEvents,
+    ...successionBoundEvents,
+    ...childBirthBoundEvents,
+    ...apprenticeshipBoundEvents,
+    ...expeditionBoundEvents,
+  ];
+}
 
 // ─── Store interface ─────────────────────────────────────────────────────────
 
@@ -399,6 +555,8 @@ function applyDawnResultToState(state: GameState, dawnResult: DawnResult): GameS
     factions: dawnResult.updatedFactions,
     lastSettlementMorale: dawnResult.settlementMorale,
     lowMoraleTurns: dawnResult.newLowMoraleTurns,
+    famineStreak: dawnResult.newFamineStreak,
+    famineRecoveryTurn: dawnResult.newFamineRecoveryTurn,
     lastPayrollShortfall: false,
     massDesertionWarningFired: shouldFireDesertion
       ? true
@@ -413,10 +571,13 @@ export const useGameStore = create<GameStore>((set, get) => {
   let initialState: GameState | null = null;
 
   // Cross-phase temporaries: set during startTurn (dawn), consumed by endTurn (dusk).
-  // Kept as closure locals rather than reactive Zustand state to avoid spurious re-renders.
-  let _pendingProduction: ResourceStock | undefined;
-  let _pendingConsumption: ResourceStock | undefined;
-  let _pendingSpoilage: Partial<ResourceStock> | undefined;
+  // Kept as a closure local rather than reactive Zustand state to avoid spurious re-renders.
+  interface PendingTurnData {
+    production: ResourceStock;
+    consumption: ResourceStock;
+    spoilage: Partial<ResourceStock>;
+  }
+  let _pendingTurnData: PendingTurnData | undefined;
   try {
     const saved = localStorage.getItem(SAVE_KEY);
     if (saved) {
@@ -549,20 +710,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         for (const memberId of [lostExp.leaderId, ...lostExp.memberIds]) {
           const p = restoredPeople.get(memberId);
           if (!p) continue;
-          lostMemberGraveyardEntries.push({
-            id: p.id,
-            firstName: p.firstName,
-            familyName: p.familyName,
-            sex: p.sex,
-            birthYear: Math.round(postDawnState.currentYear - p.age),
-            deathYear: postDawnState.currentYear,
-            deathCause: 'expedition_lost',
-            parentIds: p.parentIds,
-            childrenIds: [...p.childrenIds],
-            heritage: p.heritage,
-            portraitVariant: p.portraitVariant ?? 1,
-            ageAtDeath: Math.floor(p.age),
-          });
+          lostMemberGraveyardEntries.push(toGraveyardEntry(p, postDawnState.currentYear, 'expedition_lost'));
           lostMemberIds.add(memberId);
           restoredPeople.delete(memberId);
         }
@@ -608,6 +756,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       let updatedPendingSessions = [...(stateAfterDrain.pendingDiplomacySessions ?? [])];
       const restoredPeopleForEmissaries = new Map(stateAfterDrain.people);
 
+      const returnedGiftsList: Array<{ wealth: number; food: number }> = [];
       updatedEmissaries = updatedEmissaries.map(em => {
         if (em.status === 'travelling' && em.arrivalTurn <= currentTurnNum) {
           // Emissary has arrived — queue a diplomacy session.
@@ -622,8 +771,8 @@ export const useGameStore = create<GameStore>((set, get) => {
           if (person && person.role === 'away') {
             restoredPeopleForEmissaries.set(em.emissaryId, { ...person, role: 'gather_food' });
           }
-          // Tag leftover gifts so the resource-consolidation loop below can credit them.
-          (em as any)._returnedGifts = em.giftsRemaining;
+          // Capture gifts before zeroing; consolidation loop below will credit them.
+          returnedGiftsList.push(em.giftsRemaining);
           return { ...em, status: 'completed' as const, giftsRemaining: { wealth: 0, food: 0 } };
         }
         return em;
@@ -631,15 +780,12 @@ export const useGameStore = create<GameStore>((set, get) => {
 
       // Consolidate returned gift resources into settlement.
       let settlementResourcesAfterReturns = { ...stateAfterDrain.settlement.resources };
-      for (const em of updatedEmissaries) {
-        if (em.status === 'completed' && (em as any)._returnedGifts) {
-          const rg = (em as any)._returnedGifts as { wealth: number; food: number };
-          settlementResourcesAfterReturns = {
-            ...settlementResourcesAfterReturns,
-            wealth: (settlementResourcesAfterReturns.wealth ?? 0) + rg.wealth,
-            food:   (settlementResourcesAfterReturns.food   ?? 0) + rg.food,
-          };
-        }
+      for (const rg of returnedGiftsList) {
+        settlementResourcesAfterReturns = {
+          ...settlementResourcesAfterReturns,
+          wealth: (settlementResourcesAfterReturns.wealth ?? 0) + rg.wealth,
+          food:   (settlementResourcesAfterReturns.food   ?? 0) + rg.food,
+        };
       }
 
       // Prune completed emissaries older than 16 turns (4 in-game years).
@@ -682,144 +828,11 @@ export const useGameStore = create<GameStore>((set, get) => {
         return { ...event, boundActors: actors ?? {} } as BoundEvent;
       });
 
-      // If the Hidden Wheel divergence counter just crossed its threshold this dawn,
-      // inject the emergence event as the first thing the player sees this turn.
-      if (dawnResult.shouldFireHiddenWheelEvent) {
-        const hiddenWheelEv = getEventById('rel_hidden_wheel_emerges');
-        if (hiddenWheelEv) {
-          deferredBoundEvents.unshift({ ...hiddenWheelEv, boundActors: {} } as BoundEvent);
-        }
-      }
-
-      // Inject scheme events generated this dawn (climaxes + intermediate notifications).
-      const schemeBoundEvents: BoundEvent[] = dawnResult.pendingSchemeEvents
-        .map(({ eventId, personId, targetId }) => {
-          const ev = getEventById(eventId);
-          if (!ev) return null;
-          // Pre-bind the first two actor slots to schemer/target using the event's slot names.
-          const actorSlots = ev.actorRequirements ?? [];
-          const boundActors: Record<string, string> = {};
-          if (actorSlots[0]) boundActors[actorSlots[0].slot] = personId;
-          if (actorSlots[1]) boundActors[actorSlots[1].slot] = targetId;
-          return { ...ev, boundActors } as BoundEvent;
-        })
-        .filter((e): e is BoundEvent => e !== null);
-
-      // Inject faction demand/standoff events generated this dawn.
-      const factionBoundEvents: BoundEvent[] = dawnResult.pendingFactionEvents
-        .map(({ eventId }) => {
-          const ev = getEventById(eventId);
-          if (!ev) return null;
-          // Bind the spokesperson slot to the highest-leadership faction member.
-          const actorSlots = ev.actorRequirements ?? [];
-          if (actorSlots.length === 0) return { ...ev, boundActors: {} } as BoundEvent;
-          const actors = resolveActors(actorSlots, stateAfterDrainFinal, rng);
-          return { ...ev, boundActors: actors ?? {} } as BoundEvent;
-        })
-        .filter((e): e is BoundEvent => e !== null);
-
-      // Inject happiness crisis events.
-      const happinessBoundEvents: BoundEvent[] = [];
-
-      // Individual desertion — fire once when lowHappinessTurns first hits 3.
-      for (const candidateId of dawnResult.desertionCandidateIds) {
-        const candidate = stateAfterDrainFinal.people.get(candidateId);
-        if (!candidate) continue;
-        if (candidate.lowHappinessTurns !== 3) continue; // only on the turn they cross the threshold
-        const ev = getEventById('hap_settler_considers_leaving');
-        if (!ev) continue;
-        happinessBoundEvents.push({ ...ev, boundActors: { settler: candidateId } } as BoundEvent);
-      }
-
-      // Settlement morale warning — fires when lowMoraleTurns first reaches 4.
-      if (dawnResult.newLowMoraleTurns === 4) {
-        const ev = getEventById('hap_low_morale_warning');
-        if (ev) happinessBoundEvents.push({ ...ev, boundActors: {} } as BoundEvent);
-      }
-
-      // Mass desertion warning — fires once per crisis episode (gated by massDesertionWarningFired).
-      if (shouldFireDesertion) {
-        const ev = getEventById('hap_desertion_imminent');
-        if (ev) {
-          const actorSlots = ev.actorRequirements ?? [];
-          const actors = actorSlots.length > 0 ? resolveActors(actorSlots, stateAfterDrainFinal, rng) : {};
-          happinessBoundEvents.push({ ...ev, boundActors: actors ?? {} } as BoundEvent);
-        }
-      }
-
-      // Company happiness inquiry — fires when lowMoraleTurns first reaches 8.
-      if (dawnResult.newLowMoraleTurns === 8) {
-        const ev = getEventById('hap_company_happiness_inquiry');
-        if (ev) happinessBoundEvents.push({ ...ev, boundActors: {} } as BoundEvent);
-      }
-
-      // Company funding ends — fires once in Spring of year 10 to warn the player.
-      if (dawnResult.shouldFireFundingEndsEvent) {
-        const fundingEndsEv = getEventById('eco_company_funding_ends');
-        if (fundingEndsEv) {
-          happinessBoundEvents.push({ ...fundingEndsEv, boundActors: {} } as BoundEvent);
-        }
-      }
-
-      // Annual export reckoning — fires each Autumn from year 11 onward.
-      if (dawnResult.shouldFireAnnualExportEvent) {
-        const exportEv = getEventById('co_annual_export');
-        if (exportEv) {
-          happinessBoundEvents.push({ ...exportEv, boundActors: {} } as BoundEvent);
-        }
-      }
-
-      // Inject Sauromatian succession council events (one per household needing a player decision).
-      const successionBoundEvents: BoundEvent[] = dawnResult.pendingSauromatianCouncilEventHouseholdIds
-        .map(() => {
-          const ev = getEventById('hh_succession_council');
-          return ev ? ({ ...ev, boundActors: {} } as BoundEvent) : null;
-        })
-        .filter((e): e is BoundEvent => e !== null);
-
-      // Inject rel_child_outside_marriage for unwed Sauromatian mothers who just gave birth.
-      const childBirthBoundEvents: BoundEvent[] = (dawnResult.newBirths ?? [])
-        .filter(birth => {
-          const mother = stateAfterDrainFinal.people.get(birth.motherId);
-          return (
-            mother !== undefined &&
-            mother.spouseIds.length === 0 &&
-            SAUROMATIAN_CULTURE_IDS.has(mother.heritage.primaryCulture)
-          );
-        })
-        .map(birth => {
-          const ev = getEventById('rel_child_outside_marriage');
-          if (!ev) return null;
-          const boundActors: Record<string, string> = { mother: birth.motherId };
-          if (birth.fatherId) boundActors['father'] = birth.fatherId;
-          return { ...ev, boundActors } as BoundEvent;
-        })
-        .filter((e): e is BoundEvent => e !== null);
-
-      // Inject apprenticeship lifecycle events (formation + graduation).
-      const apprenticeshipBoundEvents: BoundEvent[] = (dawnResult.pendingApprenticeshipEvents ?? [])
-        .map(({ eventId, masterId, apprenticeId }) => {
-          const ev = getEventById(eventId);
-          if (!ev) return null;
-          const actorSlots = ev.actorRequirements ?? [];
-          const boundActors: Record<string, string> = {};
-          if (actorSlots[0]) boundActors[actorSlots[0].slot] = masterId;
-          if (actorSlots[1]) boundActors[actorSlots[1].slot] = apprenticeId;
-          return { ...ev, boundActors } as BoundEvent;
-        })
-        .filter((e): e is BoundEvent => e !== null);
-
-      // Inject expedition events (hex discoveries, encounters, morale, return report).
-      const expeditionBoundEvents: BoundEvent[] = (expeditionResult.pendingEventArgs ?? [])
-        .map(({ eventId, boundActors }) => {
-          const ev = getEventById(eventId);
-          if (!ev) return null;
-          return { ...ev, boundActors } as BoundEvent;
-        })
-        .filter((e): e is BoundEvent => e !== null);
-
-      // Deferred events are prepended so they resolve before new draws.
-      const allPending: BoundEvent[] = [...deferredBoundEvents, ...schemeBoundEvents, ...factionBoundEvents, ...happinessBoundEvents, ...successionBoundEvents, ...childBirthBoundEvents, ...apprenticeshipBoundEvents, ...expeditionBoundEvents, ...boundDrawn];
+      // Assemble all programmatically-injected events, then append randomly drawn events.
+      const allPending: BoundEvent[] = [
+        ...buildInjectedEvents(dawnResult, expeditionResult, stateAfterDrainFinal, rng, deferredBoundEvents, shouldFireDesertion),
+        ...boundDrawn,
+      ];
 
       // One-time creole emergence notification.
       const showCreoleNotification =
@@ -828,9 +841,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         ? { ...stateAfterDrainFinal, flags: { ...stateAfterDrainFinal.flags, creoleEmergedNotified: true } }
         : stateAfterDrainFinal;
 
-      _pendingProduction = dawnResult.production;
-      _pendingConsumption = dawnResult.consumption;
-      _pendingSpoilage = dawnResult.spoilageThisTurn;
+      _pendingTurnData = { production: dawnResult.production, consumption: dawnResult.consumption, spoilage: dawnResult.spoilageThisTurn };
       const skipEvents = stateWithFlags.debugSettings?.skipEvents ?? false;
       const effectivePending = skipEvents ? [] : allPending;
       set({
@@ -907,11 +918,11 @@ export const useGameStore = create<GameStore>((set, get) => {
       const { gameState } = get();
       if (!gameState) return;
 
-      if (!_pendingProduction || !_pendingConsumption) {
+      if (!_pendingTurnData) {
         console.error('[Palusteria] endTurn() called without a preceding startTurn() — production and consumption will be zero.');
       }
-      const production = _pendingProduction ?? emptyResourceStock();
-      const consumption = _pendingConsumption ?? emptyResourceStock();
+      const production = _pendingTurnData?.production ?? emptyResourceStock();
+      const consumption = _pendingTurnData?.consumption ?? emptyResourceStock();
 
       // Apply resource deltas: production + consumption (consumption is already negative).
       let rawResources = addResourceStocks(
@@ -920,8 +931,19 @@ export const useGameStore = create<GameStore>((set, get) => {
       );
 
       // Apply spoilage losses.
-      if (_pendingSpoilage) {
-        rawResources = applySpoilage(rawResources, _pendingSpoilage);
+      if (_pendingTurnData?.spoilage) {
+        rawResources = applySpoilage(rawResources, _pendingTurnData.spoilage);
+      }
+
+      // Apply hard storage caps — excess beyond cap is discarded (overfull stores).
+      const storageCaps = computeStorageCaps(
+        gameState.people.size,
+        gameState.settlement.buildings,
+      );
+      for (const key of Object.keys(storageCaps) as Array<keyof typeof storageCaps>) {
+        if (rawResources[key] > storageCaps[key]) {
+          rawResources = { ...rawResources, [key]: storageCaps[key] };
+        }
       }
 
       const updatedResources = clampResourceStock(rawResources);
@@ -991,9 +1013,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       const json = serializeGameState(updatedState);
       localStorage.setItem(SAVE_KEY, json);
 
-      _pendingProduction = undefined;
-      _pendingConsumption = undefined;
-      _pendingSpoilage = undefined;
+      _pendingTurnData = undefined;
       set({
         gameState: updatedState,
         currentPhase: 'idle',

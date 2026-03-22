@@ -222,6 +222,77 @@ describe('evaluateAmbition', () => {
   });
 });
 
+// ─── evaluateAmbition — seek_production_building ─────────────────────────────
+
+describe('evaluateAmbition — seek_production_building', () => {
+  const makeProductionState = (role: Person['role'], extraBuildings: import('../../src/simulation/turn/game-state').BuiltBuilding[] = []) => {
+    const household = {
+      id: 'hh1',
+      memberIds: ['a'],
+      dwellingBuildingId: 'dw1',
+      buildingSlots: ['dw1', null, null, null, null, null, null, null, null],
+      productionBuildingIds: [],
+    } as import('../../src/simulation/turn/game-state').Household;
+    return makeState({
+      turnNumber: 5,
+      households: new Map([['hh1', household]]),
+      settlement: {
+        buildings: [
+          { defId: 'wattle_hut', instanceId: 'dw1', builtTurn: 1, style: null },
+          ...extraBuildings,
+        ],
+        courtshipNorms: 'traditional',
+      } as unknown as import('../../src/simulation/turn/game-state').Settlement,
+      people: new Map(),
+    });
+  };
+
+  it('returns ongoing for hunter when hunters_lodge not yet built', () => {
+    const p = makePerson('a', {
+      role: 'hunter',
+      householdId: 'hh1',
+      ambition: makeAmbition({ type: 'seek_production_building', formedTurn: 1 }),
+    });
+    expect(evaluateAmbition(p, makeProductionState('hunter'))).toBe('ongoing');
+  });
+
+  it('returns ongoing for healer when healers_hut not yet built', () => {
+    const p = makePerson('a', {
+      role: 'healer',
+      householdId: 'hh1',
+      ambition: makeAmbition({ type: 'seek_production_building', formedTurn: 1 }),
+    });
+    expect(evaluateAmbition(p, makeProductionState('healer'))).toBe('ongoing');
+  });
+
+  it('returns ongoing for trader when trading_post not yet built', () => {
+    const p = makePerson('a', {
+      role: 'trader',
+      householdId: 'hh1',
+      ambition: makeAmbition({ type: 'seek_production_building', formedTurn: 1 }),
+    });
+    expect(evaluateAmbition(p, makeProductionState('trader'))).toBe('ongoing');
+  });
+
+  it('returns ongoing for craftsman when pottery not yet built', () => {
+    const p = makePerson('a', {
+      role: 'craftsman',
+      householdId: 'hh1',
+      ambition: makeAmbition({ type: 'seek_production_building', formedTurn: 1 }),
+    });
+    expect(evaluateAmbition(p, makeProductionState('craftsman'))).toBe('ongoing');
+  });
+
+  it('returns failed for unassigned (no mapping)', () => {
+    const p = makePerson('a', {
+      role: 'unassigned',
+      householdId: 'hh1',
+      ambition: makeAmbition({ type: 'seek_production_building', formedTurn: 1 }),
+    });
+    expect(evaluateAmbition(p, makeProductionState('unassigned'))).toBe('failed');
+  });
+});
+
 // ─── generateAmbition ────────────────────────────────────────────────────────
 
 describe('generateAmbition', () => {
@@ -321,6 +392,8 @@ describe('getAmbitionLabel', () => {
     ['seek_seniority',       'Seeking senior-wife standing'],
     ['seek_cultural_duty',   'Called to keth-thara'],
     ['seek_informal_union',  'Seeking an informal bond'],
+    ['seek_hospice_investment', 'Wants to sponsor an infirmary'],
+    ['seek_bathhouse_investment', 'Wants to sponsor a bathhouse'],
   ];
 
   for (const [type, expected] of cases) {
@@ -505,14 +578,14 @@ describe('evaluateAmbition — seek_better_housing', () => {
     });
   }
 
-  it('is ongoing when household is at exactly 50% of wattle_hut capacity (2/4)', () => {
+  it('is fulfilled when household is at exactly 50% of wattle_hut capacity (2/4) — below 70% threshold', () => {
     const p = makePerson('a', {
       householdId: 'hh1',
       ambition: makeAmbition({ type: 'seek_better_housing', formedTurn: 1 }),
     });
-    // memberIds = 2, shelterCapacity = 4 → 2 >= 2 → still overcrowded intent
+    // memberIds = 2, shelterCapacity = 4 → 50% < 70% threshold → fulfilled
     const state = makeHousingState(['a', 'b'], 'wattle_hut');
-    expect(evaluateAmbition(p, state)).toBe('ongoing');
+    expect(evaluateAmbition(p, state)).toBe('fulfilled');
   });
 
   it('is fulfilled when household drops below 50% after an upgrade (1 member in cottage)', () => {
@@ -525,14 +598,14 @@ describe('evaluateAmbition — seek_better_housing', () => {
     expect(evaluateAmbition(p, state)).toBe('fulfilled');
   });
 
-  it('is ongoing when household still at 50%+ of upgraded dwelling (3 in cottage)', () => {
+  it('is ongoing when household is at 75% of wattle_hut capacity (3/4) — at 70%+ threshold', () => {
     const p = makePerson('a', {
       householdId: 'hh1',
       ambition: makeAmbition({ type: 'seek_better_housing', formedTurn: 1 }),
     });
-    // cottage cap 6 → threshold = 3; 3 >= 3 → still needs next tier
+    // cottage cap 6 → threshold = 4.2; 3 members = 50% < 70% → fulfilled (not ongoing)
     const state = makeHousingState(['a', 'b', 'c'], 'cottage');
-    expect(evaluateAmbition(p, state)).toBe('ongoing');
+    expect(evaluateAmbition(p, state)).toBe('fulfilled');
   });
 
   it('is fulfilled when household reaches compound regardless of occupancy', () => {
@@ -552,6 +625,38 @@ describe('evaluateAmbition — seek_better_housing', () => {
     });
     const state = makeState({ turnNumber: 5 });
     expect(evaluateAmbition(p, state)).toBe('failed');
+  });
+});
+
+describe('evaluateAmbition — communal sponsorship', () => {
+  it('is fulfilled when the settlement reaches grand_hospital', () => {
+    const p = makePerson('a', {
+      householdId: 'hh1',
+      ambition: makeAmbition({ type: 'seek_hospice_investment', formedTurn: 1 }),
+    });
+    const state = makeState({
+      turnNumber: 5,
+      households: new Map([['hh1', { id: 'hh1', memberIds: ['a'], householdWealth: 10 }]]) as GameState['households'],
+      settlement: {
+        buildings: [{ defId: 'grand_hospital', instanceId: 'grand_hospital_1', builtTurn: 1, style: null }],
+      } as GameState['settlement'],
+    });
+    expect(evaluateAmbition(p, state)).toBe('fulfilled');
+  });
+
+  it('is fulfilled when the settlement reaches bathhouse_improved', () => {
+    const p = makePerson('a', {
+      householdId: 'hh1',
+      ambition: makeAmbition({ type: 'seek_bathhouse_investment', formedTurn: 1 }),
+    });
+    const state = makeState({
+      turnNumber: 5,
+      households: new Map([['hh1', { id: 'hh1', memberIds: ['a'], householdWealth: 10 }]]) as GameState['households'],
+      settlement: {
+        buildings: [{ defId: 'bathhouse_improved', instanceId: 'bathhouse_improved_1', builtTurn: 1, style: null }],
+      } as GameState['settlement'],
+    });
+    expect(evaluateAmbition(p, state)).toBe('fulfilled');
   });
 });
 
@@ -588,8 +693,8 @@ describe('determineAmbitionType — seek_better_housing (capacity-based)', () =>
     return { p, state };
   }
 
-  it('fires when couple (2) is at 50% of wattle_hut capacity (4)', () => {
-    const { p, state } = makeHousingPerson(['a', 'b'], 'wattle_hut');
+  it('fires when family of 3 reaches 75% of wattle_hut capacity (3/4 = 75%) — at 70%+ threshold', () => {
+    const { p, state } = makeHousingPerson(['a', 'b', 'c'], 'wattle_hut');
     const result = determineAmbitionType(p, state, rng);
     expect(result?.type).toBe('seek_better_housing');
   });
@@ -600,8 +705,8 @@ describe('determineAmbitionType — seek_better_housing (capacity-based)', () =>
     expect(result?.type).not.toBe('seek_better_housing');
   });
 
-  it('fires when 3-member family is at 50% of cottage (6)', () => {
-    const { p, state } = makeHousingPerson(['a', 'b', 'c'], 'cottage');
+  it('fires when 5-member family reaches 83% of cottage capacity (5/6) — above 70% threshold', () => {
+    const { p, state } = makeHousingPerson(['a', 'b', 'c', 'd', 'e'], 'cottage');
     const result = determineAmbitionType(p, state, rng);
     expect(result?.type).toBe('seek_better_housing');
   });
@@ -675,6 +780,95 @@ describe('determineAmbitionType — seek_production_building requires dwelling',
     });
     const result = determineAmbitionType(p, state, rng);
     expect(result?.type).toBe('seek_production_building');
+  });
+});
+
+describe('determineAmbitionType — communal sponsorship ambitions', () => {
+  const rng = { nextInt: () => 0, nextFloat: () => 0, nextGaussian: () => 0 } as import('../../src/utils/rng').SeededRNG;
+
+  it('forms seek_hospice_investment for a family-minded patron with savings', () => {
+    const sponsor = makePerson('a', {
+      age: 30,
+      householdId: 'hh1',
+      spouseIds: ['s'],
+      childrenIds: ['c'],
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+    });
+    const spouse = makePerson('s', { sex: 'female', spouseIds: ['a'], householdId: 'hh1' });
+    const child = makePerson('c', { age: 10, householdId: 'hh1' });
+    const state = makeState({
+      turnNumber: 5,
+      people: new Map([
+        ['a', sponsor],
+        ['s', spouse],
+        ['c', child],
+      ]),
+      councilMemberIds: ['a'],
+      households: new Map([[
+        'hh1',
+        {
+          id: 'hh1',
+          memberIds: ['a', 's', 'c'],
+          householdWealth: 10,
+          dwellingBuildingId: null,
+          buildingSlots: Array(9).fill(null),
+        },
+      ]]) as GameState['households'],
+      settlement: {
+        buildings: [],
+        courtshipNorms: 'traditional',
+      } as GameState['settlement'],
+    });
+
+    const result = determineAmbitionType(sponsor, state, rng);
+    expect(result?.type).toBe('seek_hospice_investment');
+  });
+
+  it('forms seek_bathhouse_investment for a bathhouse attendant in a pottery town', () => {
+    const sponsor = makePerson('a', {
+      age: 30,
+      role: 'bathhouse_attendant',
+      householdId: 'hh1',
+      spouseIds: ['s'],
+      traits: ['gregarious'],
+      skills: { animals: 25, bargaining: 25, combat: 25, custom: 25, leadership: 25, plants: 25 },
+    });
+    const spouse = makePerson('s', {
+      sex: 'female',
+      spouseIds: ['a'],
+      householdId: 'hh1',
+      heritage: {
+        bloodline: { imanian: 0, kiswani_riverfolk: 1, kiswani_bayuk: 0, kiswani_haisla: 0, hanjoda_stormcaller: 0, hanjoda_bloodmoon: 0, hanjoda_talon: 0, hanjoda_emrasi: 0 },
+        primaryCulture: 'kiswani_riverfolk',
+        culturalFluency: new Map(),
+        ethnicGroup: 'kiswani_riverfolk',
+      },
+    });
+    const state = makeState({
+      turnNumber: 5,
+      people: new Map([
+        ['a', sponsor],
+        ['s', spouse],
+      ]),
+      councilMemberIds: ['a'],
+      households: new Map([[
+        'hh1',
+        {
+          id: 'hh1',
+          memberIds: ['a', 's'],
+          householdWealth: 10,
+          dwellingBuildingId: null,
+          buildingSlots: Array(9).fill(null),
+        },
+      ]]) as GameState['households'],
+      settlement: {
+        buildings: [{ defId: 'pottery', instanceId: 'pottery_1', builtTurn: 1, style: null }],
+        courtshipNorms: 'traditional',
+      } as GameState['settlement'],
+    });
+
+    const result = determineAmbitionType(sponsor, state, rng);
+    expect(result?.type).toBe('seek_bathhouse_investment');
   });
 });
 

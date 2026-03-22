@@ -37,6 +37,7 @@ import { WEDDING_EVENTS }        from './definitions/weddings';
 import { APPRENTICESHIP_EVENTS } from './definitions/apprenticeship';
 import { IMMIGRATION_EVENTS }   from './definitions/immigration';
 import { EXPEDITION_EVENTS }    from './definitions/expedition';
+import { FAMINE_EVENTS }        from './definitions/famine';
 
 // ─── Master event deck ────────────────────────────────────────────────────────
 
@@ -60,6 +61,7 @@ export const ALL_EVENTS: GameEvent[] = [
   ...APPRENTICESHIP_EVENTS,
   ...IMMIGRATION_EVENTS,
   ...EXPEDITION_EVENTS,
+  ...FAMINE_EVENTS,
 ];
 
 // ─── Prerequisite checking ────────────────────────────────────────────────────

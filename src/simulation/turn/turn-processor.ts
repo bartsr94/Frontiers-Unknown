@@ -41,7 +41,8 @@ import {
   computeHiddenWheelDivergence,
   computeCompanyReligiousPressure,
 } from '../population/culture';
-import { processConstruction } from '../buildings/construction';
+import { processConstruction, canBuild, startConstruction } from '../buildings/construction';
+import { BUILDING_CATALOG } from '../buildings/building-definitions';
 import {
   getOvercrowdingRatio,
   getOvercrowdingMortalityModifiers,
@@ -52,6 +53,7 @@ import {
   hasBuilding,
   getBuildingFertilityBonus,
   applyBuildingMaintenance,
+  computeStorageCaps,
 } from '../buildings/building-effects';
 import { calculateSpoilage } from '../economy/spoilage';
 import {
@@ -276,8 +278,6 @@ export interface DawnResult {
   privateBuildLogEntries: ActivityLogEntry[];
   /** Settlement resources after private-build material deductions. */
   updatedResourcesAfterPrivateBuild: ResourceStock;
-  /** @deprecated Always null; wealth generation is handled in-line. */
-  wageResult: null;
   /** True when year === 10 and season === 'spring'; triggers the funding-ends notification event. */
   shouldFireFundingEndsEvent: boolean;
   /**
@@ -296,6 +296,17 @@ export interface DawnResult {
    * Only set when currentSeason === 'autumn' and currentYear ≥ 11.
    */
   shouldFireAnnualExportEvent: boolean;
+  /**
+   * Updated famineStreak counter (how many consecutive seasons food ran short).
+   * 0 when food is sufficient this season.
+   */
+  newFamineStreak: number;
+  /**
+   * Turn number on which `malnourished` should auto-clear (0 = not in recovery).
+   * Set when a famine ends and the settlement has sufficient food again.
+   * Halved to +1 season when an apothecary building is present.
+   */
+  newFamineRecoveryTurn: number;
 }
 
 /** Data returned by processDusk(). The store applies these to GameState. */
@@ -409,7 +420,7 @@ function calculateChildMortalityChance(person: Person, medicineStock: number): n
  * @param cause - Human-readable cause of death.
  * @returns A GraveyardEntry suitable for appending to GameState.graveyard.
  */
-function toGraveyardEntry(person: Person, deathYear: number, cause: string): GraveyardEntry {
+export function toGraveyardEntry(person: Person, deathYear: number, cause: string): GraveyardEntry {
   // Approximate birth year from age (fractional years → round to nearest year)
   const birthYear = Math.round(deathYear - person.age);
   return {
@@ -588,13 +599,15 @@ function processDemographicPhase(
   }
 
   // Attempt conception for all married women not already pregnant.
-  for (const woman of Array.from(updatedPeople.values())) {
+  for (const woman of updatedPeople.values()) {
     if (woman.sex !== 'female' || woman.health.pregnancy) continue;
     for (const spouseId of woman.spouseIds) {
       const man = updatedPeople.get(spouseId);
       if (!man || man.sex !== 'male') continue;
       const fertilityBonus = getBuildingFertilityBonus(state.settlement.buildings);
-      const pregnancy = attemptConception(woman, man, state.turnNumber, state.currentSeason, rng, fertilityBonus);
+      const womanHousehold = updatedHouseholds.get(woman.householdId ?? '');
+      const memberCount = womanHousehold?.memberIds.length ?? 1;
+      const pregnancy = attemptConception(woman, man, state.turnNumber, state.currentSeason, rng, fertilityBonus, memberCount);
       if (pregnancy) {
         updatedPeople.set(woman.id, { ...woman, health: { ...woman.health, pregnancy } });
         break;
@@ -603,7 +616,7 @@ function processDemographicPhase(
   }
 
   // Natural deaths (age-based, overcrowding multiplier for elderly).
-  for (const person of Array.from(updatedPeople.values())) {
+  for (const person of updatedPeople.values()) {
     let deathChance = calculateNaturalDeathChance(person);
     if (person.age >= 60) deathChance *= overcrowdingMortality.elderlyDeathMultiplier;
     deathChance = clamp(deathChance, 0, 0.95);
@@ -615,7 +628,7 @@ function processDemographicPhase(
 
   // Child mortality (under-5, building modifier + overcrowding modifier).
   const medicineStock = state.settlement.resources.medicine;
-  for (const person of Array.from(updatedPeople.values())) {
+  for (const person of updatedPeople.values()) {
     if (person.age >= 5) continue;
     let deathChance = calculateChildMortalityChance(person, medicineStock);
     deathChance *= buildingChildMortalityModifier;
@@ -945,6 +958,303 @@ function resolveAutonomousMarriages(
   return entries;
 }
 
+// ─── Dawn helper: autonomous communal patronage ──────────────────────────────
+
+/**
+ * Autonomous communal-patronage fallback.
+ *
+ * When a character's communal sponsorship ambition reaches max intensity (1.0)
+ * without a player-facing event resolving it first, the character acts on their
+ * own: they donate their household savings to the settlement and, if the
+ * settlement has the material resources, they commission the next relevant
+ * communal chain tier themselves.
+ *
+ * Only one patron can commission a communal upgrade per dawn (the wealthiest
+ * eligible household), to keep the pace predictable.
+ *
+ * Mutates `updatedPeople` (ambition cleared) and `updatedHouseholds` (wealth
+ * deducted).  Returns the resources delta, optional new project, and log entries
+ * for the caller to apply.
+ */
+function resolveAutonomousCivicDonations(
+  updatedPeople: Map<string, Person>,
+  updatedHouseholds: Map<string, Household>,
+  settlementSnapshot: {
+    resources: ResourceStock;
+    buildings: BuiltBuilding[];
+    constructionQueue: ConstructionProject[];
+    culturalBlend: number;
+  },
+  turnNumber: number,
+): {
+  wealthAdded: number;
+  newProject: ConstructionProject | null;
+  updatedResources: ResourceStock;
+  autoBuilderAssignment: { personId: string; prevRole: WorkRole } | null;
+  entries: Array<{ type: 'ambition_cleared'; personId: string; description: string }>;
+} {
+  const { resources, buildings, constructionQueue, culturalBlend } = settlementSnapshot;
+  const entries: Array<{ type: 'ambition_cleared'; personId: string; description: string }> = [];
+
+  const resolveTargetId = (ambitionType: 'seek_civic_investment' | 'seek_hospice_investment' | 'seek_bathhouse_investment'): BuildingId | null => {
+    if (ambitionType === 'seek_civic_investment') {
+      const hasCamp       = buildings.some(b => b.defId === 'camp');
+      const hasLonghouse  = buildings.some(b => b.defId === 'longhouse');
+      const hasRoundhouse = buildings.some(b => b.defId === 'roundhouse');
+      const hasGreatHall  = buildings.some(b => b.defId === 'great_hall');
+      const hasClanLodge  = buildings.some(b => b.defId === 'clan_lodge');
+      if (hasGreatHall || hasClanLodge) return null;
+      if (hasLonghouse) return 'great_hall';
+      if (hasRoundhouse) return 'clan_lodge';
+      if (hasCamp) return culturalBlend >= 0.5 ? 'roundhouse' : 'longhouse';
+      return null;
+    }
+
+    if (ambitionType === 'seek_hospice_investment') {
+      if (buildings.some(b => b.defId === 'grand_hospital')) return null;
+      if (buildings.some(b => b.defId === 'hospital')) return 'grand_hospital';
+      if (buildings.some(b => b.defId === 'infirmary')) return 'hospital';
+      return 'infirmary';
+    }
+
+    if (buildings.some(b => b.defId === 'bathhouse_improved')) return null;
+    if (buildings.some(b => b.defId === 'bathhouse')) return 'bathhouse_improved';
+    return 'bathhouse';
+  };
+
+  const candidates = Array.from(updatedPeople.values()).filter(
+    p =>
+      (p.ambition?.type === 'seek_civic_investment' ||
+        p.ambition?.type === 'seek_hospice_investment' ||
+        p.ambition?.type === 'seek_bathhouse_investment') &&
+      p.ambition.intensity >= 1.0 &&
+      p.householdId !== null,
+  );
+  if (candidates.length === 0) {
+    return { wealthAdded: 0, newProject: null, updatedResources: resources, autoBuilderAssignment: null, entries };
+  }
+
+  const actionableCandidates = candidates
+    .map(candidate => ({
+      candidate,
+      targetId: resolveTargetId(candidate.ambition!.type as 'seek_civic_investment' | 'seek_hospice_investment' | 'seek_bathhouse_investment'),
+    }))
+    .filter((entry): entry is { candidate: Person; targetId: BuildingId } => entry.targetId !== null)
+    .filter(entry => !constructionQueue.some(project => project.defId === entry.targetId));
+
+  if (actionableCandidates.length === 0) {
+    return { wealthAdded: 0, newProject: null, updatedResources: resources, autoBuilderAssignment: null, entries };
+  }
+
+  const { candidate: patron, targetId } = actionableCandidates.reduce((best, current) => {
+    const currentWealth = updatedHouseholds.get(current.candidate.householdId!)?.householdWealth ?? 0;
+    const bestWealth = updatedHouseholds.get(best.candidate.householdId!)?.householdWealth ?? 0;
+    return currentWealth > bestWealth ? current : best;
+  });
+
+  const household = updatedHouseholds.get(patron.householdId!);
+  if (!household) {
+    return { wealthAdded: 0, newProject: null, updatedResources: resources, autoBuilderAssignment: null, entries };
+  }
+
+  // Donate all household savings (capped at 30) to the settlement.
+  const donated = Math.min(household.householdWealth, 30);
+  const resourcesWithDonation: ResourceStock = {
+    ...resources,
+    wealth: (resources.wealth ?? 0) + donated,
+  };
+
+  // Check if construction can now proceed.
+  const mockSettlement = {
+    buildings,
+    constructionQueue,
+    resources: resourcesWithDonation,
+  } as Parameters<typeof canBuild>[0];
+  const buildCheck = canBuild(mockSettlement, targetId, null);
+
+  if (!buildCheck.ok) {
+    // Materials not available — donate wealth anyway (it helps the settlement
+    // pool) but do NOT clear the ambition yet; the patron will keep trying.
+    if (donated > 0) {
+      updatedHouseholds.set(household.id, {
+        ...household,
+        householdWealth: household.householdWealth - donated,
+      });
+    }
+    return {
+      wealthAdded: donated,
+      newProject: null,
+      updatedResources: resourcesWithDonation,
+      autoBuilderAssignment: null,
+      entries,
+    };
+  }
+
+  // All clear — commit donation, start construction.
+  updatedHouseholds.set(household.id, {
+    ...household,
+    householdWealth: household.householdWealth - donated,
+  });
+
+  const { project: rawProject, updatedResources: resourcesAfterBuild } = startConstruction(
+    mockSettlement,
+    targetId,
+    null,
+    turnNumber,
+    null,
+  );
+
+  // Pick one household member (not protected) to be the auto-assigned builder.
+  const BUILDER_PROTECTED = new Set<WorkRole>(['away', 'builder', 'keth_thara']);
+  const builderCandidates = household.memberIds
+    .map(id => updatedPeople.get(id))
+    .filter((p): p is Person => p !== undefined && p.age >= 16 && !BUILDER_PROTECTED.has(p.role));
+  const builderPick =
+    builderCandidates.find(p => p.id !== patron.id && p.role === 'unassigned') ??
+    builderCandidates.find(p => p.id !== patron.id) ??
+    builderCandidates.find(p => p.id === patron.id) ??
+    null;
+
+  const autoBuilderAssignment: { personId: string; prevRole: WorkRole } | null =
+    builderPick ? { personId: builderPick.id, prevRole: builderPick.role } : null;
+
+  const project: ConstructionProject = builderPick
+    ? {
+        ...rawProject,
+        assignedWorkerIds: [builderPick.id],
+        autoBuilderPrevRoles: { [builderPick.id]: builderPick.role },
+      }
+    : rawProject;
+
+  // Clear the patron's ambition.
+  const updatedPatron = { ...patron, ambition: null };
+  updatedPeople.set(patron.id, updatedPatron);
+
+  const targetName = BUILDING_CATALOG[targetId]?.name ?? targetId;
+  entries.push({
+    type: 'ambition_cleared',
+    personId: patron.id,
+    description:
+      `**${patron.firstName}** donated their savings and commissioned the ${targetName} — ` +
+      `their ambition to improve the settlement has been fulfilled.`,
+  });
+
+  return {
+    wealthAdded: donated,
+    newProject: project,
+    updatedResources: resourcesAfterBuild,
+    autoBuilderAssignment,
+    entries,
+  };
+}
+
+function resolveAutonomousCommunalInfrastructure(
+  updatedPeople: Map<string, Person>,
+  settlementSnapshot: {
+    resources: ResourceStock;
+    buildings: BuiltBuilding[];
+    constructionQueue: ConstructionProject[];
+  },
+  turnNumber: number,
+): {
+  newProject: ConstructionProject | null;
+  updatedResources: ResourceStock;
+  autoBuilderAssignment: { personId: string; prevRole: WorkRole } | null;
+} {
+  const chainSpecs: Array<{
+    chainId: string;
+    foundingBuildingId: BuildingId;
+    workerRole: WorkRole;
+    keySkill: SkillId;
+    minimumWorkers: number;
+  }> = [
+    {
+      chainId: 'forestry',
+      foundingBuildingId: 'logging_camp',
+      workerRole: 'gather_lumber',
+      keySkill: 'custom',
+      minimumWorkers: 2,
+    },
+    {
+      chainId: 'quarry',
+      foundingBuildingId: 'stone_quarry',
+      workerRole: 'gather_stone',
+      keySkill: 'custom',
+      minimumWorkers: 2,
+    },
+  ];
+
+  for (const spec of chainSpecs) {
+    const eligibleWorkers = Array.from(updatedPeople.values())
+      .filter(person => person.role === spec.workerRole && person.age >= 16)
+      .sort((a, b) => b.skills[spec.keySkill] - a.skills[spec.keySkill]);
+    if (eligibleWorkers.length < spec.minimumWorkers) continue;
+
+    if (settlementSnapshot.constructionQueue.some(
+      project => BUILDING_CATALOG[project.defId as BuildingId]?.upgradeChainId === spec.chainId,
+    )) {
+      continue;
+    }
+
+    const chainDefs = Object.values(BUILDING_CATALOG)
+      .filter(def => def.ownership === 'communal' && def.upgradeChainId === spec.chainId)
+      .sort((a, b) => (a.tierInChain ?? 0) - (b.tierInChain ?? 0));
+    if (chainDefs.length === 0) continue;
+
+    const currentTier = chainDefs
+      .filter(def => settlementSnapshot.buildings.some(building => building.defId === def.id))
+      .sort((a, b) => (b.tierInChain ?? 0) - (a.tierInChain ?? 0))[0] ?? null;
+
+    const targetDef = currentTier
+      ? chainDefs.find(def => (def.tierInChain ?? 0) === (currentTier.tierInChain ?? 0) + 1) ?? null
+      : chainDefs.find(def => def.id === spec.foundingBuildingId) ?? null;
+    if (!targetDef) continue;
+
+    if (currentTier && eligibleWorkers.length < (currentTier.workerSlots ?? spec.minimumWorkers + 1)) {
+      continue;
+    }
+
+    const mockSettlement = {
+      ...settlementSnapshot,
+      resources: settlementSnapshot.resources,
+    } as Parameters<typeof canBuild>[0];
+    const buildCheck = canBuild(mockSettlement, targetDef.id as BuildingId, null);
+    if (!buildCheck.ok) continue;
+
+    const { project: rawProject, updatedResources } = startConstruction(
+      mockSettlement,
+      targetDef.id as BuildingId,
+      null,
+      turnNumber,
+      null,
+    );
+
+    const builderPick = eligibleWorkers[0] ?? null;
+    const autoBuilderAssignment = builderPick
+      ? { personId: builderPick.id, prevRole: builderPick.role }
+      : null;
+    const project: ConstructionProject = builderPick
+      ? {
+          ...rawProject,
+          assignedWorkerIds: [builderPick.id],
+          autoBuilderPrevRoles: { [builderPick.id]: builderPick.role },
+        }
+      : rawProject;
+
+    return {
+      newProject: project,
+      updatedResources,
+      autoBuilderAssignment,
+    };
+  }
+
+  return {
+    newProject: null,
+    updatedResources: settlementSnapshot.resources,
+    autoBuilderAssignment: null,
+  };
+}
+
 // ─── Household Specialization Helpers ────────────────────────────────────────
 
 /**
@@ -1161,6 +1471,128 @@ function resolveIdleRoleSeeking(
     }
 
     results.push({ personId: id, role: assignedRole });
+  }
+
+  return results;
+}
+
+/**
+ * Gradually promotes foragers (gather_food) to farmer when Tilled Fields have
+ * open worker slots. At most one forager is promoted per turn to keep the
+ * transition gradual and prevent overnight mass-shifts.
+ *
+ * Slot capacity = sum of BuildingDef.workerSlots across all built 'fields'.
+ * Current farmers = count of persons with role === 'farmer'.
+ * Available = capacity − current farmers.
+ *
+ * Picks the eligible forager with the highest plants skill so the best grower
+ * fills the field first. Thralls and minors (< 16) are excluded.
+ *
+ * Returns at most one { personId, role: 'farmer' } entry.
+ */
+/** @internal – exported for unit testing only. */
+export function promoteForagersToFarmers(
+  people: Map<string, Person>,
+  buildings: BuiltBuilding[],
+): Array<{ personId: string; role: WorkRole }> {
+  const farmerCapacity = buildings
+    .filter(b => b.defId === 'fields')
+    .reduce((sum, b) => sum + (BUILDING_CATALOG[b.defId as BuildingId]?.workerSlots ?? 0), 0);
+
+  if (farmerCapacity === 0) return [];
+
+  const currentFarmerCount = Array.from(people.values()).filter(p => p.role === 'farmer').length;
+  if (currentFarmerCount >= farmerCapacity) return [];
+
+  // Cap farmers at 45% of the adult workforce so the settlement can't go full-monoculture.
+  const livingAdults = Array.from(people.values()).filter(p => p.age >= 16).length;
+  const FARMER_WORKFORCE_FRACTION_CAP = 0.45;
+  if (currentFarmerCount >= Math.floor(livingAdults * FARMER_WORKFORCE_FRACTION_CAP)) return [];
+
+  const best = Array.from(people.values())
+    .filter(p => p.role === 'gather_food' && p.age >= 16 && p.socialStatus !== 'thrall')
+    .sort((a, b) => b.skills.plants - a.skills.plants)[0];
+
+  return best ? [{ personId: best.id, role: 'farmer' }] : [];
+}
+
+/**
+ * When the settlement has a food surplus of at least 4 seasons (stockpile ≥
+ * population × 4), gradually diversifies labor away from food-gathering:
+ *   – Promotes at most one eligible person to gather_lumber if lumberjacks are
+ *     below a floor (1 per 5 food-producing workers).
+ *   – Promotes at most one eligible person to gather_stone under the same rule.
+ *
+ * Farmers are preferred over foragers as the reassignment source (they produce
+ * more, so pulling them tests the surplus robustly). Adults only; no thralls.
+ *
+ * Returns up to two entries (one per role shortfall).
+ */
+/** @internal – exported for unit testing only. */
+export function diversifyLaborFromFoodSurplus(
+  people: Map<string, Person>,
+  currentFood: number,
+): Array<{ personId: string; role: WorkRole }> {
+  const pop = people.size;
+  if (pop === 0) return [];
+
+  const SURPLUS_THRESHOLD = pop * 4;
+  if (currentFood < SURPLUS_THRESHOLD) return [];
+
+  const allPeople = Array.from(people.values());
+
+  // Counts.
+  const foodWorkers = allPeople.filter(
+    p => p.role === 'farmer' || p.role === 'gather_food',
+  ).length;
+  const lumberjacks = allPeople.filter(p => p.role === 'gather_lumber').length;
+  const quarriers   = allPeople.filter(p => p.role === 'gather_stone').length;
+
+  // Cap: at most 10% of the adult workforce in each gathering role (min 2).
+  // This prevents the diversification logic from pulling dozens of workers off
+  // food production in a large settlement.
+  const livingAdultCount = allPeople.filter(p => p.age >= 16).length;
+  const MAX_PER_ROLE = Math.max(2, Math.floor(livingAdultCount * 0.10));
+
+  const results: Array<{ personId: string; role: WorkRole }> = [];
+
+  // Candidates: adult non-thrall farmers first, then foragers.
+  const candidates = allPeople.filter(
+    p =>
+      (p.role === 'farmer' || p.role === 'gather_food') &&
+      p.age >= 16 &&
+      p.socialStatus !== 'thrall',
+  );
+  // Prefer farmers (produce more, so surplus is better tested by losing one).
+  const sorted = [...candidates].sort((a, b) => {
+    if (a.role === 'farmer' && b.role !== 'farmer') return -1;
+    if (b.role === 'farmer' && a.role !== 'farmer') return  1;
+    return 0;
+  });
+
+  // Use a small set to avoid assigning the same person to two roles.
+  const claimed = new Set<string>();
+
+  if (lumberjacks < MAX_PER_ROLE) {
+    // Pick best custom-skill candidate for lumber.
+    const pick = sorted
+      .filter(p => !claimed.has(p.id))
+      .sort((a, b) => b.skills.custom - a.skills.custom)[0];
+    if (pick) {
+      results.push({ personId: pick.id, role: 'gather_lumber' });
+      claimed.add(pick.id);
+    }
+  }
+
+  if (quarriers < MAX_PER_ROLE) {
+    // Pick best custom-skill candidate for stone (custom covers both).
+    const pick = sorted
+      .filter(p => !claimed.has(p.id))
+      .sort((a, b) => b.skills.custom - a.skills.custom)[0];
+    if (pick) {
+      results.push({ personId: pick.id, role: 'gather_stone' });
+      claimed.add(pick.id);
+    }
   }
 
   return results;
@@ -1409,6 +1841,20 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     updatedHouseholds,
     state.turnNumber,
   );
+
+  // 8.96. Forager → farmer promotion — when Tilled Fields have open slots,
+  //        gradually reassign the best-plants forager (1 per turn).
+  const farmerPromotions = promoteForagersToFarmers(updatedPeople, currentBuildings);
+  idleRoleAssignments.push(...farmerPromotions);
+
+  // 8.97. Labor diversification — when the food stockpile covers ≥ 4 seasons,
+  //        redirect up to one farmer/forager to lumber and one to stone gathering.
+  const diversificationShifts = diversifyLaborFromFoodSurplus(
+    updatedPeople,
+    state.settlement.resources.food,
+  );
+  idleRoleAssignments.push(...diversificationShifts);
+
   for (const { personId, role } of idleRoleAssignments) {
     const p = updatedPeople.get(personId);
     if (p) updatedPeople.set(personId, { ...p, role, roleAssignedTurn: state.turnNumber });
@@ -1516,6 +1962,55 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     const p = updatedPeople.get(personId);
     if (p) updatedPeople.set(personId, { ...p, role: 'builder', roleAssignedTurn: state.turnNumber });
   }
+  // Apply permanent role assignments made by Path D resource-pressure builds
+  // (e.g. gather_lumber / gather_stone when woodcutter_hut / stone_pit is commissioned).
+  for (const { personId, newRole } of privateBuildResult.autoRoleAssignments) {
+    const p = updatedPeople.get(personId);
+    if (p) updatedPeople.set(personId, { ...p, role: newRole, roleAssignedTurn: state.turnNumber });
+  }
+
+  // 9.76. Autonomous civic donations — wealthy patrons with a maxed-out
+  //        seek_civic_investment ambition commission the next communal hall upgrade.
+  const civicDonationResult = resolveAutonomousCivicDonations(
+    updatedPeople,
+    updatedHouseholds,
+    {
+      resources: maintenanceResult.updatedResources,
+      buildings: buildingsAfterMaintenance,
+      constructionQueue: finalConstructionQueue,
+      culturalBlend: state.settlement.culturalBlend,
+    },
+    state.turnNumber,
+  );
+  // Apply the auto-assigned builder role for the civic project.
+  if (civicDonationResult.autoBuilderAssignment) {
+    const { personId } = civicDonationResult.autoBuilderAssignment;
+    const p = updatedPeople.get(personId);
+    if (p) updatedPeople.set(personId, { ...p, role: 'builder', roleAssignedTurn: state.turnNumber });
+  }
+  // Merge civic donation ambition log entries into the ambition entries array.
+  for (const entry of civicDonationResult.entries) {
+    ambitionEntries.push(entry);
+  }
+
+  const communalInfrastructureResult = resolveAutonomousCommunalInfrastructure(
+    updatedPeople,
+    {
+      resources: civicDonationResult.newProject
+        ? civicDonationResult.updatedResources
+        : privateBuildResult.updatedResources,
+      buildings: buildingsAfterMaintenance,
+      constructionQueue: civicDonationResult.newProject
+        ? [...finalConstructionQueue, civicDonationResult.newProject]
+        : finalConstructionQueue,
+    },
+    state.turnNumber,
+  );
+  if (communalInfrastructureResult.autoBuilderAssignment) {
+    const { personId } = communalInfrastructureResult.autoBuilderAssignment;
+    const person = updatedPeople.get(personId);
+    if (person) updatedPeople.set(personId, { ...person, role: 'builder', roleAssignedTurn: state.turnNumber });
+  }
 
   // 9.65. Dwelling maintenance — deduct seasonal cost from household wealthSavings;
   //        increment wealthMaintenanceDebt counter for households that cannot pay.
@@ -1594,6 +2089,52 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     state.currentYear >= 11 &&
     !annualExportAlreadyFiredThisYear;
 
+  // ── Famine check ────────────────────────────────────────────
+  // Project the post-season food balance using resources BEFORE private-build
+  // material deductions (those use non-food resources), but AFTER production +
+  // consumption.  If projected food goes negative, the settlement is hungry.
+  const projectedFood =
+    maintenanceResult.updatedResources.food + seasonalProduction.food + consumption.food;
+  const hungryThisSeason = projectedFood < 0;
+  const newFamineStreak = hungryThisSeason ? (state.famineStreak ?? 0) + 1 : 0;
+
+  // Manage the `malnourished` health condition.
+  const hasApothecary = buildingsAfterMaintenance.some(
+    b => BUILDING_CATALOG[b.defId as BuildingId]?.malnourishedRecoveryBonus === true,
+  );
+  const recoverySeasons = hasApothecary ? 1 : 2;
+  let newFamineRecoveryTurn = state.famineRecoveryTurn ?? 0;
+
+  if (hungryThisSeason) {
+    // Actively hungry — ensure everyone has the malnourished condition.
+    newFamineRecoveryTurn = 0; // cancels any pending recovery
+    for (const [id, person] of updatedPeople) {
+      if (!person.health.conditions.includes('malnourished')) {
+        updatedPeople.set(id, {
+          ...person,
+          health: { ...person.health, conditions: [...person.health.conditions, 'malnourished'] },
+        });
+      }
+    }
+  } else if ((state.famineStreak ?? 0) > 0 && (state.famineRecoveryTurn ?? 0) === 0) {
+    // Famine just ended this turn — start recovery countdown.
+    newFamineRecoveryTurn = state.turnNumber + recoverySeasons;
+  } else if ((state.famineRecoveryTurn ?? 0) > 0 && state.turnNumber >= (state.famineRecoveryTurn ?? 0)) {
+    // Recovery complete — clear malnourished from all persons.
+    newFamineRecoveryTurn = 0;
+    for (const [id, person] of updatedPeople) {
+      if (person.health.conditions.includes('malnourished')) {
+        updatedPeople.set(id, {
+          ...person,
+          health: {
+            ...person.health,
+            conditions: person.health.conditions.filter(c => c !== 'malnourished'),
+          },
+        });
+      }
+    }
+  }
+
   return {
     updatedPeople,
     production: seasonalProduction,
@@ -1615,6 +2156,7 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
       state.settlement.resources,
       state.currentSeason,
       currentBuildings,
+      computeStorageCaps(updatedPeople.size, currentBuildings),
     ),
     updatedHouseholds,
     newHouseholds: demoNewHouseholds,
@@ -1646,14 +2188,23 @@ export function processDawn(state: GameState, rng: SeededRNG): DawnResult {
     newBirths,
     pendingApprenticeshipEvents: apprenticeshipResult.pendingApprenticeshipEvents,
     newApprenticeshipEntries: apprenticeshipResult.logEntries,
-    wageResult: null,
     shouldFireFundingEndsEvent,
-    privateProjects: privateBuildResult.newProjects,
+    privateProjects: [
+      ...privateBuildResult.newProjects,
+      ...(civicDonationResult.newProject ? [civicDonationResult.newProject] : []),
+      ...(communalInfrastructureResult.newProject ? [communalInfrastructureResult.newProject] : []),
+    ],
     privateBuildLogEntries: privateBuildResult.logEntries,
-    updatedResourcesAfterPrivateBuild: privateBuildResult.updatedResources,
+    updatedResourcesAfterPrivateBuild: communalInfrastructureResult.newProject
+      ? communalInfrastructureResult.updatedResources
+      : civicDonationResult.newProject
+        ? civicDonationResult.updatedResources
+        : privateBuildResult.updatedResources,
     neglectedBuildingIds: maintenanceResult.neglectedIds,
     atRiskDwellingIds: dwellingMaintenanceResult.atRiskBuildingIds,
     shouldFireAnnualExportEvent,
+    newFamineStreak,
+    newFamineRecoveryTurn,
   };
 }
 

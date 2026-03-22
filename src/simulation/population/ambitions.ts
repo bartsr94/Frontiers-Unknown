@@ -18,7 +18,7 @@ import type { SeededRNG } from '../../utils/rng';
 import { getDerivedSkill } from '../population/person';
 import { getEffectiveOpinion } from './opinions';
 import { SAUROMATIAN_CULTURE_IDS } from '../population/culture';
-import { getNextHouseholdProductionTarget } from '../economy/private-economy';
+import { getNextHouseholdProductionTarget, ROLE_TO_BUILDING, ROLE_TO_PRODUCTION_CHAINS } from '../economy/private-economy';
 import { BUILDING_CATALOG } from '../buildings/building-definitions';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -193,11 +193,11 @@ export function evaluateAmbition(
         : undefined;
       // Top tier — nothing more to build.
       if (dwelling?.defId === 'compound') return 'fulfilled';
-      // Fulfilled when the household now has comfortable space (below 50% of dwelling capacity).
+      // Fulfilled when the household now has comfortable space (below 70% of dwelling capacity).
       // This covers the case where a completed upgrade has relieved overcrowding.
       if (dwelling) {
         const def = BUILDING_CATALOG[dwelling.defId];
-        if (def?.shelterCapacity && household.memberIds.length < def.shelterCapacity * 0.5) {
+        if (def?.shelterCapacity && household.memberIds.length < def.shelterCapacity * 0.7) {
           return 'fulfilled';
         }
       }
@@ -213,13 +213,46 @@ export function evaluateAmbition(
       const nextTarget = getNextHouseholdProductionTarget(
         person, household, state.settlement.buildings,
       );
-      // No next target at all = role has no chain mapping → ambition stale
-      const hasSomeChain =
-        (person.role === 'farmer' || person.role === 'herder' ||
-         person.role === 'blacksmith' || person.role === 'tailor' ||
-         person.role === 'brewer' || person.role === 'miller');
-      if (!hasSomeChain) return 'failed';
+      // No next target at all = role has no chain or building mapping → ambition stale
+      const hasAnyMapping =
+        ROLE_TO_BUILDING[person.role] !== undefined ||
+        ROLE_TO_PRODUCTION_CHAINS[person.role] !== undefined;
+      if (!hasAnyMapping) return 'failed';
       return nextTarget ? 'ongoing' : 'fulfilled';
+    }
+
+    case 'seek_civic_investment': {
+      if (!person.householdId) return 'failed';
+      const household = state.households.get(person.householdId);
+      if (!household) return 'failed';
+      // Fulfilled once the settlement reaches T3 civic (great hall or clan lodge).
+      const hasT3Civic = state.settlement.buildings.some(
+        b => b.defId === 'great_hall' || b.defId === 'clan_lodge',
+      );
+      if (hasT3Civic) return 'fulfilled';
+      // Failed if the household no longer has enough wealth to meaningfully donate.
+      if (household.householdWealth < 5) return 'failed';
+      return 'ongoing';
+    }
+
+    case 'seek_hospice_investment': {
+      if (!person.householdId) return 'failed';
+      const household = state.households.get(person.householdId);
+      if (!household) return 'failed';
+      const hasGrandHospital = state.settlement.buildings.some(b => b.defId === 'grand_hospital');
+      if (hasGrandHospital) return 'fulfilled';
+      if (household.householdWealth < 5) return 'failed';
+      return 'ongoing';
+    }
+
+    case 'seek_bathhouse_investment': {
+      if (!person.householdId) return 'failed';
+      const household = state.households.get(person.householdId);
+      if (!household) return 'failed';
+      const hasImprovedBathhouse = state.settlement.buildings.some(b => b.defId === 'bathhouse_improved');
+      if (hasImprovedBathhouse) return 'fulfilled';
+      if (household.householdWealth < 5) return 'failed';
+      return 'ongoing';
     }
   }
 }
@@ -438,7 +471,7 @@ export function determineAmbitionType(
         const defForHousing = BUILDING_CATALOG[dwellingForHousing.defId];
         if (
           defForHousing?.shelterCapacity &&
-          hhForHousing.memberIds.length >= defForHousing.shelterCapacity * 0.5
+          hhForHousing.memberIds.length >= defForHousing.shelterCapacity * 0.7
         ) {
           return { type: 'seek_better_housing', targetPersonId: null };
         }
@@ -459,6 +492,82 @@ export function determineAmbitionType(
       );
       if (nextProdTarget) {
         return { type: 'seek_production_building', targetPersonId: null };
+      }
+    }
+  }
+
+  // 13. seek_hospice_investment — healer or family-minded patron pushes for the
+  // settlement's communal medical chain when it is still incomplete.
+  if (person.age >= 18 && person.householdId) {
+    const hhForHospice = state.households.get(person.householdId);
+    const hasGrandHospital = state.settlement.buildings.some(
+      b => b.defId === 'grand_hospital',
+    );
+    const childIds = person.childrenIds ?? (person as Person & { childIds?: string[] }).childIds ?? [];
+    const isHospiceSponsor =
+      person.role === 'healer' ||
+      person.skills.plants >= 46 ||
+      childIds.some(childId => {
+        const child = state.people.get(childId);
+        return child !== undefined && child.age < 16;
+      });
+    if (hhForHospice && !hasGrandHospital && isHospiceSponsor && hhForHospice.householdWealth >= 8) {
+      return { type: 'seek_hospice_investment', targetPersonId: null };
+    }
+  }
+
+  // 14. seek_bathhouse_investment — socially connected patron in a settlement
+  // with a real Sauromatian presence wants to sponsor the bathhouse chain.
+  if (person.age >= 18 && person.householdId) {
+    const hhForBathhouse = state.households.get(person.householdId);
+    const hasImprovedBathhouse = state.settlement.buildings.some(
+      b => b.defId === 'bathhouse_improved',
+    );
+    const hasPottery = state.settlement.buildings.some(b => b.defId === 'pottery');
+    const sauromatianPresence = state.people.size > 0
+      ? Array.from(state.people.values()).filter(
+          p => p.sex === 'female' && p.heritage.primaryCulture !== 'ansberite',
+        ).length / state.people.size
+      : 0;
+    const isBathhouseSponsor =
+      person.role === 'bathhouse_attendant' ||
+      person.skills.bargaining >= 46 ||
+      person.skills.leadership >= 46 ||
+      person.traits.includes('gregarious');
+    if (
+      hhForBathhouse &&
+      !hasImprovedBathhouse &&
+      hasPottery &&
+      sauromatianPresence >= 0.15 &&
+      isBathhouseSponsor &&
+      hhForBathhouse.householdWealth >= 8
+    ) {
+      return { type: 'seek_bathhouse_investment', targetPersonId: null };
+    }
+  }
+
+  // 15. seek_civic_investment — wealthy adult who wants to leave their mark on the
+  // settlement by sponsoring a civic building upgrade. Fires when the household has
+  // accumulated significant savings AND the settlement hasn't yet reached the top
+  // civic tier (great hall / clan lodge). Any adult with enough wealth qualifies —
+  // the desire to improve the town is universal; trait boosts add pressure but
+  // characters without them can still feel the pull.
+  if (person.age >= 18 && person.householdId) {
+    const hhForCivic = state.households.get(person.householdId);
+    const hasT3Civic = state.settlement.buildings.some(
+      b => b.defId === 'great_hall' || b.defId === 'clan_lodge',
+    );
+    if (hhForCivic && !hasT3Civic) {
+      // Wealthy threshold: 12 wealth saved up. Characters with prestige-seeking
+      // traits feel the pull at a lower threshold (8).
+      const isPrestigeOriented =
+        person.traits.includes('ambitious') ||
+        person.traits.includes('proud') ||
+        person.traits.includes('gregarious') ||
+        person.skills.leadership >= 46;
+      const wealthThreshold = isPrestigeOriented ? 8 : 12;
+      if (hhForCivic.householdWealth >= wealthThreshold) {
+        return { type: 'seek_civic_investment', targetPersonId: null };
       }
     }
   }
@@ -527,6 +636,9 @@ export function getAmbitionLabel(ambition: PersonAmbition): string {
     case 'seek_autonomy':              return 'Chafing under authority';
     case 'seek_better_housing':        return 'Wants a proper home';
     case 'seek_production_building':   return 'Wants a workshop for the household';
+    case 'seek_civic_investment':      return 'Wants to sponsor a civic building';
+    case 'seek_hospice_investment':    return 'Wants to sponsor an infirmary';
+    case 'seek_bathhouse_investment':  return 'Wants to sponsor a bathhouse';
   }
 }
 

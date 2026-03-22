@@ -187,6 +187,7 @@ export function deserializeGameState(json: string): GameState {
           householdWealth: (h as any).householdWealth ?? (h as any).householdGold ?? 0,
           wealthAccumulator: (h as any).wealthAccumulator ?? 0,
           wealthMaintenanceDebt: (h as any).wealthMaintenanceDebt ?? 0,
+          specialty: (h as any).specialty ?? null,
           buildingSlots: (h as any).buildingSlots ?? [
             (h as any).dwellingBuildingId ?? null,
             ...((h as any).productionBuildingIds ?? []).slice(0, 8),
@@ -235,6 +236,9 @@ export function deserializeGameState(json: string): GameState {
     buildingWorkersInitialized:(s as unknown as Partial<GameState>).buildingWorkersInitialized ?? false,
     // Private economy fields.
     lastPayrollShortfall:      (s as unknown as Partial<GameState>).lastPayrollShortfall      ?? false,
+    // Famine tracking fields.
+    famineStreak:        (s as unknown as Partial<GameState>).famineStreak        ?? 0,
+    famineRecoveryTurn:  (s as unknown as Partial<GameState>).famineRecoveryTurn  ?? 0,
     // Expedition system fields — not present in pre-expedition saves.
     hexMap: ((): GameState['hexMap'] => {
       const rawHexMap = (s as unknown as Partial<SerialGameState>).hexMap;

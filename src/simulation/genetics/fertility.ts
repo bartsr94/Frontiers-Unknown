@@ -116,9 +116,11 @@ export function createFertilityProfile(isExtended: boolean): FertilityProfile {
  *
  * @param woman - The woman to evaluate.
  * @param season - The current game season.
+ * @param householdMemberCount - Optional total member count of the woman's household.
+ *   Larger households reduce fertility (natural spacing effect).
  * @returns Probability of conception this season (0.0–~0.40).
  */
-export function getFertilityChance(woman: Person, season: Season): number {
+export function getFertilityChance(woman: Person, season: Season, householdMemberCount?: number): number {
   if (woman.sex !== 'female') return 0;
   if (woman.health.pregnancy) return 0;
 
@@ -160,6 +162,16 @@ export function getFertilityChance(woman: Person, season: Season): number {
     }
   }
 
+  // Household crowding penalty — large households naturally space births
+  if (householdMemberCount !== undefined) {
+    let crowdingMult = 1.0;
+    if      (householdMemberCount >= 25) crowdingMult = 0.35;
+    else if (householdMemberCount >= 17) crowdingMult = 0.50;
+    else if (householdMemberCount >= 11) crowdingMult = 0.65;
+    else if (householdMemberCount >=  6) crowdingMult = 0.80;
+    base *= crowdingMult;
+  }
+
   return clamp(base, 0, 0.40);
 }
 
@@ -190,8 +202,9 @@ export function attemptConception(
   season: Season,
   rng: SeededRNG,
   buildingFertilityBonus = 0,
+  householdMemberCount?: number,
 ): PregnancyState | null {
-  const baseChance = getFertilityChance(woman, season);
+  const baseChance = getFertilityChance(woman, season, householdMemberCount);
   if (baseChance <= 0) return null;
 
   const chance = Math.min(baseChance + buildingFertilityBonus, 0.65);

@@ -108,6 +108,19 @@ export function calculateProduction(
   const mods = SEASON_MODIFIERS[season];
   const buildings: BuiltBuilding[] = settlement.buildings;
 
+  // Pre-split buildings for scoped roleProductionBonus.
+  // Communal buildings (ownerHouseholdId === null) benefit every worker.
+  // Household-owned buildings only boost their own household's members.
+  const communalBuildings = buildings.filter(b => b.ownerHouseholdId === null);
+  const householdBuildingsMap = new Map<string, BuiltBuilding[]>();
+  for (const b of buildings) {
+    if (b.ownerHouseholdId !== null) {
+      const existing = householdBuildingsMap.get(b.ownerHouseholdId) ?? [];
+      existing.push(b);
+      householdBuildingsMap.set(b.ownerHouseholdId, existing);
+    }
+  }
+
   // ── Base role production ──────────────────────────────────────────────────
   const delta = emptyResourceStock();
 
@@ -153,10 +166,16 @@ export function calculateProduction(
       case 'unassigned': break;
     }
 
-    // Per-role building bonuses.
-    // food and wealth flow through personFood/personWealth so role-base + bonus
-    // are multiplied together. All other resources are added directly to delta.
-    const roleBonus = getRoleProductionBonus(buildings, person.role);
+    // Per-role building bonuses — scoped to communal buildings plus this person's
+    // own household buildings only (prevents private buildings from stacking
+    // production benefit across all workers in the settlement).
+    const ownHouseholdBuildings = person.householdId
+      ? (householdBuildingsMap.get(person.householdId) ?? [])
+      : [];
+    const roleBonus = getRoleProductionBonus(
+      [...communalBuildings, ...ownHouseholdBuildings],
+      person.role,
+    );
     personFood   += roleBonus.food   ?? 0;
     personWealth += roleBonus.wealth ?? 0;
 

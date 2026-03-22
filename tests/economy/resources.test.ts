@@ -641,3 +641,56 @@ describe('calculateProduction — tradeTraining bonus', () => {
     );
   });
 });
+
+// ─── calculateProduction — roleProductionBonus household scoping ──────────────
+
+describe('calculateProduction — roleProductionBonus household scoping', () => {
+  /** Farmer stub belonging to the given household (or homeless if null). */
+  function makeHouseholdFarmer(householdId: string | null): Person {
+    return { role: 'farmer', householdId } as unknown as Person;
+  }
+
+  /** BuiltBuilding with explicit household ownership. */
+  function makeOwnedBuilding(defId: BuiltBuilding['defId'], instanceId: string, ownerHouseholdId: string | null): BuiltBuilding {
+    return { defId, instanceId, builtTurn: 1, style: null, claimedByPersonIds: [], ownerHouseholdId, assignedWorkerIds: [] };
+  }
+
+  it('household-owned Fields only boosts the farmer whose household owns it', () => {
+    const hhAFields = makeOwnedBuilding('fields', 'fields_a', 'hh_a');
+    const farmerA   = makeHouseholdFarmer('hh_a');
+    const farmerB   = makeHouseholdFarmer('hh_b');
+    const people = new Map([['a', farmerA], ['b', farmerB]]);
+    const result = calculateProduction(people, makeSettlement(0, [hhAFields]), 'spring');
+    // farmerA: 1 (base) + 2 (fields bonus) = 3; farmerB: 1 (base only) = 1; total = 4
+    expect(result.food).toBe(4);
+  });
+
+  it('communal Fields (ownerHouseholdId=null) boosts all farmers equally', () => {
+    const communalFields = makeOwnedBuilding('fields', 'fields_0', null);
+    const farmerA = makeHouseholdFarmer('hh_a');
+    const farmerB = makeHouseholdFarmer('hh_b');
+    const people = new Map([['a', farmerA], ['b', farmerB]]);
+    const result = calculateProduction(people, makeSettlement(0, [communalFields]), 'spring');
+    // Both get +2: 2 × (1 + 2) = 6
+    expect(result.food).toBe(6);
+  });
+
+  it('homeless farmer (householdId=null) does not benefit from household-owned Fields', () => {
+    const hhAFields = makeOwnedBuilding('fields', 'fields_a', 'hh_a');
+    const homelessFarmer = makeHouseholdFarmer(null);
+    const people = new Map([['p', homelessFarmer]]);
+    const result = calculateProduction(people, makeSettlement(0, [hhAFields]), 'spring');
+    expect(result.food).toBe(1); // base only — no household to match
+  });
+
+  it('two households each with their own Fields are scoped independently', () => {
+    const fieldsA = makeOwnedBuilding('fields', 'fields_a', 'hh_a');
+    const fieldsB = makeOwnedBuilding('fields', 'fields_b', 'hh_b');
+    const farmerA = makeHouseholdFarmer('hh_a');
+    const farmerB = makeHouseholdFarmer('hh_b');
+    const people = new Map([['a', farmerA], ['b', farmerB]]);
+    const result = calculateProduction(people, makeSettlement(0, [fieldsA, fieldsB]), 'spring');
+    // Each farmer sees only their own fields: both get base 1 + bonus 2 = 3; total = 6
+    expect(result.food).toBe(6);
+  });
+});

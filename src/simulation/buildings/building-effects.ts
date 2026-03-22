@@ -6,7 +6,7 @@
  * (plus any auxiliary data they need) as inputs.
  */
 
-import type { BuiltBuilding, BuildingId, ResourceStock } from '../turn/game-state';
+import type { BuiltBuilding, BuildingId, ResourceStock, ResourceType } from '../turn/game-state';
 import type { Person } from '../population/person';
 import type { SkillId } from '../population/person';
 import { BUILDING_CATALOG } from './building-definitions';
@@ -123,6 +123,39 @@ export function getBuildingCulturePull(buildings: BuiltBuilding[]): CulturePullM
     result.push({ direction, strength: def.culturePull.strength });
   }
   return result;
+}
+
+// ─── Storage Caps ─────────────────────────────────────────────────────────────
+
+/**
+ * Computes per-resource storage caps based on population and standing buildings.
+ *
+ * Caps scale with population so a tiny settlement isn't crushed by the ceiling,
+ * while a large one with no investment in storage infrastructure still hits
+ * a meaningful limit. Storage buildings raise the cap significantly.
+ *
+ * @param population - Current living population count.
+ * @param buildings  - Currently standing buildings.
+ * @returns A Record mapping every ResourceType to its maximum storable amount.
+ */
+export function computeStorageCaps(
+  population: number,
+  buildings: BuiltBuilding[],
+): Record<ResourceType, number> {
+  const granaryCount      = buildings.filter(b => b.defId === 'granary').length;
+  const grainSiloCount    = buildings.filter(b => b.defId === 'grain_silo').length;
+  const barnsCount        = buildings.filter(b => b.defId === 'barns_storehouses').length;
+  const tradingPostCount  = buildings.filter(b => b.defId === 'trading_post').length;
+  return {
+    food:     Math.max(100, population * 8  + granaryCount * 500 + grainSiloCount * 150 + barnsCount * 200),
+    cattle:   Math.max(20,  population * 2  + barnsCount * 50),
+    lumber:   Math.max(50,  population * 4),
+    stone:    Math.max(50,  population * 4),
+    wealth:   Math.max(200, population * 12 + tradingPostCount * 300),
+    medicine: Math.max(20,  population * 3),
+    steel:    400,
+    horses:   400,
+  };
 }
 
 // ─── Defence ─────────────────────────────────────────────────────────────────

@@ -19,6 +19,8 @@ describe('BuildingCatalog — ownership: household', () => {
     'fields', 'mill',                                   // agriculture
     'stable',                                           // livestock
     'smithy', 'tannery', 'brewery',                     // production
+    'healers_hut',                                      // healing (moved from communal)
+    'hunters_lodge', 'hound_pens', 'hunting_towers', 'hunting_reserve', // hunting chain
   ];
 
   it.each(HOUSEHOLD_IDS)('%s has ownership: household', id => {
@@ -30,7 +32,7 @@ describe('BuildingCatalog — ownership: communal', () => {
   const COMMUNAL_IDS: BuildingId[] = [
     'camp', 'longhouse', 'roundhouse', 'great_hall', 'clan_lodge',
     'granary', 'gathering_hall', 'palisade', 'trading_post',
-    'healers_hut', 'workshop',
+    'workshop',
     'bathhouse', 'bathhouse_improved', 'bathhouse_grand',
   ];
 
@@ -238,11 +240,9 @@ describe('BuildingCatalog — ownership: communal (new expansion buildings)', ()
   const NEW_COMMUNAL_IDS: BuildingId[] = [
     // Forestry chain (T1–T4)
     'logging_camp', 'charcoal_burners', 'wood_pasture', 'sawmill',
-    // Hunting chain (T1–T4)
-    'hunters_lodge', 'hound_pens', 'hunting_towers', 'hunting_reserve',
     // Quarry chain (T1–T4)
     'stone_quarry', 'ore_mine', 'large_quarry', 'shaft_mine',
-    // Hospice chain (T2–T4 — T1 is 'healers_hut', already tested above)
+    // Hospice chain (T1–T3 — infirmary is now T1)
     'infirmary', 'hospital', 'grand_hospital',
   ];
 
@@ -468,34 +468,56 @@ describe('BuildingCatalog — quarry upgrade chain', () => {
   });
 });
 
-// ─── Upgrade chain — hospice (healers_hut T1 → grand_hospital T4) ────────────
+// ─── Upgrade chain — healing (healers_hut T1 → apothecary T3) ────────────────
 
-describe('BuildingCatalog — hospice upgrade chain', () => {
-  it('healers_hut is hospice chain tier 1', () => {
-    expect(BUILDING_CATALOG['healers_hut'].upgradeChainId).toBe('hospice');
+describe('BuildingCatalog — healing upgrade chain', () => {
+  it('healers_hut is healing chain tier 1', () => {
+    expect(BUILDING_CATALOG['healers_hut'].upgradeChainId).toBe('healing');
     expect(BUILDING_CATALOG['healers_hut'].tierInChain).toBe(1);
   });
 
-  it('infirmary is hospice chain tier 2', () => {
+  it('herb_garden is healing chain tier 2', () => {
+    expect(BUILDING_CATALOG['herb_garden'].upgradeChainId).toBe('healing');
+    expect(BUILDING_CATALOG['herb_garden'].tierInChain).toBe(2);
+  });
+
+  it('apothecary is healing chain tier 3', () => {
+    expect(BUILDING_CATALOG['apothecary'].upgradeChainId).toBe('healing');
+    expect(BUILDING_CATALOG['apothecary'].tierInChain).toBe(3);
+  });
+
+  it('healers_hut → herb_garden (next-tier lookup)', () => {
+    expect(findNextTier('healers_hut')?.id).toBe('herb_garden');
+  });
+
+  it('herb_garden → apothecary', () => {
+    expect(findNextTier('herb_garden')?.id).toBe('apothecary');
+  });
+
+  it('apothecary (tier 3) has no next tier', () => {
+    expect(findNextTier('apothecary')).toBeUndefined();
+  });
+});
+
+// ─── Upgrade chain — hospice (infirmary T1 → grand_hospital T3) ──────────────
+
+describe('BuildingCatalog — hospice upgrade chain', () => {
+  it('infirmary is hospice chain tier 1', () => {
     expect(BUILDING_CATALOG['infirmary'].upgradeChainId).toBe('hospice');
-    expect(BUILDING_CATALOG['infirmary'].tierInChain).toBe(2);
+    expect(BUILDING_CATALOG['infirmary'].tierInChain).toBe(1);
   });
 
-  it('hospital is hospice chain tier 3', () => {
+  it('hospital is hospice chain tier 2', () => {
     expect(BUILDING_CATALOG['hospital'].upgradeChainId).toBe('hospice');
-    expect(BUILDING_CATALOG['hospital'].tierInChain).toBe(3);
+    expect(BUILDING_CATALOG['hospital'].tierInChain).toBe(2);
   });
 
-  it('grand_hospital is hospice chain tier 4', () => {
+  it('grand_hospital is hospice chain tier 3', () => {
     expect(BUILDING_CATALOG['grand_hospital'].upgradeChainId).toBe('hospice');
-    expect(BUILDING_CATALOG['grand_hospital'].tierInChain).toBe(4);
+    expect(BUILDING_CATALOG['grand_hospital'].tierInChain).toBe(3);
   });
 
-  it('healers_hut → infirmary (next-tier lookup)', () => {
-    expect(findNextTier('healers_hut')?.id).toBe('infirmary');
-  });
-
-  it('infirmary → hospital', () => {
+  it('infirmary → hospital (next-tier lookup)', () => {
     expect(findNextTier('infirmary')?.id).toBe('hospital');
   });
 
@@ -503,7 +525,7 @@ describe('BuildingCatalog — hospice upgrade chain', () => {
     expect(findNextTier('hospital')?.id).toBe('grand_hospital');
   });
 
-  it('grand_hospital (tier 4) has no next tier', () => {
+  it('grand_hospital (tier 3) has no next tier', () => {
     expect(findNextTier('grand_hospital')).toBeUndefined();
   });
 });

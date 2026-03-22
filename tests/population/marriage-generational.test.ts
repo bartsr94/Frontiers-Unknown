@@ -101,7 +101,6 @@ function makeMinimalState(people: Map<string, Person>): GameState {
     eventCooldowns: new Map(),
     pendingEvents: [],
     deferredEvents: [],
-    councilMemberIds: [],
     graveyard: [],
     factions: [],
     activityLog: [],

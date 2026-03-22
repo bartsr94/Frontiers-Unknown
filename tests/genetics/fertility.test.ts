@@ -441,3 +441,46 @@ describe('processPregnancies', () => {
     expect(results[0]!.motherHealthDelta).toBeLessThan(0);
   });
 });
+
+describe('getFertilityChance — household crowding penalty', () => {
+  it('does not apply a crowding penalty below 6 household members', () => {
+    const woman = baseWoman({ age: 22 });
+    const baseChance = getFertilityChance(woman, 'spring');
+    expect(getFertilityChance(woman, 'spring', 5)).toBeCloseTo(baseChance, 5);
+  });
+
+  it('applies a 0.80 multiplier at 6 household members', () => {
+    const woman = baseWoman({ age: 22 });
+    const baseChance = getFertilityChance(woman, 'spring');
+    expect(getFertilityChance(woman, 'spring', 6)).toBeCloseTo(baseChance * 0.8, 5);
+  });
+
+  it('applies a 0.65 multiplier at 11 household members', () => {
+    const woman = baseWoman({ age: 22 });
+    const baseChance = getFertilityChance(woman, 'spring');
+    expect(getFertilityChance(woman, 'spring', 11)).toBeCloseTo(baseChance * 0.65, 5);
+  });
+
+  it('applies a 0.50 multiplier at 17 household members', () => {
+    const woman = baseWoman({ age: 22 });
+    const baseChance = getFertilityChance(woman, 'spring');
+    expect(getFertilityChance(woman, 'spring', 17)).toBeCloseTo(baseChance * 0.5, 5);
+  });
+
+  it('applies a 0.35 multiplier at 25 household members', () => {
+    const woman = baseWoman({ age: 22 });
+    const baseChance = getFertilityChance(woman, 'spring');
+    expect(getFertilityChance(woman, 'spring', 25)).toBeCloseTo(baseChance * 0.35, 5);
+  });
+
+  it('still returns 0 for males even when a household size is supplied', () => {
+    const man = baseMale({ age: 25 });
+    expect(getFertilityChance(man, 'spring', 25)).toBe(0);
+  });
+
+  it('layers the crowding penalty on top of the summer seasonal bonus', () => {
+    const woman = baseWoman({ age: 22 });
+    const summerChance = getFertilityChance(woman, 'summer');
+    expect(getFertilityChance(woman, 'summer', 11)).toBeCloseTo(summerChance * 0.65, 5);
+  });
+});

@@ -1162,5 +1162,69 @@ export const RELATIONSHIP_EVENTS: GameEvent[] = [
       },
     ],
   },
+
+  // ── Civic investment ambition ────────────────────────────────────────────────
+
+  {
+    id: 'rel_civic_patron_offer',
+    title: 'A Sponsor for the Settlement',
+    category: 'domestic',
+    prerequisites: [
+      { type: 'has_person_with_ambition', params: { ambitionId: 'seek_civic_investment' } },
+    ],
+    actorRequirements: [
+      { slot: 'patron', criteria: { minAge: 18, hasAmbitionType: 'seek_civic_investment' } },
+    ],
+    weight: 3,
+    cooldown: 12,
+    isUnique: false,
+    description:
+      '{patron} has been thinking about what kind of place this should become. ' +
+      'The camp — or whatever stands at its centre — does not reflect how far the ' +
+      'settlement has come. {patron.He} pulls you aside and makes an offer: {patron.he} ' +
+      'will contribute from {patron.his} own savings toward a proper civic hall. ' +
+      'The wealth is {patron.his} to give, and {patron.he} is giving it freely. ' +
+      'The decision is yours.',
+    choices: [
+      {
+        id: 'accept_donation',
+        label: 'Accept the donation with gratitude.',
+        description:
+          'The patron\'s savings flow into the settlement treasury. Word spreads — ' +
+          'this is someone who puts the community first.',
+        consequences: [
+          { type: 'donate_to_settlement', target: '{patron}', value: 10 },
+          { type: 'modify_opinion',       target: '{patron}', value: 20 },
+          { type: 'modify_opinion_labeled',
+            target: '{patron}',
+            value: 8,
+            params: { label: 'Civic patron' },
+          },
+          { type: 'clear_ambition', target: '{patron}', value: 0 },
+        ],
+      },
+      {
+        id: 'accept_small',
+        label: 'Accept a smaller contribution — do not let one person carry this.',
+        description:
+          'Half the donation, shared credit. The patron is pleased but not overwhelmed.',
+        consequences: [
+          { type: 'donate_to_settlement', target: '{patron}', value: 5 },
+          { type: 'modify_opinion',       target: '{patron}', value: 10 },
+          { type: 'clear_ambition', target: '{patron}', value: 0 },
+        ],
+      },
+      {
+        id: 'decline',
+        label: 'Decline — civic buildings are a communal responsibility.',
+        description:
+          'The patron is stung. They wanted to be part of something larger than themselves.',
+        consequences: [
+          { type: 'modify_opinion', target: '{patron}', value: -12 },
+          { type: 'clear_ambition', target: '{patron}', value: 0 },
+        ],
+      },
+    ],
+  },
 ];
 

@@ -803,6 +803,33 @@ function applyConsequence(
       };
     }
 
+    case 'donate_to_settlement': {
+      const donorId = resolveConsequenceTarget(consequence.target, boundActors);
+      if (!donorId) return state;
+      const donor = state.people.get(donorId);
+      if (!donor || !donor.householdId) return state;
+      const household = state.households.get(donor.householdId);
+      if (!household) return state;
+      const amount = Math.min(consequence.value as number, household.householdWealth);
+      if (amount <= 0) return state;
+      const updatedHouseholds = new Map(state.households);
+      updatedHouseholds.set(donor.householdId, {
+        ...household,
+        householdWealth: household.householdWealth - amount,
+      });
+      return {
+        ...state,
+        households: updatedHouseholds,
+        settlement: {
+          ...state.settlement,
+          resources: {
+            ...state.settlement.resources,
+            wealth: (state.settlement.resources.wealth ?? 0) + amount,
+          },
+        },
+      };
+    }
+
     // Exhaustiveness guard — compile error if a new ConsequenceType is added without a handler.
     default: {
       const _exhaustive: never = consequence;

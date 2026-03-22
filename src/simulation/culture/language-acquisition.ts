@@ -11,7 +11,8 @@
  * No React / DOM / store imports — pure simulation logic.
  */
 
-import type { Person, LanguageId, LanguageFluency } from '../population/person';
+import type { LanguageId } from './culture-ids';
+import type { Person, LanguageFluency } from '../population/person';
 import { clamp } from '../../utils/math';
 
 // ─── Constants ────────────────────────────────────────────────────────────────

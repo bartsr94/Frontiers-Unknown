@@ -50,18 +50,21 @@ const LOCATION_SUPPLY_MODIFIERS: Record<string, number> = {
  * Settlers who will eventually farm start as foragers — the settlement begins
  * without Tilled Fields, so farming slots don't exist yet. Once a Fields
  * building is constructed the player can re-assign them to 'farmer'.
+ * One settler begins as a lumberjack so the settlement generates a steady
+ * lumber supply from turn 1; otherwise the starting 20 lumber is exhausted
+ * by wattle-hut construction and leaves nothing for production buildings.
  */
 const FOUNDER_ROLES: ReadonlyArray<{ role: WorkRole; ageMin: number; ageMax: number }> = [
-  { role: 'gather_food', ageMin: 17, ageMax: 23 },
-  { role: 'gather_food', ageMin: 22, ageMax: 32 },
-  { role: 'gather_food', ageMin: 22, ageMax: 35 },
-  { role: 'gather_food', ageMin: 25, ageMax: 40 },
-  { role: 'gather_food', ageMin: 25, ageMax: 40 },
-  { role: 'gather_food', ageMin: 30, ageMax: 45 },
-  { role: 'gather_food', ageMin: 45, ageMax: 65 },
-  { role: 'trader',      ageMin: 22, ageMax: 32 },
-  { role: 'trader',      ageMin: 22, ageMax: 32 },
-  { role: 'guard',       ageMin: 25, ageMax: 42 },
+  { role: 'gather_food',   ageMin: 17, ageMax: 23 },
+  { role: 'gather_food',   ageMin: 22, ageMax: 32 },
+  { role: 'gather_food',   ageMin: 22, ageMax: 35 },
+  { role: 'gather_lumber', ageMin: 25, ageMax: 40 },
+  { role: 'gather_food',   ageMin: 25, ageMax: 40 },
+  { role: 'gather_food',   ageMin: 30, ageMax: 45 },
+  { role: 'gather_food',   ageMin: 45, ageMax: 65 },
+  { role: 'trader',        ageMin: 22, ageMax: 32 },
+  { role: 'trader',        ageMin: 22, ageMax: 32 },
+  { role: 'guard',         ageMin: 25, ageMax: 42 },
 ];
 
 /**
@@ -589,6 +592,8 @@ export function createInitialState(config: GameConfig, settlementName: string, s
     massDesertionWarningFired: false,
     lastSettlementMorale: 0,
     lastPayrollShortfall: false,
+    famineStreak: 0,
+    famineRecoveryTurn: 0,
     hexMap: generateHexMap({ ...config, startingTribes: [...ALL_MAP_TRIBE_IDS] }, rng),
     expeditions: [],
     boatsInPort: 1,

@@ -1,8 +1,12 @@
 # Diplomacy & Emissary System — Design Document
 
-> **Status:** Design phase — ready to implement.
+> **Status:** Phases D1–D3 complete. Two minor polish items outstanding (see below).
 > **Depends on:** Expedition System (Phase A–D complete), `ExternalTribe` type, `HexMap`, deferred event engine, `processDawn` pipeline.
 > **Scope:** Tribe discovery (Sighted → Known), emissary dispatch, diplomacy session overlay, gift mechanics, trade relationship gating.
+>
+> **Implementation divergences / outstanding:**
+> - §10 Hex map emissary tokens — `HexGrid.tsx` only renders expedition tokens; emissary `✦` tokens for travelling/returning emissaries not yet added.
+> - No dedicated emissary test file — `emissaryTravelTime`, `giftDispositionGain`, `computeResourceRequestYield`, and `resolveEmissarySession` are untested.
 
 ---
 

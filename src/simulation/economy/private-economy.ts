@@ -20,6 +20,7 @@ import type {
   ConstructionProject,
   ActivityLogEntry,
   GameState,
+  HouseholdSpecialty,
 } from '../turn/game-state';
 import { BUILDING_CATALOG } from '../buildings/building-definitions';
 
@@ -34,10 +35,14 @@ export const ROLE_TO_BUILDING: Partial<Record<WorkRole, BuildingId>> = {
   farmer:     'fields',
   blacksmith: 'smithy',
   brewer:     'brewery',
-  tailor:     'tannery',
   miller:     'mill',
+  // craftsman targets pottery (single-building, kiln chain T1).
+  craftsman:  'pottery',
   // herder is also handled by ROLE_TO_PRODUCTION_CHAINS; stable is the single-building fallback.
   herder:     'stable',
+  // hunter is also handled by ROLE_TO_PRODUCTION_CHAINS; smokehouse is the additive fallback
+  // targeted whenever the hunting chain cannot provide the next upgrade step.
+  hunter:     'smokehouse',
 } as const;
 
 /**
@@ -67,6 +72,25 @@ export const ROLE_TO_PRODUCTION_CHAINS: Partial<Record<WorkRole, ReadonlyArray<{
   ],
   herder: [
     { chainId: 'pastoralism', skill: 'animals' },
+  ],
+  healer: [
+    { chainId: 'healing', skill: 'plants' },
+  ],
+  hunter: [
+    { chainId: 'hunting', skill: 'combat' },
+  ],
+  trader: [
+    { chainId: 'commerce', skill: 'bargaining' },
+  ],
+  tailor: [
+    { chainId: 'leatherwork', skill: 'custom' },
+  ],
+  // Gathering roles: household-scale infra before communal camps are built.
+  gather_lumber: [
+    { chainId: 'logging_household', skill: 'custom' },
+  ],
+  gather_stone: [
+    { chainId: 'quarrying_household', skill: 'custom' },
   ],
 };
 
@@ -291,8 +315,10 @@ export function getNextHouseholdProductionTarget(
       }
     }
     // All chains exhausted or skill-gated — nothing to build right now.
-    // For herder: still fall through to check stable via ROLE_TO_BUILDING.
-    if (person.role === 'farmer') return null;
+    // farmer, healer, trader, and tailor have no ROLE_TO_BUILDING fallback.
+    // hunter falls through to check smokehouse; herder falls through to check stable.
+    if (person.role === 'farmer' || person.role === 'healer' ||
+        person.role === 'trader' || person.role === 'tailor') return null;
   }
 
   // ── Single-building fallback (blacksmith, tailor, brewer, miller, herder-stable) ──
@@ -313,6 +339,42 @@ const DWELLING_TIER_ORDER: BuildingId[] = [
   'homestead',
   'compound',
 ];
+
+/**
+ * Maximum number of production building slots (slots 1–8) each dwelling tier
+ * unlocks. A household cannot commission a new production building while all
+ * permitted slots are filled — they must upgrade their dwelling first.
+ */
+const DWELLING_PRODUCTION_SLOTS: Partial<Record<BuildingId, number>> = {
+  wattle_hut: 2,
+  cottage:    3,
+  homestead:  4,
+  compound:   6,
+};
+
+/**
+ * Food units per living settler below which food pressure is active.
+ * When the settlement drops below this threshold, households without any
+ * food production building will commission `fields` as a communal necessity
+ * (Path D) — no role or ambition required.
+ * At roughly 1 food consumed per person per season this is ~6 seasons of buffer.
+ */
+const FOOD_LOW_PER_PERSON = 6;
+
+/**
+ * Lumber units per living settler that triggers household lumber infrastructure.
+ * Below this floor, households without a lumber-production building commission
+ * a `woodcutter_hut` (Path D), and one member is auto-assigned to gather_lumber.
+ * ~4 seasons of normal construction consumption per person.
+ */
+const LUMBER_LOW_PER_PERSON = 8;
+
+/**
+ * Stone units per living settler that triggers household stone infrastructure.
+ * Below this floor, households without a stone-production building commission
+ * a `stone_pit` (Path D), and one member is auto-assigned to gather_stone.
+ */
+const STONE_LOW_PER_PERSON = 5;
 
 /** Roles that may never be auto-reassigned to 'builder'. */
 const PROTECTED_FROM_BUILDER = new Set<WorkRole>(['away', 'builder', 'keth_thara']);
@@ -380,17 +442,31 @@ export interface PrivateBuildResult {
    * can be restored when construction completes or is cancelled.
    */
   autoBuilderAssignments: Array<{ personId: string; prevRole: WorkRole }>;
+  /**
+   * Permanent role assignments made alongside a resource-pressure build
+   * (Path D lumber / stone: one suitable household member is auto-assigned to
+   * the appropriate gathering role so work begins immediately, before the
+   * building even completes).
+   * The turn processor applies these role changes to `updatedPeople`.
+   */
+  autoRoleAssignments: Array<{ personId: string; newRole: WorkRole }>;
 }
 
 /**
  * Autonomous private build pass.
  *
- * For every household whose head (or senior wife as fallback) holds a
- * `seek_better_housing` or `seek_production_building` ambition, tries to
- * start a private construction project if:
- *   – the household has enough wealth (`privateWealthCost`), and
- *   – every required material is available as surplus above the communal
- *     reserve floor.
+ * Three paths, tried in order, each gated on wealth + material surplus:
+ *
+ *   Path A — No dwelling: always commissions a `wattle_hut` (necessity).
+ *   Path B — Dwelling exists, ambition-driven:
+ *     – `seek_better_housing` → next dwelling tier.
+ *     – `seek_production_building` → next chain/building for best member.
+ *     – Emergency overcrowding bypass (≥75% capacity) also fires without
+ *       any ambition, just like Path A.
+ *   Path C — Dwelling exists, role-driven (no ambition required):
+ *     Scans every adult member; if any has a production role that maps to
+ *     a building they don't yet own, commissions it. This ensures tradespeople
+ *     build their workplaces as a necessity, not an aspiration.
  *
  * At most one project is started per household per dawn.
  * Purchases are processed in `state.households` iteration order; if two
@@ -406,6 +482,7 @@ export function processPrivateBuilding(
   const newProjects: ConstructionProject[] = [];
   const logEntries: ActivityLogEntry[] = [];
   const autoBuilderAssignments: Array<{ personId: string; prevRole: WorkRole }> = [];
+  const autoRoleAssignments: Array<{ personId: string; newRole: WorkRole }> = [];
   const reserves: Partial<ResourceStock> = state.settlement.economyReserves ?? {};
   const allBuildings = state.settlement.buildings;
 
@@ -452,11 +529,10 @@ export function processPrivateBuilding(
       }
 
       if (!desiredBuildId) {
-        // Normal path: require an active ambition from the household leader.
+        // ── Path B-ambition: ambition-driven building decisions ──────────────
         const ambition = leader.ambition;
-        if (!ambition) continue;
 
-        if (ambition.type === 'seek_better_housing') {
+        if (ambition?.type === 'seek_better_housing') {
           const tier = currentBuilding
             ? DWELLING_TIER_ORDER.indexOf(currentBuilding.defId as BuildingId)
             : -1;
@@ -464,7 +540,7 @@ export function processPrivateBuilding(
           if (nextTierIndex < DWELLING_TIER_ORDER.length) {
             desiredBuildId = DWELLING_TIER_ORDER[nextTierIndex]!;
           }
-        } else if (ambition.type === 'seek_production_building') {
+        } else if (ambition?.type === 'seek_production_building') {
           // Chain-aware: find the next production building any member needs.
           for (const memberId of household.memberIds) {
             const member = state.people.get(memberId);
@@ -476,7 +552,92 @@ export function processPrivateBuilding(
             }
           }
         }
-        // Any other ambition type → no building action this turn.
+
+        // ── Path C: Role-driven production building (no ambition required) ───
+        // A worker who practices a trade needs a workplace — treating this as a
+        // necessity like shelter, not an aspiration. Fires for any adult member
+        // whose role maps to a production building the household doesn't yet own.
+        if (!desiredBuildId) {
+          for (const memberId of household.memberIds) {
+            const member = state.people.get(memberId);
+            if (!member || member.age < 16) continue;
+            const wanted = getNextHouseholdProductionTarget(member, household, allBuildings);
+            if (wanted) {
+              desiredBuildId = wanted;
+              break;
+            }
+          }
+        }
+
+        // ── Path D: Resource-pressure bypass ─────────────────────────────────
+        // When settlement resource stocks are low, any household without the
+        // appropriate production building commissions one as a necessity —
+        // no role, no ambition required.
+        //
+        // D-food:   food < FOOD_LOW_PER_PERSON   → commission `fields`
+        // D-lumber: lumber < LUMBER_LOW_PER_PERSON → commission `woodcutter_hut`
+        //           + auto-assign an eligible member to gather_lumber
+        // D-stone:  stone < STONE_LOW_PER_PERSON  → commission `stone_pit`
+        //           + auto-assign an eligible member to gather_stone
+        //
+        // A household qualifies only if it has NO building in that resource's
+        // category among its current production slots (slots 1–8).
+        if (!desiredBuildId) {
+          const ownedCategories = new Set<string>(
+            household.buildingSlots
+              .slice(1)
+              .filter((s): s is string => s !== null)
+              .map(slotId => {
+                const b = allBuildings.find(b => b.instanceId === slotId);
+                return b ? (BUILDING_CATALOG[b.defId as BuildingId]?.category ?? '') : '';
+              }),
+          );
+
+          const livingCount = state.people.size;
+          const foodPerPerson   = livingCount > 0 ? updatedResources.food   / livingCount : Infinity;
+          const lumberPerPerson = livingCount > 0 ? updatedResources.lumber / livingCount : Infinity;
+          const stonePerPerson  = livingCount > 0 ? updatedResources.stone  / livingCount : Infinity;
+
+          // D-food
+          if (!ownedCategories.has('food') && foodPerPerson < FOOD_LOW_PER_PERSON) {
+            desiredBuildId = 'fields';
+          }
+
+          // D-lumber (checked independently; a single household can address multiple needs
+          // over successive turns, one project at a time)
+          if (!desiredBuildId && lumberPerPerson < LUMBER_LOW_PER_PERSON) {
+            const hasLumberBuilding = household.buildingSlots
+              .slice(1)
+              .filter((s): s is string => s !== null)
+              .some(slotId => {
+                const b = allBuildings.find(b => b.instanceId === slotId);
+                if (!b) return false;
+                const def = BUILDING_CATALOG[b.defId as BuildingId];
+                return def?.workerRole === 'gather_lumber';
+              });
+            if (!hasLumberBuilding) {
+              desiredBuildId = 'woodcutter_hut';
+            }
+          }
+
+          // D-stone
+          if (!desiredBuildId && stonePerPerson < STONE_LOW_PER_PERSON) {
+            const hasStoneBuilding = household.buildingSlots
+              .slice(1)
+              .filter((s): s is string => s !== null)
+              .some(slotId => {
+                const b = allBuildings.find(b => b.instanceId === slotId);
+                if (!b) return false;
+                const def = BUILDING_CATALOG[b.defId as BuildingId];
+                return def?.workerRole === 'gather_stone';
+              });
+            if (!hasStoneBuilding) {
+              desiredBuildId = 'stone_pit';
+            }
+          }
+        }
+
+        // Nothing to build this turn.
         if (!desiredBuildId) continue;
       }
     }
@@ -484,7 +645,57 @@ export function processPrivateBuilding(
     // ── Affordability checks ─────────────────────────────────────────────────
     const def = BUILDING_CATALOG[desiredBuildId];
     const wealthCost = def.privateWealthCost;
-    if (wealthCost === undefined || household.householdWealth < wealthCost) continue;
+    if (wealthCost === undefined) continue;
+
+    // Out-of-specialty premium: building outside the household's established
+    // trade costs 1.5× wealth. Basic resource-gathering structures are exempt.
+    const ALWAYS_IN_SPECIALTY = new Set<BuildingId>(['fields', 'woodcutter_hut', 'stone_pit']);
+    const isDwellingTarget = DWELLING_TIER_ORDER.includes(desiredBuildId);
+    const buildingCategory = def.category as string;
+    const SPECIALTY_CATEGORIES = new Set(['food', 'industry', 'social']);
+    let effectiveWealthCost = wealthCost;
+    if (
+      !isDwellingTarget &&
+      household.specialty !== null &&
+      SPECIALTY_CATEGORIES.has(buildingCategory) &&
+      buildingCategory !== household.specialty &&
+      !ALWAYS_IN_SPECIALTY.has(desiredBuildId)
+    ) {
+      effectiveWealthCost = Math.ceil(wealthCost * 1.5);
+    }
+    if (household.householdWealth < effectiveWealthCost) continue;
+
+    // ── Production-slot cap: dwelling tier limits how many production buildings ──
+    // the household may own at once. Dwelling upgrades and Path-A shelters are
+    // exempt (they occupy slot 0, not a production slot).
+    const isDwelling = isDwellingTarget;
+    if (!isDwelling) {
+      const currentDwellingBuilding = currentDwellingId
+        ? allBuildings.find(b => b.instanceId === currentDwellingId)
+        : null;
+      const maxProductionSlots = currentDwellingBuilding
+        ? (DWELLING_PRODUCTION_SLOTS[currentDwellingBuilding.defId as BuildingId] ?? Infinity)
+        : Infinity;
+      // Count distinct production chains rather than total buildings — chain
+      // tier upgrades (e.g. fields → barns_storehouses) extend an existing
+      // interest and must not consume an additional slot.
+      const usedChainIds = new Set<string>();
+      let standaloneCount = 0;
+      for (const slotId of household.buildingSlots.slice(1)) {
+        if (slotId === null) continue;
+        const slotBuilding = allBuildings.find(b => b.instanceId === slotId);
+        if (!slotBuilding) continue;
+        const slotDef = BUILDING_CATALOG[slotBuilding.defId as BuildingId];
+        if (slotDef?.upgradeChainId) {
+          usedChainIds.add(slotDef.upgradeChainId);
+        } else {
+          standaloneCount++;
+        }
+      }
+      const usedProductionSlots = usedChainIds.size + standaloneCount;
+      const isChainUpgrade = def.upgradeChainId != null && usedChainIds.has(def.upgradeChainId);
+      if (!isChainUpgrade && usedProductionSlots >= maxProductionSlots) continue;
+    }
 
     const surplus = getSurplus(updatedResources, reserves);
     let canAffordMaterials = true;
@@ -497,7 +708,15 @@ export function processPrivateBuilding(
     if (!canAffordMaterials) continue;
 
     // ── Purchase ─────────────────────────────────────────────────────────────
-    updatedHouseholds.set(hhId, { ...household, householdWealth: household.householdWealth - wealthCost });
+    updatedHouseholds.set(hhId, { ...household, householdWealth: household.householdWealth - effectiveWealthCost });
+
+    // Set household specialty on first commissioned production building.
+    if (!isDwelling && household.specialty === null && SPECIALTY_CATEGORIES.has(buildingCategory)) {
+      updatedHouseholds.set(hhId, {
+        ...updatedHouseholds.get(hhId)!,
+        specialty: buildingCategory as HouseholdSpecialty,
+      });
+    }
 
     // Deduct materials from the running resource snapshot
     for (const [resource, amount] of Object.entries(def.cost) as [keyof ResourceStock, number][]) {
@@ -532,6 +751,41 @@ export function processPrivateBuilding(
       autoBuilderAssignments.push(builderPick);
     }
 
+    // ── Path D auto-role assignment ──────────────────────────────────────────
+    // When a woodcutter_hut or stone_pit is commissioned via resource pressure,
+    // immediately assign one eligible household member to the gathering role so
+    // production starts this same dawn rather than waiting for construction.
+    // We skip any member who is already in the target role, who is the designated
+    // builder for this project, or who holds a protected / specialist role.
+    if (desiredBuildId === 'woodcutter_hut' || desiredBuildId === 'stone_pit') {
+      const targetRole: WorkRole =
+        desiredBuildId === 'woodcutter_hut' ? 'gather_lumber' : 'gather_stone';
+      const builderId = builderPick?.personId ?? null;
+      const alreadyAssigned = household.memberIds.some(id => {
+        const m = state.people.get(id);
+        return m?.role === targetRole;
+      });
+      if (!alreadyAssigned) {
+        // Prefer an unassigned adult; fall back to gather_food; skip builder/away/keth_thara.
+        const SKIP_ROLES = new Set<WorkRole>([
+          'builder', 'away', 'keth_thara', 'guard',
+          'farmer', 'blacksmith', 'tailor', 'brewer', 'miller', 'herder',
+          'healer', 'trader', 'craftsman', 'hunter',
+          'priest_solar', 'wheel_singer', 'voice_of_wheel',
+        ]);
+        let candidate: Person | null = null;
+        for (const memberId of household.memberIds) {
+          const m = state.people.get(memberId);
+          if (!m || m.age < 16 || memberId === builderId || SKIP_ROLES.has(m.role)) continue;
+          if (m.role === 'unassigned') { candidate = m; break; }
+          if (m.role === 'gather_food' && !candidate) candidate = m;
+        }
+        if (candidate) {
+          autoRoleAssignments.push({ personId: candidate.id, newRole: targetRole });
+        }
+      }
+    }
+
     // Log
     const firstName = leader.firstName;
     logEntries.push({
@@ -542,7 +796,7 @@ export function processPrivateBuilding(
     });
   }
 
-  return { updatedHouseholds, updatedResources, newProjects, logEntries, autoBuilderAssignments };
+  return { updatedHouseholds, updatedResources, newProjects, logEntries, autoBuilderAssignments, autoRoleAssignments };
 }
 
 // ─── Dwelling Maintenance ─────────────────────────────────────────────────────

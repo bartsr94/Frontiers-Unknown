@@ -1,7 +1,9 @@
 # Expedition & Hex Map System — Design Document
 
-> **Status:** Design phase — not yet implemented.
+> **Status:** Phases A–E complete (hex grid 21×21, data model, travel processing, all 18 expedition events, dispatch/status UI, tribe contact integration). Phase F polish items outstanding — see §12.
 > **Scope:** Replaces the static Ashmark map image in `DiplomacyView` with an interactive hex grid. Adds expedition dispatch, travel, and event resolution. Integrates with the existing event, tribe, and deferred-event systems.
+>
+> **Divergences from original design:** Grid is 21×21 (not 15×15); settlement at axial `(10,10)` (not `(7,7)`). `TribeFlag` as a `Set` was not implemented — its key flags (`sighted`, `diplomacyOpened`, `giftedTurns`) became direct fields on `ExternalTribe` instead. `ExpeditionStatusPanel` is an inline component in `DiplomacyView.tsx` rather than a separate file.
 
 ---
 
@@ -18,7 +20,7 @@ The existing map image (`/ui/ashmark.jpg`) is rendered **underneath** the hex gr
 | Question | Decision |
 |----------|----------|
 | Starting visibility | Settlement hex + 3 random adjacent hexes visible; everything else fog |
-| Grid size | 15×15 axial hex grid to start; expandable |
+| Grid size | 15×15 axial hex grid to start; expandable | q
 | Hex orientation | Pointed-top (fits horizontal viewport) |
 | Map underlayer | Ashmark image shows beneath revealed hexes |
 | Party size | 1 leader (required) + 1–10 members |
@@ -711,10 +713,11 @@ This system is large. Recommended implementation order:
 - Known Clans panel contact-status display
 - Re-enable Diplomacy action buttons in TribeInfoCard (Phase 2 gate now reachable)
 
-### Phase F — Polish & Balance
-- Waypoint amendment during active expeditions
-- Winter/season terrain modifiers
-- Expedition status panel (click-to-inspect active expedition)
+### Phase F — Polish & Balance *(outstanding)*
+
+- Waypoint amendment during active expeditions (UI to add/remove waypoints after dispatch)
+- Winter/season terrain modifiers — `mountains` impassable when a `winterPassClosed` content flag is present
+- Expedition status panel polish (full journal view; recall confirmation)
 - Balance pass on food consumption and travel speeds
 
 ---

@@ -863,7 +863,7 @@ Consecutive failures escalate `CompanySupportLevel`: `full_support` → `standar
 
 ### Tribe Trade
 
-Requires both: a `trading_post` is built AND `tribe.contactEstablished = true`.
+Requires both: a `trading_post` is built AND `tribe.diplomacyOpened = true`.
 
 **Barter fairness meter:** ±30% value ratio is the fair band. Favoring yourself (>+30% your way) reduces the tribe's disposition. Favoring the tribe (>+15% their way) increases it.
 
@@ -1223,6 +1223,31 @@ Each neighbouring tribe has:
 
 **16 tribe presets** defined in `TRIBE_PRESETS`. Initial tribes are selected at game setup.
 
+### Tribe Naming Conventions
+
+Sauromatian tribe names follow a **[Color] + [Noun] closed compound** pattern. Each ethnic group owns three colours and a noun pool drawn from their environment and character. The colour prefix alone identifies the ethnic group — `Ash-` / `Pale-` / `White-` = Stormcaller; `Red-` / `Ochre-` / `Crimson-` = Bloodmoon; `Amber-` / `Gold-` = Talon; and so on.
+
+### Tribe Roster
+
+| ID | Name | Ethnic Group | Starting Disposition | Traits |
+|---|---|---|---|---|
+| `bluetide` | Bluetide | Kiswani Riverfolk | +25 | peaceful, trader |
+| `darkwake` | Darkwake | Kiswani Riverfolk | −10 | warlike, expansionist |
+| `jadehollow` | Jadehollow | Kiswani Bayuk | 0 | isolationist |
+| `greenthorn` | Greenthorn | Kiswani Bayuk | −15 | warlike, desperate |
+| `silvercrest` | Silvercrest | Kiswani Haisla | +20 | peaceful, trader |
+| `greysquall` | Greysquall | Kiswani Haisla | −20 | warlike |
+| `ashmantle` | Ashmantle | Hanjoda Stormcaller | +15 | peaceful |
+| `paleveil` | Paleveil | Hanjoda Stormcaller | −5 | isolationist |
+| `redmoon` | Redmoon | Hanjoda Bloodmoon | −25 | warlike, expansionist |
+| `ochrescar` | Ochrescar | Hanjoda Bloodmoon | −10 | warlike |
+| `ochredrift` | Ochredrift | Hanjoda Bloodmoon | +5 | peaceful, trader |
+| `crimsonfang` | Crimsonfang | Hanjoda Bloodmoon | −30 | warlike, desperate |
+| `goldhand` | Goldhand | Hanjoda Talon | +10 | peaceful, trader |
+| `ambercairn` | Ambercairn | Hanjoda Talon | −5 | isolationist |
+| `bronzemouth` | Bronzemouth | Hanjoda Emrasi | +20 | peaceful, trader |
+| `copperhook` | Copperhook | Hanjoda Emrasi | +5 | peaceful |
+
 ### Trade
 
 Full barter UI available in the **Trade** view once a Trading Post is built and contact is established. Trades affect tribe disposition based on fairness (see §16 Economy).
@@ -1231,10 +1256,64 @@ Full barter UI available in the **Trade** view once a Trading Post is built and 
 
 The **Diplomacy** view shows the Known Clans panel (left) and an interactive hex map (right). The hex map is an SVG overlay on the Ashmark background image; unrevealed hexes render as opaque fog tiles. Entered hexes show the terrain art beneath.
 
-**Additional `ExternalTribe` flags:**
-- `contactEstablished: true` — first contact made (via expedition entering their territory). Tribe appears in Known Clans panel.
-- `diplomacyOpened: true` — formal relations established. Required for trade and alliance events.
-- `territoryQ: number | null` / `territoryR: number | null` — hex coordinates of the tribe's territory centre.
+### Tribe Visibility & Contact Tiers
+
+Tribes progress through three tiers as the player engages with them:
+
+| Tier | Flag | How achieved | What it unlocks |
+|------|------|-------------|-----------------|
+| **Sighted** | `sighted: true` | Expedition enters the tribe's territory or an adjacent hex | Tribe appears in Known Clans as `??? — Sighted`. Name hidden. Emissary available. |
+| **Contact** | `contactEstablished: true` | Expedition physically enters a tribe territory/outpost/settlement hex | Full tribe details visible. All emissary missions available. |
+| **Relations** | `diplomacyOpened: true` | Set by expedition outcome or a successful `open_relations` emissary mission | Trade unlocked. Alliance events available. |
+
+**Additional `ExternalTribe` fields:**
+- `territoryQ / territoryR: number | null` — hex coordinates of the tribe's territory centre
+- `giftedTurns: number | null` — last turn gifts were sent; gift bonus halves if repeated in the same year
+
+### Emissary System
+
+From the TribeInfoCard or the "Send Emissary" button at the bottom of the Known Clans panel, the player dispatches a single person as a diplomat via `EmissaryDispatchOverlay`. No hex-by-hex events fire during emissary travel — only full expeditions trigger mid-journey encounters.
+
+**Mission types (4):**
+| Mission | Minimum tier | Effect |
+|---------|--------------|--------|
+| `open_relations` | `contactEstablished` | Sets `diplomacyOpened = true` on session success; requires disposition ≥ 20 (or ≥ 5 for `trader` tribes) |
+| `gift_giving` | `sighted` | Pack wealth/food as gifts; improves disposition |
+| `request_food` | `contactEstablished` | Ask for a food grant; locked if tribe disposition < 0 or tribe desires food itself |
+| `request_goods` | `contactEstablished` | Ask for a goods grant; locked for same reasons |
+
+**Travel time:** `ceil(axialDistance / 2)` seasons one-way; −1 turn for bargaining skill ≥ 63 (Excellent). Round-trip = `travelOneWay × 2 + 1`. Unknown territory falls back to 4 turns.
+
+The emissary is set to `role = 'away'` while travelling. When `arrivalTurn` is reached at dawn, the emissary's `EmissaryDispatch` status advances to `at_tribe` and the emissary ID is added to `pendingDiplomacySessions` — a pulsing amber badge on the Known Clans header invites the player to open the session.
+
+**`EmissaryDiplomacyOverlay` — session actions:**
+
+| Action | Availability | Effect |
+|--------|-------------|--------|
+| Offer Gifts | Always (uses `giftsRemaining`) | Applies `giftDispositionGain`; can be repeated |
+| Ask for Food | Once per session; disposition ≥ 0; tribe not desiring food | Credits food to settlement immediately on session close |
+| Ask for Goods | Once per session; disposition ≥ 0; tribe not desiring goods | Credits goods to settlement immediately |
+| Propose Trade | Once; `!diplomacyOpened`; disposition ≥ 20 (≥ 5 for traders) | Sets `diplomacyOpened = true`; trade route activates on emissary return |
+| Take Your Leave | Always | Closes session; emissary begins return journey |
+
+All session outcomes (disposition delta, `diplomacyOpened`, resources received) are applied to `GameState` immediately when the player takes their leave. Unused packed gifts are returned to the settlement stockpile when the emissary physically returns at `returnTurn`.
+
+**Gift formula (`giftDispositionGain`):**
+- Base: wealth × 4 + food × 1 per unit
+- Tribe desires the resource type: +50% for that resource
+- Tribe trait: warlike ×0.70 · isolationist ×0.60 · desperate ×1.50
+- Gifted within last 4 turns (`giftedTurns` flag): ×0.50 (diminishing returns same year)
+- Cap: +40 per session
+
+**Resource request yield (`computeResourceRequestYield`):**
+`floor(population / 40 × clamp(disposition / 50, 0.2, 1.5))` — returns 0 if tribe disposition < 0 or tribe desires that resource.
+
+**Key files:**
+| File | Purpose |
+|------|---------|
+| `src/simulation/world/emissaries.ts` | `emissaryTravelTime`, `giftDispositionGain`, `computeResourceRequestYield`, `createEmissaryDispatch`, `resolveEmissarySession` |
+| `src/ui/overlays/EmissaryDispatchOverlay.tsx` | Dispatch modal — tribe dropdown, 4 mission types, person picker, gift sliders |
+| `src/ui/overlays/EmissaryDiplomacyOverlay.tsx` | Session negotiation modal — gift offers, resource requests, propose trade, take your leave |
 
 The **"Send Expedition"** button at the bottom of the Known Clans panel opens `ExpeditionDispatchOverlay`. See §26 for the full expedition system.
 
@@ -1428,11 +1507,76 @@ Expedition processing runs in `game-store.startTurn()` after `processDawn` retur
 1. **Deduct food:** `foodRemaining -= memberCount × 0.25`. Starvation flag set if food reaches 0.
 2. **Advance travel:** `travelProgress` decrements by terrain speed. When it hits 0 the expedition enters the next waypoint hex.
 3. **On hex entry:** hex visibility updated to `visited`; 6 adjacent hexes updated to `scouted`. One-time content triggers fire. Tribe territory detected (see below).
-4. **Expedition events** are injected into `pendingEvents` and resolve before the management phase like normal events.
+4. **Expedition events** are injected into `pendingEvents` and resolve before the management phase like normal events. Events show a `⛺ Expedition: {name}` banner in the EventView to contextualise them.
 5. When the waypoint list is exhausted the expedition returns to the settlement. On arrival, members regain their pre-dispatch role; `boatsInPort` is restored.
 
 ### Tribe Contact
 
-Entering a hex with `tribe_territory`, `tribe_outpost`, or `tribe_settlement` content automatically sets `tribe.contactEstablished = true`. The tribe becomes visible in the Known Clans list. This does **not** unlock trade — `diplomacyOpened = true` is set via follow-up emissary events or a deliberate diplomatic expedition.
+Entering a hex with `tribe_territory`, `tribe_outpost`, or `tribe_settlement` content automatically sets `tribe.contactEstablished = true`. Adjacent-only entry (the party never enters the hex directly) sets `tribe.sighted = true` — the tribe appears in the Known Clans list as `??? — Sighted` with details hidden. Full contact requires physical entry. Trade requires `diplomacyOpened = true` (set via expedition outcome or emissary mission).
 
-> **Implementation note:** The hex map, travel mechanics, dispatch overlay, and expedition data model are fully in place. Authored expedition events (`src/simulation/events/definitions/expedition.ts`) are **not yet written**. Expeditions can currently travel and reveal the map, but content triggers (ruins discoveries, starvation crises, tribe contact events, return reports) will only fire once that file is authored. March 2026. All values from source as of Building Expansion, Private Economy, and Expedition System completion (1766 tests passing). Gap: authored expedition events (`src/simulation/events/definitions/expedition.ts`) not yet written.*
+### Expedition Events (18 authored)
+
+All expedition events have `isDeferredOutcome: true` and category `'expedition'`. They are injected programmatically by `processExpeditions` / `collectHexEntryEvents` — never drawn from the normal event deck.
+
+**Group A — One-time hex discoveries (fire once per hex on first entry):**
+
+| Event ID | Trigger |
+|----------|---------|
+| `exp_ruins_discovered` | `ruins` hex content |
+| `exp_abandoned_camp_found` | `abandoned_camp` content |
+| `exp_burial_ground_entered` | `burial_ground` content |
+| `exp_hidden_shrine_discovered` | `hidden_shrine` content |
+| `exp_fresh_water_spring` | `fresh_water_spring` content — no choices; passive buff to future travel |
+| `exp_old_road_found` | `old_road` content |
+| `exp_resource_cache_found` | `resource_cache` content |
+
+**Group B — Tribe contact (fire on first entry into a tribe hex):**
+
+| Event ID | Trigger |
+|----------|---------|
+| `exp_tribe_territory_entered` | `tribe_territory` content (first contact) |
+| `exp_tribe_settlement_approached` | `tribe_settlement` content; can set `diplomacyOpened` on success |
+| `exp_tribe_patrol_encountered` | `tribe_outpost` content or recurring patrol roll |
+
+**Group C — Recurring encounters (roll each visit to eligible hex):**
+
+| Event ID | Trigger |
+|----------|---------|
+| `exp_animal_attack` | `animal_den` content |
+| `exp_travellers_met` | `travellers` content |
+| `exp_disease_outbreak` | `disease_vector` content (wetlands) |
+| `exp_bandit_ambush` | `bandit_camp` content |
+| `exp_severe_weather` | `weather_hazard` content |
+
+**Group D — Supply & morale (injected by expedition state):**
+
+| Event ID | Trigger |
+|----------|---------|
+| `exp_food_running_low` | `foodRemaining < 1 season's worth`; fires once per expedition |
+| `exp_member_wants_to_turn_back` | Injected periodically when expedition has multiple members |
+
+**Return:**
+
+| Event ID | Trigger |
+|----------|---------|
+| `exp_return_report` | Fires when expedition reaches `status = 'completed'`; narrative journal summary |
+
+### Expedition Status Panel
+
+Hovering an expedition token on the hex map shows a tooltip (leader name, party size, food remaining, seasons to next hex). Clicking the token opens the `ExpeditionStatusPanel` (inline in `DiplomacyView.tsx`) — a slide-in panel with full party list, route, journal, and a **Recall Expedition** button.
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/simulation/world/hex-map.ts` | `HexCell`, `HexMap`, `generateHexMap()`, coordinate math, visibility helpers |
+| `src/simulation/world/expeditions.ts` | `createExpedition()`, `processExpeditionTurn()`, `processExpeditions()`, `collectHexEntryEvents()`, food math |
+| `src/simulation/events/definitions/expedition.ts` | All 18 expedition event definitions |
+| `src/ui/overlays/ExpeditionDispatchOverlay.tsx` | Party picker, provisions sliders, route setter, boat toggle |
+| `src/ui/components/HexGrid.tsx` | SVG hex grid renderer; fog/scouted/visited/cleared states; expedition tokens; waypoint lines |
+| `src/ui/overlays/EmissaryDispatchOverlay.tsx` | Single-person emissary mission (`open_relations` / `gift_giving`) |
+| `src/ui/overlays/EmissaryDiplomacyOverlay.tsx` | Emissary outcome and resolution |
+| `tests/world/hex-map.test.ts` | Hex generation rules, coordinate math, visibility propagation |
+| `tests/world/expedition-events.test.ts` | Travel progress, food deduction, hex entry, return mechanics, event firing |
+
+**Outstanding (Phase F):** Waypoint amendment during active expeditions; winter mountain terrain modifiers (`winterPassClosed` impassability flag). See `plans/EXPEDITION_SYSTEM.md §12`.

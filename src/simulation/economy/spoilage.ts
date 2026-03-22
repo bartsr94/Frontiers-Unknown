@@ -10,7 +10,6 @@
  */
 
 import type { ResourceType, ResourceStock, Season } from '../turn/game-state';
-import type { BuiltBuilding } from '../turn/game-state';
 import { hasBuilding } from '../buildings/building-effects';
 
 // ─── Spoilage Rate Config ─────────────────────────────────────────────────────
@@ -46,10 +45,14 @@ export const SPOILAGE_CONFIG: Record<ResourceType, SpoilageConfig | null> = {
  * - Loss is ignored if it would remove < 1 unit (no fractional deductions).
  * - Loss is capped so the stock never goes below 0.
  * - Granary halves food spoilage; Stable halves cattle & horse spoilage.
+ * - When a storageCap is provided and the stockpile fill-ratio is ≥ 70%,
+ *   spoilage is amplified to represent rotting in overfull stores.
  *
- * @param resources - Current resource stockpile.
- * @param season - Current season.
- * @param buildings - Current standing buildings (checked for Granary / Stable).
+ * @param resources   - Current resource stockpile.
+ * @param season      - Current season.
+ * @param buildings   - Current standing buildings (checked for Granary / Stable).
+ * @param storageCaps - Optional per-resource storage caps; enables fill-ratio
+ *                      amplification when provided.
  * @returns A partial record of losses (positive amounts to subtract from stock).
  *          Resources with zero or no spoilage are omitted from the result.
  */
@@ -57,6 +60,7 @@ export function calculateSpoilage(
   resources: ResourceStock,
   season: Season,
   buildings: BuiltBuilding[],
+  storageCaps?: Partial<Record<ResourceType, number>>,
 ): Partial<ResourceStock> {
   const losses: Partial<ResourceStock> = {};
 
@@ -75,6 +79,18 @@ export function calculateSpoilage(
     // Apply building mitigation (halves the rate).
     if (config.mitigatedBy && hasBuilding(buildings, config.mitigatedBy)) {
       rate *= 0.5;
+    }
+
+    // Amplify spoilage when stockpile is near the storage cap — overfull stores
+    // rot faster. Multipliers: ≥70% fill ×2, ≥85% ×4, ≥95% ×8.
+    if (storageCaps?.[res] !== undefined) {
+      const cap = storageCaps[res]!;
+      if (cap > 0) {
+        const fill = stock / cap;
+        if      (fill >= 0.95) rate *= 8.0;
+        else if (fill >= 0.85) rate *= 4.0;
+        else if (fill >= 0.70) rate *= 2.0;
+      }
     }
 
     const rawLoss = stock * rate;

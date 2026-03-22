@@ -14,6 +14,7 @@ import {
   getOvercrowdingProductionMultiplier,
   hasBuilding,
   lacksBuilding,
+  computeStorageCaps,
 } from '../../src/simulation/buildings/building-effects';
 import type { BuiltBuilding } from '../../src/simulation/turn/game-state';
 
@@ -163,5 +164,74 @@ describe('hasBuilding / lacksBuilding', () => {
   it('lacksBuilding is the inverse of hasBuilding', () => {
     expect(lacksBuilding([camp, granary], 'granary')).toBe(false);
     expect(lacksBuilding([camp], 'granary')).toBe(true);
+  });
+});
+
+// ─── computeStorageCaps ───────────────────────────────────────────────────────
+
+const grainSilo:   BuiltBuilding = { defId: 'grain_silo',       instanceId: 'gs_0',  builtTurn: 0, style: null, claimedByPersonIds: [], ownerHouseholdId: null, assignedWorkerIds: [] };
+const barns:       BuiltBuilding = { defId: 'barns_storehouses', instanceId: 'b_0',   builtTurn: 0, style: null, claimedByPersonIds: [], ownerHouseholdId: null, assignedWorkerIds: [] };
+const tradingPost: BuiltBuilding = { defId: 'trading_post',      instanceId: 'tp_0',  builtTurn: 0, style: null, claimedByPersonIds: [], ownerHouseholdId: null, assignedWorkerIds: [] };
+
+describe('computeStorageCaps', () => {
+  it('enforces minimum food cap of 100 for a tiny population', () => {
+    // pop*8 = 1*8 = 8 < 100 → min applies
+    expect(computeStorageCaps(1, []).food).toBe(100);
+  });
+
+  it('food cap scales with population above the minimum', () => {
+    // 20*8 = 160 > 100
+    expect(computeStorageCaps(20, []).food).toBe(160);
+  });
+
+  it('granary adds 500 to food cap', () => {
+    // 10*8 + 500 = 580
+    expect(computeStorageCaps(10, [granary]).food).toBe(580);
+  });
+
+  it('grain_silo adds 150 to food cap', () => {
+    // 10*8 + 150 = 230
+    expect(computeStorageCaps(10, [grainSilo]).food).toBe(230);
+  });
+
+  it('barns_storehouses adds 200 to food cap and 50 to cattle cap', () => {
+    const caps = computeStorageCaps(10, [barns]);
+    expect(caps.food).toBe(280);  // 10*8 + 200 = 280
+    expect(caps.cattle).toBe(70); // 10*2 + 50  = 70
+  });
+
+  it('cattle cap enforces minimum of 20', () => {
+    // pop*2 = 1*2 = 2 < 20 → min applies
+    expect(computeStorageCaps(1, []).cattle).toBe(20);
+  });
+
+  it('trading_post adds 300 to wealth cap', () => {
+    // 10*12 + 300 = 420
+    expect(computeStorageCaps(10, [tradingPost]).wealth).toBe(420);
+  });
+
+  it('wealth cap enforces minimum of 200', () => {
+    // 1*12 = 12 < 200 → min applies
+    expect(computeStorageCaps(1, []).wealth).toBe(200);
+  });
+
+  it('steel and horses have fixed caps of 400 regardless of population or buildings', () => {
+    expect(computeStorageCaps(1, []).steel).toBe(400);
+    expect(computeStorageCaps(1, []).horses).toBe(400);
+    expect(computeStorageCaps(500, [granary, tradingPost]).steel).toBe(400);
+    expect(computeStorageCaps(500, [granary, tradingPost]).horses).toBe(400);
+  });
+
+  it('multiple granaries stack additively', () => {
+    const g2: BuiltBuilding = { defId: 'granary', instanceId: 'g2', builtTurn: 0, style: null, claimedByPersonIds: [], ownerHouseholdId: null, assignedWorkerIds: [] };
+    // 10*8 + 2*500 = 1080
+    expect(computeStorageCaps(10, [granary, g2]).food).toBe(1080);
+  });
+
+  it('all caps are positive even for zero population', () => {
+    const caps = computeStorageCaps(0, []);
+    for (const val of Object.values(caps)) {
+      expect(val).toBeGreaterThan(0);
+    }
   });
 });

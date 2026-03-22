@@ -183,6 +183,13 @@ export interface BuildingDef {
    * Undefined = not privately buildable (communal-only buildings).
    */
   privateWealthCost?: number;
+
+  /**
+   * When true, the presence of this building in the settlement halves the
+   * famine recovery delay (from 2 seasons to 1 season).
+   * Only set on `apothecary`.
+   */
+  malnourishedRecoveryBonus?: boolean;
 }
 
 // ─── Building Catalogue ────────────────────────────────────────────────────────
@@ -227,7 +234,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
       { role: 'council', skill: 'leadership', bonus: 1 },
       { role: 'council', skill: 'custom', bonus: 1 },
     ],
-    maintenanceCost: { wealth: 1 },
+    maintenanceCost: { lumber: 1, wealth: 1 },
     ownership: 'communal',
     upgradeChainId: 'civic',
     tierInChain: 2,
@@ -248,7 +255,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [
       { role: 'council', skill: 'leadership', bonus: 1 },
     ],
-    maintenanceCost: { wealth: 1 },
+    maintenanceCost: { lumber: 1 },
     ownership: 'communal',
     upgradeChainId: 'civic',
     tierInChain: 2,
@@ -272,7 +279,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
       { role: 'council', skill: 'leadership', bonus: 1 },
       { role: 'council', skill: 'custom', bonus: 1 },
     ],
-    maintenanceCost: { wealth: 2 },
+    maintenanceCost: { lumber: 1, stone: 1 },
     ownership: 'communal',
     upgradeChainId: 'civic',
     tierInChain: 3,
@@ -293,7 +300,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [
       { role: 'council', skill: 'leadership', bonus: 1 },
     ],
-    maintenanceCost: { wealth: 1 },
+    maintenanceCost: { lumber: 1 },
     ownership: 'communal',
     upgradeChainId: 'civic',
     tierInChain: 3,
@@ -312,7 +319,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     shelterCapacity: 0,
     flatProductionBonus: { food: 2 },
     winterFoodProtection: true,
-    maintenanceCost: { wealth: 1 },
+    maintenanceCost: { lumber: 1 },
     ownership: 'communal',
   },
 
@@ -370,10 +377,15 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     cost: { lumber: 3 },
     buildSeasons: 1,
     shelterCapacity: 0,
+    roleProductionBonus: { role: 'craftsman', bonus: { wealth: 1 } },
     workerSlots: 1,
     workerRole: 'craftsman',
+    allowMultiple: true,
     maintenanceCost: { wealth: 1 },
-    ownership: 'communal',
+    ownership: 'household',
+    upgradeChainId: 'kiln',
+    tierInChain: 1,
+    privateWealthCost: 3,
   },
 
   trading_post: {
@@ -401,7 +413,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
   healers_hut: {
     id: 'healers_hut',
     name: "Healer's Hut",
-    description: 'A clean, well-stocked treatment room. With proper facilities, healers save lives that would otherwise be lost to childhood illness.',
+    description: 'A clean, well-stocked treatment room — a household healer can attend to minor ailments, childhood illness, and recovery. Good for a family; the whole settlement benefits over time.',
     category: 'social',
     hasStyleVariants: false,
     cost: { lumber: 8, medicine: 5 },
@@ -413,10 +425,12 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ],
     workerSlots: 2,
     workerRole: 'healer',
-    maintenanceCost: { wealth: 1 },
-    ownership: 'communal',
-    upgradeChainId: 'hospice',
+    allowMultiple: true,
+    maintenanceCost: { medicine: 1 },
+    ownership: 'household',
+    upgradeChainId: 'healing',
     tierInChain: 1,
+    privateWealthCost: 4,
   },
 
   // ── Social ──────────────────────────────────────────────────────────────────
@@ -440,7 +454,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     shelterCapacity: 0,
     languageDriftMultiplier: 1.5,
     culturePull: { strength: 0.003, direction: 'from_style' },
-    maintenanceCost: { wealth: 1 },
+    maintenanceCost: { lumber: 1 },
     ownership: 'communal',
   },
 
@@ -459,7 +473,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [
       { role: 'guard', skill: 'combat', bonus: 1 },
     ],
-    maintenanceCost: { lumber: 1 },
+    maintenanceCost: { lumber: 2 },
     ownership: 'communal',
   },
 
@@ -505,7 +519,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     workerSlots: 2,
     workerRole: 'miller',
     allowMultiple: true,
-    maintenanceCost: { wealth: 1 },
+    maintenanceCost: { stone: 1 },
     ownership: 'household',
     upgradeChainId: 'milling',
     tierInChain: 1,
@@ -527,7 +541,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     workerSlots: 2,
     workerRole: 'blacksmith',
     allowMultiple: true,
-    maintenanceCost: { wealth: 1 },
+    maintenanceCost: { stone: 1, wealth: 1 },
     ownership: 'household',
     upgradeChainId: 'metalwork',
     tierInChain: 1,
@@ -549,7 +563,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     workerSlots: 2,
     workerRole: 'tailor',
     allowMultiple: true,
-    maintenanceCost: { wealth: 1 },
+    maintenanceCost: { wealth: 1 },    // updated to stone+wealth in dye_works T2
     ownership: 'household',
     upgradeChainId: 'leatherwork',
     tierInChain: 1,
@@ -728,6 +742,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [{ role: 'farmer', skill: 'plants', bonus: 1 }],
     workerSlots: 2,
     workerRole: 'farmer',
+    maintenanceCost: { lumber: 1 },
     ownership: 'household',
     upgradeChainId: 'agriculture',
     tierInChain: 2,
@@ -749,6 +764,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [{ role: 'farmer', skill: 'plants', bonus: 1 }],
     workerSlots: 2,
     workerRole: 'farmer',
+    maintenanceCost: { lumber: 1 },
     ownership: 'household',
     upgradeChainId: 'agriculture',
     tierInChain: 3,
@@ -946,6 +962,53 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     privateWealthCost: 14,
   },
 
+  // ── Household lumber & stone (additive, allow-multiple) ───────────────────
+  // These are the household-scale equivalents of the communal Forestry and
+  // Quarry chains. They allow gather_lumber / gather_stone workers to improve
+  // their output without waiting for the player to commission the large
+  // communal camps, and are autonomously commissioned via the private-economy
+  // Path D (resource-pressure bypass) when lumber or stone stocks run low.
+
+  woodcutter_hut: {
+    id: 'woodcutter_hut',
+    name: "Woodcutter's Hut",
+    description: 'A simple shed with sharpened axes and a splitting block. One household cannot fell as much as a full logging camp, but every extra bundle stacked before winter counts.',
+    category: 'industry',
+    hasStyleVariants: false,
+    cost: { lumber: 3 },
+    buildSeasons: 1,
+    shelterCapacity: 0,
+    roleProductionBonus: { role: 'gather_lumber', bonus: { lumber: 1 } },
+    skillGrowth: [{ role: 'gather_lumber', skill: 'custom', bonus: 1 }],
+    workerSlots: 2,
+    workerRole: 'gather_lumber',
+    allowMultiple: true,
+    ownership: 'household',
+    upgradeChainId: 'logging_household',
+    tierInChain: 1,
+    privateWealthCost: 2,
+  },
+
+  stone_pit: {
+    id: 'stone_pit',
+    name: 'Stone Pit',
+    description: 'Marked faces, iron wedges, and a barrow track. A household quarrier working an organised pit extracts far more stone than any surface scramble.',
+    category: 'industry',
+    hasStyleVariants: false,
+    cost: { lumber: 5 },
+    buildSeasons: 1,
+    shelterCapacity: 0,
+    roleProductionBonus: { role: 'gather_stone', bonus: { stone: 1 } },
+    skillGrowth: [{ role: 'gather_stone', skill: 'custom', bonus: 1 }],
+    workerSlots: 2,
+    workerRole: 'gather_stone',
+    allowMultiple: true,
+    ownership: 'household',
+    upgradeChainId: 'quarrying_household',
+    tierInChain: 1,
+    privateWealthCost: 2,
+  },
+
   // ── Forestry chain (communal, upgrade) ────────────────────────────────────
 
   logging_camp: {
@@ -961,6 +1024,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [{ role: 'gather_lumber', skill: 'custom', bonus: 1 }],
     workerSlots: 3,
     workerRole: 'gather_lumber',
+    maintenanceCost: { lumber: 1 },
     ownership: 'communal',
     upgradeChainId: 'forestry',
     tierInChain: 1,
@@ -981,6 +1045,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [{ role: 'gather_lumber', skill: 'custom', bonus: 1 }],
     workerSlots: 4,
     workerRole: 'gather_lumber',
+    maintenanceCost: { lumber: 1 },
     ownership: 'communal',
     upgradeChainId: 'forestry',
     tierInChain: 2,
@@ -1002,6 +1067,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [{ role: 'gather_lumber', skill: 'custom', bonus: 2 }],
     workerSlots: 5,
     workerRole: 'gather_lumber',
+    maintenanceCost: { lumber: 1 },
     ownership: 'communal',
     upgradeChainId: 'forestry',
     tierInChain: 3,
@@ -1023,6 +1089,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [{ role: 'gather_lumber', skill: 'custom', bonus: 2 }],
     workerSlots: 6,
     workerRole: 'gather_lumber',
+    maintenanceCost: { lumber: 1, stone: 1 },
     ownership: 'communal',
     upgradeChainId: 'forestry',
     tierInChain: 4,
@@ -1043,10 +1110,13 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [{ role: 'hunter', skill: 'combat', bonus: 1 }],
     workerSlots: 3,
     workerRole: 'hunter',
+    allowMultiple: true,
     defenseBonus: 0.05,
-    ownership: 'communal',
+    maintenanceCost: { lumber: 1 },
+    ownership: 'household',
     upgradeChainId: 'hunting',
     tierInChain: 1,
+    privateWealthCost: 3,
   },
 
   hound_pens: {
@@ -1067,10 +1137,13 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ],
     workerSlots: 4,
     workerRole: 'hunter',
+    allowMultiple: true,
     defenseBonus: 0.05,
-    ownership: 'communal',
+    maintenanceCost: { lumber: 1 },
+    ownership: 'household',
     upgradeChainId: 'hunting',
     tierInChain: 2,
+    privateWealthCost: 5,
   },
 
   hunting_towers: {
@@ -1089,10 +1162,13 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [{ role: 'hunter', skill: 'combat', bonus: 2 }],
     workerSlots: 5,
     workerRole: 'hunter',
+    allowMultiple: true,
     defenseBonus: 0.10,
-    ownership: 'communal',
+    maintenanceCost: { lumber: 1, stone: 1 },
+    ownership: 'household',
     upgradeChainId: 'hunting',
     tierInChain: 3,
+    privateWealthCost: 8,
   },
 
   hunting_reserve: {
@@ -1114,10 +1190,13 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ],
     workerSlots: 6,
     workerRole: 'hunter',
+    allowMultiple: true,
     defenseBonus: 0.15,
-    ownership: 'communal',
+    maintenanceCost: { lumber: 1, stone: 1 },
+    ownership: 'household',
     upgradeChainId: 'hunting',
     tierInChain: 4,
+    privateWealthCost: 12,
   },
 
   // ── Quarry chain (communal, upgrade) ──────────────────────────────────────
@@ -1135,6 +1214,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [{ role: 'gather_stone', skill: 'custom', bonus: 1 }],
     workerSlots: 3,
     workerRole: 'gather_stone',
+    maintenanceCost: { stone: 1 },
     ownership: 'communal',
     upgradeChainId: 'quarry',
     tierInChain: 1,
@@ -1155,6 +1235,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [{ role: 'gather_stone', skill: 'custom', bonus: 1 }],
     workerSlots: 4,
     workerRole: 'gather_stone',
+    maintenanceCost: { stone: 1, lumber: 1 },
     ownership: 'communal',
     upgradeChainId: 'quarry',
     tierInChain: 2,
@@ -1176,6 +1257,7 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [{ role: 'gather_stone', skill: 'custom', bonus: 2 }],
     workerSlots: 5,
     workerRole: 'gather_stone',
+    maintenanceCost: { stone: 1, lumber: 1 },
     ownership: 'communal',
     upgradeChainId: 'quarry',
     tierInChain: 3,
@@ -1198,12 +1280,15 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     workerSlots: 6,
     workerRole: 'gather_stone',
     defenseBonus: 0.05,
+    maintenanceCost: { stone: 2, lumber: 1 },
     ownership: 'communal',
     upgradeChainId: 'quarry',
     tierInChain: 4,
   },
 
-  // ── Hospice chain (communal, upgrade — extends healers_hut) ───────────────
+  // ── Hospice chain (communal — civic-scale; starts at infirmary) ─────────────
+  // healers_hut is no longer part of this chain — it anchors the household
+  // 'healing' chain (T1). Infirmary is now the communal T1 anchor.
 
   infirmary: {
     id: 'infirmary',
@@ -1213,17 +1298,16 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     hasStyleVariants: false,
     cost: { lumber: 12, stone: 6, medicine: 4 },
     buildSeasons: 2,
-    requires: 'healers_hut',
-    replacesId: 'healers_hut',
     shelterCapacity: 0,
     childMortalityModifier: 0.35,
     fertilityBonus: 0.05,
     skillGrowth: [{ role: 'healer', skill: 'plants', bonus: 1 }],
     workerSlots: 3,
     workerRole: 'healer',
+    maintenanceCost: { medicine: 1, wealth: 1 },
     ownership: 'communal',
     upgradeChainId: 'hospice',
-    tierInChain: 2,
+    tierInChain: 1,
   },
 
   hospital: {
@@ -1243,9 +1327,10 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     skillGrowth: [{ role: 'healer', skill: 'plants', bonus: 2 }],
     workerSlots: 4,
     workerRole: 'healer',
+    maintenanceCost: { medicine: 2, wealth: 1 },
     ownership: 'communal',
     upgradeChainId: 'hospice',
-    tierInChain: 3,
+    tierInChain: 2,
   },
 
   grand_hospital: {
@@ -1268,9 +1353,164 @@ export const BUILDING_CATALOG: Record<BuildingId, BuildingDef> = {
     ],
     workerSlots: 5,
     workerRole: 'healer',
+    maintenanceCost: { medicine: 3, wealth: 2 },
     ownership: 'communal',
     upgradeChainId: 'hospice',
-    tierInChain: 4,
+    tierInChain: 3,
+  },
+
+  // ── Household healing chain (household, upgrade-replace) ──────────────────
+
+  herb_garden: {
+    id: 'herb_garden',
+    name: 'Herb Garden',
+    description: "Cultivated medicinal plants grown behind the healer's hut. Mallow for fever, wort for wounds — a household healer with a proper garden treats twice as many ailments.",
+    category: 'social',
+    hasStyleVariants: false,
+    cost: { lumber: 10, medicine: 3 },
+    buildSeasons: 2,
+    requires: 'healers_hut',
+    replacesId: 'healers_hut',
+    shelterCapacity: 0,
+    childMortalityModifier: 0.4,
+    roleProductionBonus: { role: 'healer', bonus: { medicine: 1, wealth: 1 } },
+    flatProductionBonus: { medicine: 1 },
+    skillGrowth: [{ role: 'healer', skill: 'plants', bonus: 1 }],
+    workerSlots: 2,
+    workerRole: 'healer',
+    allowMultiple: true,
+    maintenanceCost: { medicine: 1 },
+    ownership: 'household',
+    upgradeChainId: 'healing',
+    tierInChain: 2,
+    privateWealthCost: 5,
+  },
+
+  apothecary: {
+    id: 'apothecary',
+    name: 'Apothecary',
+    description: 'A dedicated dispensary with drying racks, a compounding bench, and a proper consultation room. The apothecary produces medicines and, in famine, halves the time needed to recover from malnourishment.',
+    category: 'social',
+    hasStyleVariants: false,
+    cost: { lumber: 15, stone: 6, medicine: 8 },
+    buildSeasons: 3,
+    requires: 'herb_garden',
+    replacesId: 'herb_garden',
+    shelterCapacity: 0,
+    childMortalityModifier: 0.3,
+    roleProductionBonus: { role: 'healer', bonus: { medicine: 2, wealth: 1 } },
+    flatProductionBonus: { medicine: 2 },
+    skillGrowth: [{ role: 'healer', skill: 'plants', bonus: 2 }],
+    workerSlots: 3,
+    workerRole: 'healer',
+    allowMultiple: true,
+    maintenanceCost: { medicine: 2 },
+    ownership: 'household',
+    upgradeChainId: 'healing',
+    tierInChain: 3,
+    privateWealthCost: 8,
+    malnourishedRecoveryBonus: true,
+  },
+
+  // ── Commerce chain (household, upgrade-replace) ────────────────────────────
+
+  market_stall: {
+    id: 'market_stall',
+    name: 'Market Stall',
+    description: 'A permanent trading pitch with display shelving and a covered counter. Traders with a proper stall close deals faster and charge better prices.',
+    category: 'industry',
+    hasStyleVariants: false,
+    cost: { lumber: 8, wealth: 3 },
+    buildSeasons: 1,
+    requires: 'trading_post',
+    shelterCapacity: 0,
+    roleProductionBonus: { role: 'trader', bonus: { wealth: 2 } },
+    skillGrowth: [{ role: 'trader', skill: 'bargaining', bonus: 1 }],
+    workerSlots: 2,
+    workerRole: 'trader',
+    allowMultiple: true,
+    maintenanceCost: { wealth: 1 },
+    ownership: 'household',
+    upgradeChainId: 'commerce',
+    tierInChain: 1,
+    privateWealthCost: 4,
+  },
+
+  counting_house: {
+    id: 'counting_house',
+    name: 'Counting House',
+    description: "A merchant's office with ledgers, strongboxes, and a private meeting room. The household that owns one can run the settlement's entire trade operation from a single well-guarded desk.",
+    category: 'industry',
+    hasStyleVariants: false,
+    cost: { lumber: 15, stone: 8, wealth: 8 },
+    buildSeasons: 2,
+    requires: 'market_stall',
+    replacesId: 'market_stall',
+    shelterCapacity: 0,
+    roleProductionBonus: { role: 'trader', bonus: { wealth: 4 } },
+    flatProductionBonus: { wealth: 1 },
+    skillGrowth: [
+      { role: 'trader', skill: 'bargaining', bonus: 1 },
+      { role: 'trader', skill: 'leadership', bonus: 1 },
+    ],
+    workerSlots: 3,
+    workerRole: 'trader',
+    allowMultiple: true,
+    maintenanceCost: { wealth: 1 },
+    ownership: 'household',
+    upgradeChainId: 'commerce',
+    tierInChain: 2,
+    privateWealthCost: 8,
+  },
+
+  // ── Hunter supplement (household, standalone/additive) ────────────────────
+
+  smokehouse: {
+    id: 'smokehouse',
+    name: 'Smokehouse',
+    description: 'Curing racks and a slow-fire chamber. Hunters who smoke their catch preserve more meat per kill and can sell the surplus at a premium.',
+    category: 'food',
+    hasStyleVariants: false,
+    cost: { lumber: 8, stone: 4 },
+    buildSeasons: 1,
+    requires: 'hunters_lodge',
+    shelterCapacity: 0,
+    roleProductionBonus: { role: 'hunter', bonus: { food: 1, wealth: 1 } },
+    flatProductionBonus: { food: 1 },
+    skillGrowth: [{ role: 'hunter', skill: 'animals', bonus: 1 }],
+    workerSlots: 2,
+    workerRole: 'hunter',
+    allowMultiple: true,
+    maintenanceCost: { lumber: 1 },
+    ownership: 'household',
+    upgradeChainId: null,
+    tierInChain: null,
+    privateWealthCost: 3,
+  },
+
+  // ── Leatherwork chain extension (household, upgrade-replace) ──────────────
+
+  dye_works: {
+    id: 'dye_works',
+    name: 'Dye Works',
+    description: 'Dyeing vats, copper mordant pots, and a drying yard. Tailors who run finished cloth through here produce goods worth considerably more than plain leather.',
+    category: 'industry',
+    hasStyleVariants: false,
+    cost: { lumber: 12, stone: 6, wealth: 6 },
+    buildSeasons: 2,
+    requires: 'tannery',
+    replacesId: 'tannery',
+    shelterCapacity: 0,
+    roleProductionBonus: { role: 'tailor', bonus: { wealth: 5 } },
+    skillGrowth: [{ role: 'tailor', skill: 'custom', bonus: 2 }],
+    workerSlots: 2,
+    workerRole: 'tailor',
+    allowMultiple: true,
+    maintenanceCost: { stone: 1, wealth: 1 },
+    ownership: 'household',
+    upgradeChainId: 'leatherwork',
+    tierInChain: 2,
+    privateWealthCost: 7,
   },
 
   bathhouse_grand: {
